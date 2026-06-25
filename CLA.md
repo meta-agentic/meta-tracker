@@ -4,7 +4,7 @@
 
 Thank you for your interest in contributing to Vectis
 (the "Project"), an open-source agile development process tracking
-system maintained at https://github.com/mova77/vectis.
+system maintained at https://github.com/isohub-space/vectis.
 
 This Contributor License Agreement ("Agreement") documents the rights
 you grant to the Project when you submit a Contribution. It is

@@ -33,7 +33,7 @@ privately via GitHub's [Report a vulnerability][advisory] feature
 (Security › Advisories › *Report a vulnerability*). See
 [`SECURITY.md`](SECURITY.md) for full details.
 
-[advisory]: https://github.com/mova77/vectis/security/advisories/new
+[advisory]: https://github.com/isohub-space/vectis/security/advisories/new
 
 ---
 
@@ -61,8 +61,8 @@ privately via GitHub's [Report a vulnerability][advisory] feature
 - **Feature / RFC**: use the [feature request template][feature].
 - **Question**: see the contact link on the new-issue chooser.
 
-[bug]: https://github.com/mova77/vectis/issues/new?template=bug_report.yml
-[feature]: https://github.com/mova77/vectis/issues/new?template=feature_request.yml
+[bug]: https://github.com/isohub-space/vectis/issues/new?template=bug_report.yml
+[feature]: https://github.com/isohub-space/vectis/issues/new?template=feature_request.yml
 
 ---
 
