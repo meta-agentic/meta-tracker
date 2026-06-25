@@ -1,0 +1,42 @@
+name: Feature request
+description: Propose a capability or enhancement for Vectis.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / use case
+      description: What are you trying to do, and what's missing or hard today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: The behavior or capability you'd like.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches, workarounds, or prior art.
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Boards & workflows
+        - Sprints & planning
+        - Real-time collaboration
+        - UI / rendering
+        - Integrations & import/export
+        - Cross-project portfolio
+        - Reporting & dashboards
+        - Authentication / multi-tenancy
+        - Operations / deployment
+        - Other
+    validations:
+      required: false

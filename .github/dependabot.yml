@@ -1,0 +1,12 @@
+version: 2
+updates:
+  # Keep GitHub Actions pinned and current.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # Maven and npm ecosystems are added together with the first application code
+  # (the build manifests do not exist yet). Until then Dependabot has nothing to
+  # resolve, so enabling them now would only produce noise.
