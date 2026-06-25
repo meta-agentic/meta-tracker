@@ -107,7 +107,9 @@ boundaries are enforced by tests so they cannot erode silently.
 
 ## How it will be implemented
 
-Vectis is built in themed increments. Each is independently shippable, and the
+Vectis is built in themed increments. The full, living roadmap — with current
+status — is in [`ROADMAP.md`](./ROADMAP.md) and on the project's **GitHub Project
+board** (the *Projects* tab). Each increment is independently shippable, and the
 order is deliberately bottom-up: prove the engine, then the workflow, then the
 experience, then everything that rides on top.
 
