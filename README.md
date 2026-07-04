@@ -45,6 +45,10 @@ Design goals, in priority order:
 
 ## Design
 
+Product requirements and architectural decisions are recorded as ADRs under
+[`docs/adr/`](./docs/adr/) — start with
+[ADR-VEC-01 — product requirements & feature model](./docs/adr/ADR-VEC-01-product-requirements-and-features.md).
+
 ### Principles
 
 - **Reactive, non-blocking core.** Every request path is asynchronous end to end
