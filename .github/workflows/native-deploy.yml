@@ -1,0 +1,157 @@
+name: Native Build & Deploy
+
+# Continuous delivery for the Vectis reactive server.
+#
+# On every push to main this workflow:
+#   1. compiles a GraalVM native image of the Quarkus application and runs the
+#      native integration tests (the correctness gate),
+#   2. packages that executable into a multi-stage distroless container,
+#   3. publishes the image to the GitHub Container Registry with a Sigstore
+#      (cosign) keyless signature and BuildKit SBOM + SLSA provenance
+#      attestations.
+#
+# Rollout to staging is GitOps, not push-based: Argo CD (see deploy/argocd)
+# watches the registry and the deploy/ manifests and syncs the new digest, so a
+# merge reaches staging with no manual step.
+#
+# Like the other build workflows in this repository, every job that needs the
+# application is gated on a build manifest (pom.xml) existing, so this workflow
+# is a green no-op until the Quarkus modules land and activates automatically
+# once they do.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Least privilege at the top level; jobs elevate only what they need.
+permissions:
+  contents: read
+
+concurrency:
+  group: native-deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  JAVA_VERSION: '25'
+
+jobs:
+  detect:
+    name: detect build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      has_maven: ${{ steps.check.outputs.has_maven }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Check for Maven build
+        id: check
+        run: |
+          if [ -f pom.xml ]; then
+            echo "has_maven=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_maven=false" >> "$GITHUB_OUTPUT"
+            echo "No pom.xml yet — native build & deploy is deferred until the application lands."
+          fi
+
+  native-build:
+    name: native image
+    needs: detect
+    if: needs.detect.outputs.has_maven == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up GraalVM (JDK ${{ env.JAVA_VERSION }})
+        uses: graalvm/setup-graalvm@7a1da54cb7fdef4ea19f6ecdfa9ecf59dc5a48fe # v1.3.6
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: graalvm-community
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: maven
+
+      - name: Build native executable and run native tests
+        # -Dnative runs the Quarkus native compile and the @QuarkusIntegrationTest
+        # suite against the produced binary. This is the pipeline's correctness
+        # gate: the image is only built if the native binary compiles and passes.
+        run: >
+          mvn -B -ntp verify -Dnative
+          -Dquarkus.native.additional-build-args=-J-Xmx6g
+
+      - name: Upload native runner
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: vectis-runner-${{ github.sha }}
+          path: vectis-server/target/*-runner
+          if-no-files-found: error
+          retention-days: 7
+
+  image:
+    name: distroless image
+    needs: native-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write        # push image + SBOM/provenance attestations to GHCR
+      id-token: write         # cosign keyless (OIDC) signing
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Download native runner
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: vectis-runner-${{ github.sha }}
+          path: vectis-server/target
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@318604b99e75e41977312d83839a89be02ca4893 # v5.9.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # main-<sha> is the immutable tag Argo CD Image Updater watches for
+          # staging; the moving `staging` tag aids manual inspection only.
+          tags: |
+            type=sha,prefix=main-,format=short
+            type=raw,value=staging,enable={{is_default_branch}}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
+
+      - name: Sign image (keyless)
+        # Keyless signature bound to this workflow's OIDC identity; verifiable
+        # with `cosign verify --certificate-identity-regexp ... --certificate-oidc-issuer https://token.actions.githubusercontent.com`.
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${REGISTRY}/${IMAGE_NAME}@${DIGEST}"

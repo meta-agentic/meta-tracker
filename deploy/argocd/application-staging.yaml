@@ -1,0 +1,49 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: vectis-staging
+  namespace: argocd
+  annotations:
+    # --- Argo CD Image Updater: hands-off staging rollout -------------------
+    # Watches GHCR and, when the native-deploy workflow publishes a new
+    # main-<sha> image, rewrites the staging overlay's image tag and commits it
+    # to the dedicated `env/staging` deploy branch (write-back-method: git).
+    # Argo CD tracks that same branch and syncs the new digest, so a merge to
+    # main reaches staging with no manual step.
+    #
+    # The deploy branch is deliberately NOT main: main stays fully branch-
+    # protected, while `env/staging` (branched from main, owned by the Image
+    # Updater bot) absorbs the automated tag bumps without needing a protection
+    # bypass. Promote to prod by fast-forwarding a separate env branch.
+    argocd-image-updater.argoproj.io/image-list: >-
+      vectis=ghcr.io/isohub-space/vectis
+    argocd-image-updater.argoproj.io/vectis.update-strategy: newest-build
+    argocd-image-updater.argoproj.io/vectis.allow-tags: regexp:^main-[0-9a-f]{7,40}$
+    argocd-image-updater.argoproj.io/vectis.pull-secret: pullsecret:argocd/ghcr-creds
+    argocd-image-updater.argoproj.io/vectis.kustomize.image-name: ghcr.io/isohub-space/vectis
+    argocd-image-updater.argoproj.io/write-back-method: git
+    argocd-image-updater.argoproj.io/git-branch: env/staging
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/isohub-space/vectis.git
+    # Dedicated deploy branch owned by Image Updater (see annotations); keeps the
+    # automated tag bumps off protected main.
+    targetRevision: env/staging
+    path: deploy/k8s/overlays/staging
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: vectis-staging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 2m

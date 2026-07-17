@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: vectis-staging
+
+resources:
+  - ../../base
+
+nameSuffix: -staging
+
+commonAnnotations:
+  vectis.dev/environment: staging
+
+# The tag here is the deployment source of truth. Argo CD Image Updater rewrites
+# `newTag` in place (write-back-method: git) each time a new main-<sha> image is
+# published, and Argo CD then syncs it — the automated path to staging.
+images:
+  - name: ghcr.io/isohub-space/vectis
+    newTag: staging
+
+patches:
+  - path: deployment-patch.yaml
+    target:
+      kind: Deployment
+      name: vectis

@@ -1,0 +1,8 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vectis
+spec:
+  # Two replicas in staging so rolling updates stay available; keep the base's
+  # conservative resource envelope.
+  replicas: 2

@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Environment-agnostic base for the Vectis server. Environment overlays (see
+# ../overlays/) set the namespace, image tag, and replica/resource sizing.
+resources:
+  - deployment.yaml
+  - service.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: vectis
+    includeSelectors: false

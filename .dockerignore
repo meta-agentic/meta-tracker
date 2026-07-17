@@ -1,0 +1,4 @@
+# Keep the image build context small and free of source/VCS/secrets. The image
+# only needs the pre-built native runner under vectis-server/target/.
+*
+!vectis-server/target/*-runner
