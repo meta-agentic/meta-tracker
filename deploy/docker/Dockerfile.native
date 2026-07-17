@@ -1,0 +1,40 @@
+# syntax=docker/dockerfile:1
+
+# Multi-stage distroless image for a Vectis native (GraalVM) Quarkus runner.
+#
+# This is module-agnostic by design: it does NOT assume a specific Maven module.
+# The native executable is produced by the reactor build (`mvn package -Pnative`,
+# see .github/workflows/native-deploy.yml), then the workflow discovers the
+# `*-runner` under whichever module's target/ produced it and stages it here as
+# `app/application`. The build context is this directory (deploy/docker), so the
+# image never depends on the repository's top-level layout.
+#
+# Local build: stage the runner first, e.g.
+#   mkdir -p deploy/docker/app
+#   cp "$(find . -path '*/target/*-runner' -type f | head -n1)" deploy/docker/app/application
+#   docker build -f deploy/docker/Dockerfile.native -t vectis:native deploy/docker
+#
+# Stage `prep` normalises the binary (exec bit, non-root ownership) on a minimal
+# UBI base with a shell. The final stage is Quarkus' distroless runtime: only
+# glibc + zlib and a pre-created non-root user (uid 1001), no shell, no package
+# manager — minimal attack and CVE surface.
+
+ARG DISTROLESS_IMAGE=quay.io/quarkus/quarkus-distroless-image:2.0@sha256:11a595130bf1ef65542ca52e70ca3af06e904a08c73675d124831f131b455d12
+ARG PREP_IMAGE=registry.access.redhat.com/ubi9/ubi-minimal:9.6@sha256:34880b64c07f28f64d95737f82f891516de9a3b43583f39970f7bf8e4cfa48b7
+
+FROM ${PREP_IMAGE} AS prep
+WORKDIR /stage
+# Fails loudly if the staged runner is missing rather than shipping an empty image.
+COPY app/application ./application
+RUN chmod 0555 ./application
+
+FROM ${DISTROLESS_IMAGE}
+WORKDIR /work
+COPY --from=prep --chown=1001:root /stage/application /work/application
+
+EXPOSE 8080
+USER 1001
+
+# Bind to all interfaces; readiness/liveness probes and Argo CD health checks hit
+# /q/health on this port.
+ENTRYPOINT ["./application", "-Dquarkus.http.host=0.0.0.0"]

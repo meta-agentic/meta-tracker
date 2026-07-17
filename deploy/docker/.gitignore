@@ -1,0 +1,3 @@
+# The native runner is staged here at build time (by CI or a local build) and is
+# a build artifact, never committed.
+app/

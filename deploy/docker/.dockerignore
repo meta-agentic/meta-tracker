@@ -1,0 +1,5 @@
+# Build context is this directory; the image only needs app/application (the
+# staged native runner). Keep the Dockerfile and dotfiles out of the context.
+Dockerfile.native
+.dockerignore
+.gitignore
