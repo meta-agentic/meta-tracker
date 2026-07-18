@@ -24,7 +24,7 @@
       <artifactId>vectis-extension-spi</artifactId>
     </dependency>
 
-    <!-- CDI (ArC) is the discovery mechanism: Instance, @All, @DefaultBean. -->
+    <!-- CDI (ArC) is the discovery mechanism: Instance + @All sorted by @Priority. -->
     <dependency>
       <groupId>io.quarkus</groupId>
       <artifactId>quarkus-arc</artifactId>
