@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.vectis</groupId>
+    <artifactId>vectis-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>vectis-extension-spi</artifactId>
+  <name>Vectis :: Extension SPI</name>
+  <description>
+    The stable, framework-free contract commercial and community plugins
+    implement. This is the ONLY Vectis artifact an out-of-tree plugin is
+    permitted to compile against — it carries no engine internals, so a
+    plugin cannot reach into OSS-core classes through it.
+  </description>
+
+  <!-- No dependencies on purpose: pure Java, no framework, no engine code. -->
+</project>

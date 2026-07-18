@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.vectis</groupId>
+    <artifactId>vectis-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>vectis-plugin-audit-enterprise</artifactId>
+  <name>Vectis :: Plugin :: Enterprise Audit (example)</name>
+  <description>
+    Example of a separately-packaged, separately-licensed commercial plugin.
+    In the real open-core split this artifact lives OUT of this Apache-2.0
+    repository. It is included here only so the spike can demonstrate runtime
+    discovery end to end. It compiles against vectis-extension-spi (the
+    published contract) plus ArC only — it has NO dependency on vectis-core or
+    vectis-server, so commercial code cannot reach engine internals.
+  </description>
+
+  <dependencies>
+    <!-- The published contract: the ONLY Vectis artifact a plugin may see. -->
+    <dependency>
+      <groupId>io.vectis</groupId>
+      <artifactId>vectis-extension-spi</artifactId>
+    </dependency>
+
+    <!-- CDI annotations + license/feature gating (@LookupIfProperty). -->
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-arc</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>
