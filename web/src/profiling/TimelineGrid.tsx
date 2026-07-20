@@ -21,6 +21,8 @@ export interface TimelineGridProps {
   width?: number;
   /** Reports how many DOM nodes the two virtualizers currently render. */
   onRenderStats?: (stats: { rows: number; columns: number }) => void;
+  /** Hands the scroll container to a profiler so it can drive a scripted sweep. */
+  onScrollElementReady?: (el: HTMLDivElement | null) => void;
 }
 
 /**
@@ -40,8 +42,14 @@ export function TimelineGrid({
   height = 600,
   width = 960,
   onRenderStats,
+  onScrollElementReady,
 }: TimelineGridProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    onScrollElementReady?.(scrollRef.current);
+    return () => onScrollElementReady?.(null);
+  }, [onScrollElementReady]);
 
   const rowVirtualizer = useVirtualizer({
     count: issues.length,
