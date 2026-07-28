@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.vectis</groupId>
+    <artifactId>vectis-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>vectis-persistence</artifactId>
+  <name>Vectis :: Persistence (reactive PostgreSQL adapter)</name>
+  <description>
+    Schema, migrations and non-blocking repositories for the domain model. The runtime
+    query path is the reactive PostgreSQL client (Mutiny end to end, no thread parked on
+    I/O). A JDBC datasource is present for exactly one reason — Flyway is a blocking,
+    JDBC-only tool — and is used at startup for migration, never on a request path.
+  </description>
+
+  <dependencies>
+    <dependency>
+      <groupId>io.vectis</groupId>
+      <artifactId>vectis-domain</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-arc</artifactId>
+    </dependency>
+
+    <!-- Runtime query path: reactive, non-blocking. -->
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-reactive-pg-client</artifactId>
+    </dependency>
+
+    <!-- Migration only. Flyway is JDBC-bound, so a blocking datasource exists purely
+         to run migrations at startup; nothing in the request path touches it. -->
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-flyway</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-jdbc-postgresql</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-junit5</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>${quarkus.platform.group-id}</groupId>
+        <artifactId>quarkus-maven-plugin</artifactId>
+        <extensions>true</extensions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

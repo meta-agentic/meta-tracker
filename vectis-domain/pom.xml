@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.vectis</groupId>
+    <artifactId>vectis-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>vectis-domain</artifactId>
+  <name>Vectis :: Domain (framework-free model)</name>
+  <description>
+    Workspace, board, column and item types plus time-ordered identity. This module
+    carries no framework dependency by design — no CDI, no Quarkus, no persistence
+    annotations — so the model can be reasoned about and tested without a container
+    and cannot quietly acquire a transport or storage concern.
+  </description>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>
