@@ -74,6 +74,29 @@ jobs:
     if: needs.detect.outputs.has_maven == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
+
+    # `mvn package` runs the test phase, and the persistence suite talks to a real
+    # PostgreSQL on purpose — jsonb round-tripping, uuid byte ordering and GIN
+    # containment are exactly the behaviours an in-memory substitute would fake.
+    # Quarkus Dev Services is disabled in that module's test config so the target is
+    # explicit, which means CI has to supply the database rather than conjure one.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: vectis
+          POSTGRES_PASSWORD: vectis
+          POSTGRES_DB: vectis
+        ports:
+          - 5432:5432
+        # Without a health gate the build races the database and fails on connection
+        # refused roughly whenever the runner is fast.
+        options: >-
+          --health-cmd "pg_isready -U vectis"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -90,6 +113,12 @@ jobs:
         # Reactor-wide so it picks up whatever modules exist; the `native` profile
         # is the convention agreed across lanes for activating the Quarkus native
         # compile. This is the pipeline's correctness gate.
+        env:
+          VECTIS_DB_HOST: localhost
+          VECTIS_DB_PORT: '5432'
+          VECTIS_DB_NAME: vectis
+          VECTIS_DB_USER: vectis
+          VECTIS_DB_PASSWORD: vectis
         run: >
           mvn -B -ntp package -Pnative
           -Dquarkus.native.additional-build-args=-J-Xmx6g
