@@ -122,4 +122,35 @@
       </plugins>
     </pluginManagement>
   </build>
+
+  <profiles>
+    <!--
+      The `native` profile the delivery pipeline activates
+      (.github/workflows/native-deploy.yml: `mvn package -Pnative`).
+
+      Until this existed, `-Pnative` was a silent no-op: Maven only WARNS on an
+      unknown profile ("could not be activated because it does not exist") and
+      carries on, so the reactor produced an ordinary JVM fast-jar, no
+      `*-runner` executable was ever written, and the pipeline failed at its own
+      "No native runner found" guard.
+
+      `quarkus.native.enabled` is the Quarkus 3.x property; the older
+      `quarkus.package.type=native` is deprecated (3.37 accepts it but warns,
+      naming this as the replacement). Flipping skipITs mirrors the Quarkus
+      convention, so any @QuarkusIntegrationTest runs against the produced
+      binary rather than being skipped.
+    -->
+    <profile>
+      <id>native</id>
+      <activation>
+        <property>
+          <name>native</name>
+        </property>
+      </activation>
+      <properties>
+        <skipITs>false</skipITs>
+        <quarkus.native.enabled>true</quarkus.native.enabled>
+      </properties>
+    </profile>
+  </profiles>
 </project>
