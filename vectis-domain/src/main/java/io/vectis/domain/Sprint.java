@@ -1,6 +1,7 @@
 package io.vectis.domain;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -42,7 +43,7 @@ public record Sprint(UUID id, UUID boardId, String name, SprintStatus status, In
         if (status != SprintStatus.FUTURE) {
             throw new IllegalStateException("cannot start sprint " + id + " from state " + status);
         }
-        return new Sprint(id, boardId, name, SprintStatus.ACTIVE, Instant.now(), completedAt);
+        return new Sprint(id, boardId, name, SprintStatus.ACTIVE, now(), completedAt);
     }
 
     /** Completes the sprint. Legal only from {@link SprintStatus#ACTIVE}. */
@@ -50,6 +51,17 @@ public record Sprint(UUID id, UUID boardId, String name, SprintStatus status, In
         if (status != SprintStatus.ACTIVE) {
             throw new IllegalStateException("cannot complete sprint " + id + " from state " + status);
         }
-        return new Sprint(id, boardId, name, SprintStatus.COMPLETED, startedAt, Instant.now());
+        return new Sprint(id, boardId, name, SprintStatus.COMPLETED, startedAt, now());
+    }
+
+    /**
+     * Truncated to microseconds, PostgreSQL's {@code timestamptz} precision. Without
+     * this, a sprint's equality to its own persisted-and-reloaded form is platform-
+     * dependent: {@code Instant.now()} carries nanoseconds on some JVMs (Linux) and only
+     * microseconds on others (macOS), so a round trip through storage silently drops
+     * precision on the former and not the latter.
+     */
+    private static Instant now() {
+        return Instant.now().truncatedTo(ChronoUnit.MICROS);
     }
 }
