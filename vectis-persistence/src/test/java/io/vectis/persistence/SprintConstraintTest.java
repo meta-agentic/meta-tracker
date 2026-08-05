@@ -192,6 +192,45 @@ class SprintConstraintTest {
     }
 
     @Test
+    void startingAnAlreadyStartedSprintIsRefused() {
+        Board board = newBoard(newWorkspace());
+        Sprint active = startedSprint(board, "Sprint 1");
+
+        // A second start() call on the same in-memory-illegal transition (bypassing
+        // Sprint.start()'s own FUTURE-only check) simulates a stale caller: the row is no
+        // longer FUTURE, so the persistence-layer guard — not the domain object's own
+        // state — must be what refuses this.
+        Sprint stale = new Sprint(active.id(), active.boardId(), active.name(), SprintStatus.ACTIVE,
+                active.startedAt(), null);
+        IllegalSprintTransitionException failure = assertThrows(IllegalSprintTransitionException.class,
+                () -> sprints.start(stale).await().indefinitely());
+
+        assertTrue(failure.getMessage().contains(active.id().toString()));
+        assertEquals(SprintStatus.ACTIVE, sprints.findById(active.id()).await().indefinitely().orElseThrow().status(),
+                "a refused transition must not touch started_at or otherwise re-write the row");
+    }
+
+    @Test
+    void completingAnAlreadyCompletedSprintIsRefused() {
+        Board board = newBoard(newWorkspace());
+        Sprint active = startedSprint(board, "Sprint 1");
+        Sprint completed = sprints.complete(active.complete(), List.of(), null).await().indefinitely();
+
+        // Same shape as the start() case: a stale caller re-attempting complete() on a row
+        // the database already moved past ACTIVE must be refused, not silently re-stamp
+        // completed_at.
+        Sprint staleComplete = new Sprint(completed.id(), completed.boardId(), completed.name(),
+                SprintStatus.COMPLETED, completed.startedAt(), java.time.Instant.now());
+        IllegalSprintTransitionException failure = assertThrows(IllegalSprintTransitionException.class,
+                () -> sprints.complete(staleComplete, List.of(), null).await().indefinitely());
+
+        assertTrue(failure.getMessage().contains(completed.id().toString()));
+        assertEquals(completed.completedAt(),
+                sprints.findById(completed.id()).await().indefinitely().orElseThrow().completedAt(),
+                "a refused transition must not re-stamp completed_at");
+    }
+
+    @Test
     void theStatusColumnRefusesAStatusTheDomainDoesNotDefine() {
         Board board = newBoard(newWorkspace());
 

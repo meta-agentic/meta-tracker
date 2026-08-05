@@ -73,11 +73,21 @@ public class SprintRepository {
      * than checked here first — a check-then-write would leave a race window between two
      * concurrent starts on the same board. A violation surfaces as
      * {@link ActiveSprintConflictException}.
+     *
+     * <p>The {@code where status = 'FUTURE'} clause is a second, independent guard: {@code
+     * sprint.start()} only validates the caller's own in-memory copy, so without this a
+     * stale object (or one already started/completed elsewhere) would silently re-write
+     * the row anyway. A zero rowcount means the row was not in the expected state and
+     * surfaces as {@link IllegalSprintTransitionException}.
      */
     public Uni<Sprint> start(Sprint sprint) {
-        return pool.preparedQuery("update sprint set status = $1, started_at = $2 where id = $3")
+        return pool.preparedQuery(
+                        "update sprint set status = $1, started_at = $2 where id = $3 and status = 'FUTURE'")
                 .execute(Tuple.of(sprint.status().name(), toOffset(sprint.startedAt()), sprint.id()))
-                .replaceWith(sprint)
+                .onItem().transformToUni(rows -> rows.rowCount() == 0
+                        ? Uni.createFrom().<Sprint>failure(new IllegalSprintTransitionException(
+                                sprint.id(), SprintStatus.FUTURE, sprint.status()))
+                        : Uni.createFrom().item(sprint))
                 .onFailure(this::isSingleActiveViolation)
                 .transform(failure -> new ActiveSprintConflictException(sprint.boardId(), failure));
     }
@@ -93,12 +103,23 @@ public class SprintRepository {
      * repository's decision: {@link Sprint#complete()} deliberately has no notion of
      * done, since that belongs to the workflow engine VEC-15 owns. The caller supplies
      * the exact set.
+     *
+     * <p>The {@code where status = 'ACTIVE'} clause guards the same gap as {@link #start}:
+     * {@code sprint.complete()} only validates the caller's own in-memory copy, so without
+     * this a stale or already-completed sprint would silently re-write (and re-stamp
+     * {@code completed_at} on, or move items out from under) the row. A zero rowcount
+     * fails the whole transaction with {@link IllegalSprintTransitionException} before any
+     * item move is attempted — nothing is left half-applied.
      */
     public Uni<Sprint> complete(Sprint sprint, List<UUID> itemIdsToMove, UUID destinationSprintId) {
         return pool.withTransaction(conn -> conn.preparedQuery(
-                        "update sprint set status = $1, completed_at = $2 where id = $3")
+                        "update sprint set status = $1, completed_at = $2 where id = $3 and status = 'ACTIVE'")
                 .execute(Tuple.of(sprint.status().name(), toOffset(sprint.completedAt()), sprint.id()))
-                .chain(ignored -> {
+                .chain(rows -> {
+                    if (rows.rowCount() == 0) {
+                        return Uni.createFrom().failure(new IllegalSprintTransitionException(
+                                sprint.id(), SprintStatus.ACTIVE, sprint.status()));
+                    }
                     if (itemIdsToMove.isEmpty()) {
                         return Uni.createFrom().voidItem();
                     }
