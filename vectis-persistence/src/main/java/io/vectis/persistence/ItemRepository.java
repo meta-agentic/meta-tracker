@@ -17,6 +17,9 @@ import java.util.UUID;
 @ApplicationScoped
 public class ItemRepository {
 
+    private static final String SELECT_COLUMNS =
+            "id, workspace_id, board_id, column_id, key, title, rank, fields, sprint_id";
+
     private final Pool pool;
 
     public ItemRepository(Pool pool) {
@@ -25,24 +28,29 @@ public class ItemRepository {
 
     public Uni<Item> insert(Item item) {
         return pool.preparedQuery("""
-                        insert into item (id, workspace_id, board_id, column_id, key, title, rank, fields)
-                        values ($1, $2, $3, $4, $5, $6, $7, $8)
+                        insert into item (id, workspace_id, board_id, column_id, key, title, rank, fields, sprint_id)
+                        values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                         """)
                 .execute(bind(item))
                 .replaceWith(item);
     }
 
-    /** {@code Tuple.of} tops out at six values, so the eight-column bind goes through a list. */
+    /**
+     * {@code Tuple.of} tops out at six values and {@code List.of} rejects the null
+     * {@code sprintId} of a backlog item, so the nine-column bind goes through an array.
+     */
     private static Tuple bind(Item item) {
-        return Tuple.from(List.of(
-                item.id(),
-                item.workspaceId(),
-                item.boardId(),
-                item.columnId(),
-                item.key(),
-                item.title(),
-                item.rank(),
-                new JsonObject(item.fields())));
+        return Tuple.from(new Object[] {
+            item.id(),
+            item.workspaceId(),
+            item.boardId(),
+            item.columnId(),
+            item.key(),
+            item.title(),
+            item.rank(),
+            new JsonObject(item.fields()),
+            item.sprintId()
+        });
     }
 
     /** Inserts many items in a single round trip — the import path (VEC-18/19). */
@@ -52,16 +60,15 @@ public class ItemRepository {
         }
         List<Tuple> batch = items.stream().map(ItemRepository::bind).toList();
         return pool.withTransaction(conn -> conn.preparedQuery("""
-                        insert into item (id, workspace_id, board_id, column_id, key, title, rank, fields)
-                        values ($1, $2, $3, $4, $5, $6, $7, $8)
+                        insert into item (id, workspace_id, board_id, column_id, key, title, rank, fields, sprint_id)
+                        values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                         """)
                 .executeBatch(batch)
                 .replaceWith(items.size()));
     }
 
     public Uni<Optional<Item>> findById(UUID id) {
-        return pool.preparedQuery(
-                        "select id, workspace_id, board_id, column_id, key, title, rank, fields from item where id = $1")
+        return pool.preparedQuery("select " + SELECT_COLUMNS + " from item where id = $1")
                 .execute(Tuple.of(id))
                 .map(rows -> rows.rowCount() == 0
                         ? Optional.<Item>empty()
@@ -73,8 +80,7 @@ public class ItemRepository {
      * {@code item_board_column_rank_idx} with no sort step.
      */
     public Uni<List<Item>> findByColumn(UUID boardId, UUID columnId) {
-        return pool.preparedQuery("""
-                        select id, workspace_id, board_id, column_id, key, title, rank, fields
+        return pool.preparedQuery("select " + SELECT_COLUMNS + """
                           from item
                          where board_id = $1 and column_id = $2
                          order by rank
@@ -87,7 +93,7 @@ public class ItemRepository {
     public Uni<List<Item>> findByBoard(UUID boardId) {
         return pool.preparedQuery("""
                         select i.id, i.workspace_id, i.board_id, i.column_id,
-                               i.key, i.title, i.rank, i.fields
+                               i.key, i.title, i.rank, i.fields, i.sprint_id
                           from item i
                           join board_column c on c.id = i.column_id
                          where i.board_id = $1
@@ -109,10 +115,35 @@ public class ItemRepository {
                 .replaceWith(moved);
     }
 
+    /**
+     * Assigns an item to a sprint, or returns it to the backlog if {@code sprintId} is
+     * null. Mirrors {@link #move} for column moves: one row written regardless of scope.
+     */
+    public Uni<Item> moveToSprint(Item item, UUID sprintId) {
+        Item moved = item.withSprint(sprintId);
+        return pool.preparedQuery("update item set sprint_id = $1, updated_at = now() where id = $2")
+                .execute(Tuple.of(sprintId, item.id()))
+                .replaceWith(moved);
+    }
+
+    /**
+     * Items in a board's backlog ({@code sprintId} null) or in a specific sprint's
+     * scope — the "backlog scope distinct from sprint scope" read path. {@code is not
+     * distinct from} rather than {@code =} so the backlog (null) case matches.
+     */
+    public Uni<List<Item>> findByBoardScope(UUID boardId, UUID sprintId) {
+        return pool.preparedQuery("select " + SELECT_COLUMNS + """
+                          from item
+                         where board_id = $1 and sprint_id is not distinct from $2
+                         order by rank
+                        """)
+                .execute(Tuple.of(boardId, sprintId))
+                .map(ItemRepository::mapAll);
+    }
+
     /** Items whose open field set contains the given fragment (a GIN containment hit). */
     public Uni<List<Item>> findByFieldsContaining(UUID workspaceId, Map<String, Object> fragment) {
-        return pool.preparedQuery("""
-                        select id, workspace_id, board_id, column_id, key, title, rank, fields
+        return pool.preparedQuery("select " + SELECT_COLUMNS + """
                           from item
                          where workspace_id = $1 and fields @> $2
                          order by id
@@ -137,6 +168,7 @@ public class ItemRepository {
                 row.getString("key"),
                 row.getString("title"),
                 row.getString("rank"),
-                fields == null ? Map.of() : fields.getMap());
+                fields == null ? Map.of() : fields.getMap(),
+                row.getUUID("sprint_id"));
     }
 }

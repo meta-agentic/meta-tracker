@@ -21,6 +21,11 @@ import java.util.UUID;
  * <p>{@code rank} is a sparse lexicographic string rather than an integer index, so a
  * card dropped between two others needs one row updated instead of renumbering the
  * whole column — the difference between an O(1) and an O(n) write on every drag.
+ *
+ * <p>{@code sprintId} is a real column for the same reason as {@code boardId} or
+ * {@code columnId}: sprint scope must be indexed and queried, so it cannot live in the
+ * open {@code fields} document. {@code null} means the item is in the backlog rather
+ * than assigned to any sprint.
  */
 public record Item(
         UUID id,
@@ -30,7 +35,8 @@ public record Item(
         String key,
         String title,
         String rank,
-        Map<String, Object> fields) {
+        Map<String, Object> fields,
+        UUID sprintId) {
 
     public Item {
         Objects.requireNonNull(id, "id");
@@ -51,16 +57,21 @@ public record Item(
 
     public static Item create(
             UUID workspaceId, UUID boardId, UUID columnId, String key, String title, String rank) {
-        return new Item(TimeOrderedId.next(), workspaceId, boardId, columnId, key, title, rank, Map.of());
+        return new Item(TimeOrderedId.next(), workspaceId, boardId, columnId, key, title, rank, Map.of(), null);
     }
 
     /** The same item moved to another column, leaving every other attribute alone. */
     public Item movedTo(UUID targetColumnId, String newRank) {
-        return new Item(id, workspaceId, boardId, targetColumnId, key, title, newRank, fields);
+        return new Item(id, workspaceId, boardId, targetColumnId, key, title, newRank, fields, sprintId);
     }
 
     /** The same item with its open field set replaced. */
     public Item withFields(Map<String, Object> newFields) {
-        return new Item(id, workspaceId, boardId, columnId, key, title, rank, newFields);
+        return new Item(id, workspaceId, boardId, columnId, key, title, rank, newFields, sprintId);
+    }
+
+    /** The same item assigned to a sprint, or returned to the backlog if {@code sprintId} is null. */
+    public Item withSprint(UUID sprintId) {
+        return new Item(id, workspaceId, boardId, columnId, key, title, rank, fields, sprintId);
     }
 }
