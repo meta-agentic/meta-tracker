@@ -1,0 +1,127 @@
+name: JVM Tests
+
+# The PR test gate for application source.
+#
+# `native-deploy.yml` is path-filtered to `**/pom.xml`, `deploy/**` and itself,
+# because a ~60-minute GraalVM native compile is a *packaging* gate and has no
+# business sitting between a developer and feedback on a `.java` change. The
+# consequence, until this workflow existed, was that a pull request touching only
+# `.java` or `.sql` matched no path filter anywhere and ran no tests at all: the
+# persistence suite's only verification was whatever the author ran locally.
+#
+# This workflow closes that hole. It is the same test phase the native build
+# runs — `mvn verify`, same PostgreSQL service, same `VECTIS_DB_*` contract — with
+# the native compile left out, so source PRs get an honest gate in minutes rather
+# than an hour. `native-deploy.yml` keeps its narrow filter and stays responsible
+# for the native/packaging path.
+#
+# Gated on a Maven build existing, matching the other workflows in this repo: a
+# green no-op until application modules land, active automatically once they do.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    # Application source and the build manifests that decide what it compiles
+    # against. Scoped to the `vectis-*` Maven modules on purpose — `**/src/**`
+    # would also match `web/src/**` and spend a Maven build on an SPA-only PR.
+    paths:
+      - '**/*.java'
+      - '**/*.sql'
+      - 'vectis-*/src/**'
+      - '**/pom.xml'
+      - '.github/workflows/jvm-test.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jvm-test-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: '25'
+
+jobs:
+  detect:
+    name: detect build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      has_maven: ${{ steps.check.outputs.has_maven }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check for a Maven build (any module)
+        id: check
+        run: |
+          if find . -name pom.xml -not -path './.git/*' | grep -q .; then
+            echo "has_maven=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_maven=false" >> "$GITHUB_OUTPUT"
+            echo "No pom.xml yet — JVM tests are deferred until the application lands."
+          fi
+
+  test:
+    name: mvn verify (JVM)
+    needs: detect
+    if: needs.detect.outputs.has_maven == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    # The persistence suite talks to a real PostgreSQL on purpose — jsonb
+    # round-tripping, uuid byte ordering and GIN containment are exactly the
+    # behaviours an in-memory substitute would fake. Quarkus Dev Services is
+    # disabled in that module's test config, so CI supplies the database.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: vectis
+          POSTGRES_PASSWORD: vectis
+          POSTGRES_DB: vectis
+        ports:
+          - 5432:5432
+        # Without a health gate the build races the database and fails on
+        # connection refused roughly whenever the runner is fast.
+        options: >-
+          --health-cmd "pg_isready -U vectis"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          cache: maven
+
+      - name: Reactor-wide verify
+        # Deliberately without `-Pnative`: this is the test gate, not the
+        # packaging gate. Same VECTIS_DB_* contract as native-deploy.yml.
+        env:
+          VECTIS_DB_HOST: localhost
+          VECTIS_DB_PORT: '5432'
+          VECTIS_DB_NAME: vectis
+          VECTIS_DB_USER: vectis
+          VECTIS_DB_PASSWORD: vectis
+        run: mvn -B -ntp verify
+
+      - name: Upload test reports
+        # Surefire/failsafe XML is the only artefact that says *which* assertion
+        # failed once the runner is gone.
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-reports-${{ github.sha }}
+          path: '**/target/*-reports/**'
+          if-no-files-found: ignore
+          retention-days: 7

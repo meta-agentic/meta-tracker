@@ -28,6 +28,12 @@ on:
     branches: [main]
     # Validate the native build whenever the module structure or this pipeline
     # changes; still a no-op until a pom.xml exists.
+    #
+    # This filter is deliberately narrow and deliberately excludes `.java`/`.sql`:
+    # a ~60-minute native compile is a packaging gate, not a test gate. Source PRs
+    # are tested by `jvm-test.yml`, which runs the same `mvn verify` against the
+    # same PostgreSQL service without `-Pnative`. Widening this list instead of
+    # using that workflow trades minutes of PR feedback for an hour of it.
     paths:
       - '**/pom.xml'
       - 'deploy/**'
