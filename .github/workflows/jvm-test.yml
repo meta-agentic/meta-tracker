@@ -26,10 +26,16 @@ on:
     # Application source and the build manifests that decide what it compiles
     # against. Scoped to the `vectis-*` Maven modules on purpose — `**/src/**`
     # would also match `web/src/**` and spend a Maven build on an SPA-only PR.
+    #
+    # The root `pom.xml` is listed on its own as well as under `**/pom.xml`:
+    # GitHub documents `**` as matching zero or more of any character, but the
+    # zero case at the start of a path is not something to stake the repo's only
+    # test gate on. The bare entry costs nothing and settles it.
     paths:
       - '**/*.java'
       - '**/*.sql'
       - 'vectis-*/src/**'
+      - 'pom.xml'
       - '**/pom.xml'
       - '.github/workflows/jvm-test.yml'
   workflow_dispatch:
@@ -38,8 +44,12 @@ permissions:
   contents: read
 
 concurrency:
+  # Superseding a PR run is what you want: the older commit's result is stale the
+  # moment a new one is pushed. Superseding a *main* run is not — two merges
+  # landing a minute apart share this group by ref, and cancelling would leave the
+  # first merge commit with no test result at all.
   group: jvm-test-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   JAVA_VERSION: '25'
