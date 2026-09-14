@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
 import { useTranslation } from "react-i18next";
 import { AppProviders } from "./AppProviders";
@@ -131,6 +131,31 @@ describe("locale swap", () => {
     // scroll position and in-progress edit state survive a language change.
     expect(screen.getByTestId("boards")).toBe(probe);
     expect(document.documentElement.lang).toBe("it");
+  });
+});
+
+describe("no flash of the default locale", () => {
+  it("constructs the shared instance at the persisted locale, not the default", async () => {
+    localStorage.setItem(LOCALE_KEY, JSON.stringify("it"));
+
+    // A fresh module graph, so the module-level `i18n` runs its initialiser
+    // against the localStorage state set above — this is what a reload does.
+    vi.resetModules();
+    const { i18n } = await import("../i18n");
+
+    // Not `en`-then-`it`: the very first value has to be the persisted one, or
+    // the first paint renders English and swaps after it.
+    expect(i18n.language).toBe("it");
+    expect(i18n.t("nav.boards")).toBe("Bacheche");
+  });
+
+  it("falls back to the default when nothing is persisted", async () => {
+    localStorage.clear();
+
+    vi.resetModules();
+    const { i18n } = await import("../i18n");
+
+    expect(i18n.language).toBe("en");
   });
 });
 

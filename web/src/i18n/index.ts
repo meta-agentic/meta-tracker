@@ -6,6 +6,7 @@ import {
   resources,
   type Locale,
 } from "./locales";
+import { readPersistedPreferences } from "../store/preferences";
 
 /**
  * The shared i18next instance.
@@ -35,4 +36,13 @@ export function createI18n(locale: Locale = DEFAULT_LOCALE): I18n {
   return instance;
 }
 
-export const i18n = createI18n();
+/**
+ * Initialised at the *persisted* locale, not at the default.
+ *
+ * `AppProviders` also syncs the locale in an effect, but an effect runs after
+ * the first paint — so initialising at `DEFAULT_LOCALE` would show an Italian
+ * user a frame of English on every reload and then swap it. This is the same
+ * pre-paint read the theme already does in `index.html` and at store
+ * construction; the two preferences are now resolved the same way.
+ */
+export const i18n = createI18n(readPersistedPreferences().locale);
