@@ -5,6 +5,7 @@ import {
   uiTracking,
   type AsyncCache,
 } from "./cache";
+import { createPreferencesSlice, type PreferencesState } from "./preferences";
 import type { Board, Epic, ID, Issue, WorkspaceSnapshot } from "./types";
 
 const CACHE_KEY = "workspace:v1";
@@ -17,7 +18,7 @@ const ACTIVE_BOARD_KEY = "ui:activeBoardId";
  * denormalized index (board -> ordered issue ids) so a board's column layout is
  * assembled without scanning every issue.
  */
-export interface WorkspaceState {
+export interface WorkspaceState extends PreferencesState {
   issuesById: Record<ID, Issue>;
   epicsById: Record<ID, Epic>;
   boardsById: Record<ID, Board>;
@@ -80,6 +81,9 @@ export function createWorkspaceStore(
 
     return {
       ...empty,
+      // Read synchronously at construction, not in `hydrate()`: the theme has to
+      // be right on the first render, and `hydrate()` is async.
+      ...createPreferencesSlice(set),
       activeBoardId: null,
       hydrated: false,
 
@@ -146,6 +150,8 @@ export function createWorkspaceStore(
 
       reset: () => {
         if (persistTimer) clearTimeout(persistTimer);
+        // A partial set, so `theme` and `locale` survive: clearing the workspace
+        // data is not a reason to throw away how the user wants it displayed.
         set({ ...empty, activeBoardId: null, hydrated: false });
         void cache.delete(CACHE_KEY);
       },

@@ -1,0 +1,43 @@
+{
+  "app.title": "Vectis",
+  "app.loading": "Caricamento dello spazio di lavoro…",
+
+  "nav.boards": "Bacheche",
+  "nav.timeline": "Profilatore cronologia",
+
+  "board.empty": "Seleziona una bacheca.",
+  "board.columnCount": "({{value}})",
+  "board.moreIssues": "+{{value}} altri",
+
+  "prefs.theme.label": "Tema",
+  "prefs.theme.system": "Sistema",
+  "prefs.theme.light": "Chiaro",
+  "prefs.theme.dark": "Scuro",
+  "prefs.locale.label": "Lingua",
+
+  "profiler.preset": "{{tasks}} attività · {{years}} anni",
+  "profiler.run": "Esegui profilo a due assi",
+  "profiler.running": "Profilazione…",
+  "profiler.totalTasks": "Attività totali",
+  "profiler.timelineSpan": "Estensione cronologia",
+  "profiler.days": "{{days}} giorni",
+  "profiler.liveNodes": "Nodi DOM attivi",
+  "profiler.liveNodesDetail": "{{total}} ({{rows}} righe × {{columns}} colonne)",
+  "profiler.generation": "Generazione",
+  "profiler.milliseconds": "{{value}} ms",
+
+  "profiler.table.axis": "Asse",
+  "profiler.table.p50": "p50 (ms)",
+  "profiler.table.p95": "p95 (ms)",
+  "profiler.table.max": "max (ms)",
+  "profiler.table.breaches": "> 16,7 ms",
+  "profiler.table.peakNodes": "picco nodi",
+  "profiler.table.breachRatio": "{{breaches}}/{{total}}",
+  "profiler.domEfficiency": "Efficienza DOM: il {{percent}}% della griglia da {{cells}} celle è stato attivo.",
+
+  "profiler.axis.vertical": "verticale",
+  "profiler.axis.horizontal": "orizzontale",
+  "profiler.axis.diagonal": "diagonale",
+
+  "timeline.axisLabel": "Asse dei giorni della cronologia"
+}

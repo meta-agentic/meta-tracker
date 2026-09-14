@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { TimelineGrid } from "./TimelineGrid";
 import { generateWorkspace } from "../lib/synthetic";
+import { AppProviders } from "../providers/AppProviders";
 
 describe("dual-axis virtualization", () => {
   it("keeps live DOM node count bounded far below the task count", () => {
@@ -14,7 +15,11 @@ describe("dual-axis virtualization", () => {
     });
 
     render(
-      <TimelineGrid issues={issues} originDate="2024-01-01" totalDays={4 * 365} />,
+      // The grid labels its day axis through the active locale, so it needs the
+      // providers the app root supplies.
+      <AppProviders>
+        <TimelineGrid issues={issues} originDate="2024-01-01" totalDays={4 * 365} />
+      </AppProviders>,
     );
 
     const rows = screen.queryAllByTestId("timeline-row");

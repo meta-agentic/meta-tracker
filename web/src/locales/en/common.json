@@ -1,0 +1,43 @@
+{
+  "app.title": "Vectis",
+  "app.loading": "Loading workspace…",
+
+  "nav.boards": "Boards",
+  "nav.timeline": "Timeline profiler",
+
+  "board.empty": "Select a board.",
+  "board.columnCount": "({{value}})",
+  "board.moreIssues": "+{{value}} more",
+
+  "prefs.theme.label": "Theme",
+  "prefs.theme.system": "System",
+  "prefs.theme.light": "Light",
+  "prefs.theme.dark": "Dark",
+  "prefs.locale.label": "Language",
+
+  "profiler.preset": "{{tasks}} tasks · {{years}}y",
+  "profiler.run": "Run dual-axis profile",
+  "profiler.running": "Profiling…",
+  "profiler.totalTasks": "Total tasks",
+  "profiler.timelineSpan": "Timeline span",
+  "profiler.days": "{{days}} days",
+  "profiler.liveNodes": "Live DOM nodes",
+  "profiler.liveNodesDetail": "{{total}} ({{rows}} rows × {{columns}} cols)",
+  "profiler.generation": "Generation",
+  "profiler.milliseconds": "{{value}} ms",
+
+  "profiler.table.axis": "Axis",
+  "profiler.table.p50": "p50 (ms)",
+  "profiler.table.p95": "p95 (ms)",
+  "profiler.table.max": "max (ms)",
+  "profiler.table.breaches": "> 16.7 ms",
+  "profiler.table.peakNodes": "peak nodes",
+  "profiler.table.breachRatio": "{{breaches}}/{{total}}",
+  "profiler.domEfficiency": "DOM efficiency: {{percent}}% of the {{cells}}-cell grid was ever live.",
+
+  "profiler.axis.vertical": "vertical",
+  "profiler.axis.horizontal": "horizontal",
+  "profiler.axis.diagonal": "diagonal",
+
+  "timeline.axisLabel": "Timeline day axis"
+}

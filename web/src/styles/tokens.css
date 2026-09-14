@@ -1,0 +1,98 @@
+/*
+ * Design tokens — the single source of colour in the SPA.
+ *
+ * This file is the ONLY place in `web/src` allowed to contain a colour literal.
+ * Every component reads `var(--vec-*)`; a component carrying its own hex is a
+ * defect (VEC-34 acceptance criterion 3 greps for exactly that).
+ *
+ * Theming is a `data-theme` attribute on `documentElement` rather than a class,
+ * so the pre-paint bootstrap in index.html can set it before React exists and
+ * the toggle can flip it later with no re-mount. Deliberately stack-neutral: if
+ * a CSS framework is adopted later it consumes these same custom properties.
+ *
+ * Resolution order for the three states a theme preference can be in:
+ *   [data-theme="light"]  explicit light — wins over the OS
+ *   [data-theme="dark"]   explicit dark  — wins over the OS
+ *   (absent)              follow prefers-color-scheme
+ */
+
+:root {
+  color-scheme: light;
+
+  --vec-bg: #ffffff;
+  --vec-surface: #ffffff;
+  --vec-surface-sunken: #f4f4f5;
+  --vec-text: #18181b;
+  --vec-text-muted: #71717a;
+  --vec-border: #e4e4e7;
+  --vec-border-strong: #d4d4d8;
+  --vec-accent: #4f46e5;
+  --vec-on-accent: #ffffff;
+
+  /* Timeline day columns: every 7th line is the week boundary, hence "major". */
+  --vec-grid-line: #f4f4f5;
+  --vec-grid-line-major: #e4e4e7;
+
+  --vec-font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/*
+ * System preference. Guarded against [data-theme="light"] so that an explicit
+ * light choice still wins on a machine set to dark.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --vec-bg: #09090b;
+    --vec-surface: #18181b;
+    --vec-surface-sunken: #131316;
+    --vec-text: #e4e4e7;
+    --vec-text-muted: #a1a1aa;
+    --vec-border: #27272a;
+    --vec-border-strong: #3f3f46;
+    --vec-accent: #6366f1;
+    --vec-on-accent: #ffffff;
+
+    --vec-grid-line: #1c1c1f;
+    --vec-grid-line-major: #2e2e33;
+  }
+}
+
+/* Explicit dark. Repeated rather than shared so the toggle wins in both
+   directions — a media-query-only definition cannot be overridden by an
+   attribute on a machine set to light. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --vec-bg: #09090b;
+  --vec-surface: #18181b;
+  --vec-surface-sunken: #131316;
+  --vec-text: #e4e4e7;
+  --vec-text-muted: #a1a1aa;
+  --vec-border: #27272a;
+  --vec-border-strong: #3f3f46;
+  --vec-accent: #6366f1;
+  --vec-on-accent: #ffffff;
+
+  --vec-grid-line: #1c1c1f;
+  --vec-grid-line-major: #2e2e33;
+}
+
+body {
+  margin: 0;
+  background: var(--vec-bg);
+  color: var(--vec-text);
+  font-family: var(--vec-font-sans);
+}
+
+/*
+ * Form controls do not inherit the page font or colour by default, and the SPA
+ * uses bare <button> elements throughout. Setting them here keeps the token
+ * migration from having to restate the same three properties per button.
+ */
+button,
+select {
+  font: inherit;
+  color: inherit;
+}

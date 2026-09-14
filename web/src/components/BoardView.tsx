@@ -1,6 +1,8 @@
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { useWorkspaceStore } from "../store/workspaceStore";
 import { boardColumns, selectActiveBoard } from "../store/selectors";
+import { useNumberFormat } from "../i18n/format";
 
 /**
  * Renders the active board from the flat store. Because every board's data is
@@ -13,6 +15,8 @@ import { boardColumns, selectActiveBoard } from "../store/selectors";
  * call would defeat `useSyncExternalStore`'s snapshot caching and loop.
  */
 export function BoardView() {
+  const { t } = useTranslation();
+  const number = useNumberFormat();
   const board = useWorkspaceStore(selectActiveBoard);
   const issuesById = useWorkspaceStore((s) => s.issuesById);
   const boardIssueIds = useWorkspaceStore((s) => s.boardIssueIds);
@@ -22,7 +26,7 @@ export function BoardView() {
     [board, issuesById, boardIssueIds],
   );
 
-  if (!board) return <p style={{ padding: 16 }}>Select a board.</p>;
+  if (!board) return <p style={{ padding: 16 }}>{t("board.empty")}</p>;
 
   return (
     <div style={{ display: "flex", gap: 12, padding: 16, overflowX: "auto" }}>
@@ -33,20 +37,23 @@ export function BoardView() {
             key={column.id}
             style={{
               minWidth: 220,
-              background: "#f4f4f5",
+              background: "var(--vec-surface-sunken)",
               borderRadius: 8,
               padding: 8,
             }}
           >
             <header style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>
-              {column.name} <span style={{ color: "#71717a" }}>({issues.length})</span>
+              {column.name}{" "}
+              <span style={{ color: "var(--vec-text-muted)" }}>
+                {t("board.columnCount", { count: number(issues.length) })}
+              </span>
             </header>
             {issues.slice(0, 50).map((issue) => (
               <div
                 key={issue.id}
                 style={{
-                  background: "#fff",
-                  border: "1px solid #e4e4e7",
+                  background: "var(--vec-surface)",
+                  border: "1px solid var(--vec-border)",
                   borderRadius: 6,
                   padding: 8,
                   marginBottom: 6,
@@ -57,8 +64,8 @@ export function BoardView() {
               </div>
             ))}
             {issues.length > 50 && (
-              <p style={{ fontSize: 11, color: "#71717a" }}>
-                +{issues.length - 50} more
+              <p style={{ fontSize: 11, color: "var(--vec-text-muted)" }}>
+                {t("board.moreIssues", { count: number(issues.length - 50) })}
               </p>
             )}
           </section>

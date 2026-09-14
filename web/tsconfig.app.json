@@ -16,7 +16,10 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
-    "types": ["vitest/globals", "@testing-library/jest-dom"]
+    "resolveJsonModule": true,
+    // vite/client supplies `import.meta.glob` (the locale registry) and the
+    // module declarations for CSS side-effect imports (the token stylesheet).
+    "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"]
   },
   "include": ["src"]
 }

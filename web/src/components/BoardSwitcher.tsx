@@ -18,13 +18,18 @@ export function BoardSwitcher() {
           style={{
             padding: "4px 10px",
             borderRadius: 6,
-            border: "1px solid #d4d4d8",
-            background: board.id === activeBoardId ? "#4f46e5" : "#fff",
-            color: board.id === activeBoardId ? "#fff" : "#18181b",
+            border: "1px solid var(--vec-border-strong)",
+            background: board.id === activeBoardId
+              ? "var(--vec-accent)"
+              : "var(--vec-surface)",
+            color: board.id === activeBoardId
+              ? "var(--vec-on-accent)"
+              : "var(--vec-text)",
             cursor: "pointer",
             fontSize: 12,
           }}
         >
+          {/* Board names are user data, not chrome — deliberately not localized. */}
           {board.name}
         </button>
       ))}

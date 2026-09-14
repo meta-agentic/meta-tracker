@@ -1,5 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { generateWorkspace } from "../lib/synthetic";
+import { useNumberFormat } from "../i18n/format";
 import { TimelineGrid } from "./TimelineGrid";
 import {
   domEfficiency,
@@ -36,6 +38,8 @@ function nextFrame(): Promise<number> {
  * axes to attribute frame cost to whichever axis actually dominates.
  */
 export function ProfilingHarness() {
+  const { t } = useTranslation();
+  const number = useNumberFormat();
   const [scenario, setScenario] = useState<Scenario>(PRESETS[1]);
   const [stats, setStats] = useState({ rows: 0, columns: 0 });
   const [result, setResult] = useState<ProfileResult | null>(null);
@@ -123,7 +127,10 @@ export function ProfilingHarness() {
             }}
             style={presetStyle(preset === scenario)}
           >
-            {preset.issues.toLocaleString()} tasks · {preset.years}y
+            {t("profiler.preset", {
+              tasks: number(preset.issues),
+              years: preset.years,
+            })}
           </button>
         ))}
         <button
@@ -131,7 +138,7 @@ export function ProfilingHarness() {
           disabled={running}
           style={{ ...presetStyle(false), marginLeft: "auto", fontWeight: 600 }}
         >
-          {running ? "Profiling…" : "Run dual-axis profile"}
+          {running ? t("profiler.running") : t("profiler.run")}
         </button>
       </div>
 
@@ -144,16 +151,20 @@ export function ProfilingHarness() {
           marginBottom: 12,
         }}
       >
-        <dt>Total tasks</dt>
-        <dd>{scenario.issues.toLocaleString()}</dd>
-        <dt>Timeline span</dt>
-        <dd>{totalDays.toLocaleString()} days</dd>
-        <dt>Live DOM nodes</dt>
+        <dt>{t("profiler.totalTasks")}</dt>
+        <dd>{number(scenario.issues)}</dd>
+        <dt>{t("profiler.timelineSpan")}</dt>
+        <dd>{t("profiler.days", { days: number(totalDays) })}</dd>
+        <dt>{t("profiler.liveNodes")}</dt>
         <dd>
-          {liveNodes} ({stats.rows} rows × {stats.columns} cols)
+          {t("profiler.liveNodesDetail", {
+            total: number(liveNodes),
+            rows: number(stats.rows),
+            columns: number(stats.columns),
+          })}
         </dd>
-        <dt>Generation</dt>
-        <dd>{genMs.toFixed(1)} ms</dd>
+        <dt>{t("profiler.generation")}</dt>
+        <dd>{t("profiler.milliseconds", { value: number(genMs) })}</dd>
       </dl>
 
       {result && <ProfileTable result={result} />}
@@ -174,45 +185,63 @@ export function ProfilingHarness() {
 }
 
 function ProfileTable({ result }: { result: ProfileResult }) {
+  const { t } = useTranslation();
+  // One fraction digit for milliseconds, matching the previous `toFixed(1)` —
+  // but rendered through the locale, so a comma decimal separator appears where
+  // the locale uses one.
+  const ms = useNumberFormat({
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+  const count = useNumberFormat();
+  const percent = useNumberFormat({
+    minimumFractionDigits: 4,
+    maximumFractionDigits: 4,
+  });
+
   return (
     <div style={{ marginBottom: 12, fontSize: 12 }}>
       <table style={{ borderCollapse: "collapse", minWidth: 520 }}>
         <thead>
-          <tr style={{ textAlign: "left", color: "#71717a" }}>
-            <th style={cell}>Axis</th>
-            <th style={cell}>p50 (ms)</th>
-            <th style={cell}>p95 (ms)</th>
-            <th style={cell}>max (ms)</th>
-            <th style={cell}>&gt;16.7ms</th>
-            <th style={cell}>peak nodes</th>
+          <tr style={{ textAlign: "left", color: "var(--vec-text-muted)" }}>
+            <th style={cell}>{t("profiler.table.axis")}</th>
+            <th style={cell}>{t("profiler.table.p50")}</th>
+            <th style={cell}>{t("profiler.table.p95")}</th>
+            <th style={cell}>{t("profiler.table.max")}</th>
+            <th style={cell}>{t("profiler.table.breaches")}</th>
+            <th style={cell}>{t("profiler.table.peakNodes")}</th>
           </tr>
         </thead>
         <tbody>
           {result.axes.map((a) => (
             <tr key={a.axis}>
-              <td style={cell}>{a.axis}</td>
-              <td style={cell}>{a.timing.p50.toFixed(1)}</td>
-              <td style={cell}>{a.timing.p95.toFixed(1)}</td>
-              <td style={cell}>{a.timing.max.toFixed(1)}</td>
+              <td style={cell}>{t(`profiler.axis.${a.axis}`)}</td>
+              <td style={cell}>{ms(a.timing.p50)}</td>
+              <td style={cell}>{ms(a.timing.p95)}</td>
+              <td style={cell}>{ms(a.timing.max)}</td>
               <td style={cell}>
-                {a.breaches}/{a.timing.count}
+                {t("profiler.table.breachRatio", {
+                  breaches: count(a.breaches),
+                  total: count(a.timing.count),
+                })}
               </td>
-              <td style={cell}>{a.peakLiveNodes}</td>
+              <td style={cell}>{count(a.peakLiveNodes)}</td>
             </tr>
           ))}
         </tbody>
       </table>
-      <p style={{ color: "#71717a", marginTop: 6 }}>
-        DOM efficiency: {(result.domEfficiency * 100).toFixed(4)}% of the{" "}
-        {(result.taskCount * result.totalDays).toLocaleString()}-cell grid was ever
-        live.
+      <p style={{ color: "var(--vec-text-muted)", marginTop: 6 }}>
+        {t("profiler.domEfficiency", {
+          percent: percent(result.domEfficiency * 100),
+          cells: count(result.taskCount * result.totalDays),
+        })}
       </p>
     </div>
   );
 }
 
 const cell: React.CSSProperties = {
-  border: "1px solid #e4e4e7",
+  border: "1px solid var(--vec-border)",
   padding: "4px 8px",
 };
 
@@ -220,9 +249,9 @@ function presetStyle(active: boolean): React.CSSProperties {
   return {
     padding: "4px 10px",
     borderRadius: 6,
-    border: "1px solid #d4d4d8",
-    background: active ? "#4f46e5" : "#fff",
-    color: active ? "#fff" : "#18181b",
+    border: "1px solid var(--vec-border-strong)",
+    background: active ? "var(--vec-accent)" : "var(--vec-surface)",
+    color: active ? "var(--vec-on-accent)" : "var(--vec-text)",
     cursor: "pointer",
     fontSize: 12,
   };

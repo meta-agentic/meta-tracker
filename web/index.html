@@ -4,6 +4,34 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Vectis</title>
+    <script>
+      // Pre-paint theme bootstrap. Runs before the module bundle is fetched, so
+      // a reload into dark mode never flashes the light palette.
+      //
+      // The keys and the value shape are owned by web/src/store/preferences.ts
+      // (THEME_KEY / LOCALE_KEY, JSON-encoded) — they are repeated here because
+      // this must execute with no module graph available. If they change there,
+      // change them here.
+      (function () {
+        try {
+          var raw = localStorage.getItem("ui:theme");
+          var pref = raw ? JSON.parse(raw) : "system";
+          var dark =
+            pref === "dark" ||
+            (pref !== "light" &&
+              matchMedia("(prefers-color-scheme: dark)").matches);
+          var theme = dark ? "dark" : "light";
+          document.documentElement.dataset.theme = theme;
+          document.documentElement.style.colorScheme = theme;
+
+          var locale = localStorage.getItem("ui:locale");
+          if (locale) document.documentElement.lang = JSON.parse(locale);
+        } catch (e) {
+          // Private mode, blocked storage, or corrupt JSON — the stylesheet's
+          // :root defaults still give a correct light/system render.
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
