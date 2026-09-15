@@ -1,0 +1,18 @@
+idPolicy:
+  tracker: local
+  prefix: VEC
+  reserve: git-ref
+  pattern: '^VEC-\d+$'
+  next: 51
+sprints:
+- id: VEC-S1
+  name: VEC Sprint 1
+  status: IN PROGRESS
+  startDate: '2026-07-14'
+  endDate: '2026-07-28'
+  issues:
+  - VEC-9
+  - VEC-12
+  - VEC-21
+  - VEC-20
+  - VEC-13

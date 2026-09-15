@@ -49,6 +49,12 @@ Product requirements and architectural decisions are recorded as ADRs under
 [`docs/adr/`](./docs/adr/) — start with
 [ADR-01 — product requirements & feature model](./docs/adr/ADR-01-product-requirements-and-features.md).
 
+**The backlog ships with the source.** The whole of it — open items, finished
+work, rejected proposals and the reasoning behind each — lives in
+[`.vault/`](./.vault/README.md) as plain Markdown under version control. Nothing
+is kept in a tracker you cannot see. An issue tracker whose own backlog is
+private would be a poor advertisement for itself.
+
 ### Principles
 
 - **Reactive, non-blocking core.** Every request path is asynchronous end to end
