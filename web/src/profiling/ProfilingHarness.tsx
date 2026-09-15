@@ -47,9 +47,10 @@ export function ProfilingHarness() {
   /*
    * Measuring the generation cost is the point of this harness, and the work
    * being timed is the useMemo body itself, so the clock has to be read where
-   * the work happens. `genMs` is displayed as a diagnostic only — nothing
-   * renders off it conditionally — and this component is dev-only profiling
-   * scaffolding that is never mounted in the app.
+   * the work happens — reading it outside the memo would measure something
+   * else. `genMs` is display-only: its single consumer is the <dd> below, and
+   * no branch, hook dependency or memo key reads it. A value that moves between
+   * re-renders therefore changes a displayed diagnostic and nothing else.
    */
   /* eslint-disable react-hooks/purity -- deliberate instrumentation, see above */
   const { snapshot, genMs } = useMemo(() => {
