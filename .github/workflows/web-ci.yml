@@ -1,0 +1,97 @@
+name: Web CI
+
+# The PR gate for the SPA in `web/`.
+#
+# Until this workflow existed, nothing in CI installed, type-checked, linted,
+# tested or built `web/` — every frontend change to date was merged on the
+# author's local evidence alone. Two defects in a single sprint were invisible
+# for exactly that reason:
+#
+#   * `npm ci` failed outright on clean `main` (VEC-48): eslint 10 was declared
+#     against a react-hooks plugin that peer-required eslint 9. It only ever
+#     worked for people passing `--legacy-peer-deps`.
+#   * `@testing-library/dom` was absent from the tree, so the frontend tests
+#     could not collect on any clean install — the suite passed only for people
+#     whose `node_modules` predated the gap.
+#
+# Both are the same class: a check that only runs on a developer's warm machine
+# does not notice when a clean environment breaks. So the first thing this job
+# does, and the thing it must never be allowed to skip, is install from cold.
+#
+# Path-filtered to `web/**` so a Java-only PR does not pay for a Node toolchain,
+# mirroring in the other direction the scoping `jvm-test.yml` applies to Maven.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    # Scoped to the SPA and this workflow. Deliberately *not* `**/src/**` or
+    # `**/package.json` — the point of the filter is that a `.java`-only PR
+    # matches nothing here, just as a `web/`-only PR matches nothing in
+    # `jvm-test.yml`.
+    paths:
+      - 'web/**'
+      - '.github/workflows/web-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Same reasoning as jvm-test.yml: superseding a PR run is right, because the
+  # older commit's result is stale the moment a new one is pushed. Superseding a
+  # *main* run is not — two merges landing a minute apart share this group by
+  # ref, and cancelling would leave the first merge commit with no result.
+  group: web-ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Matches the Node major developers run locally. Pinning CI to an older major
+  # than the working checkout reintroduces the drift this workflow exists to
+  # catch, only pointed the other way.
+  NODE_VERSION: '24'
+
+defaults:
+  run:
+    working-directory: web
+
+jobs:
+  check:
+    name: install, type-check, lint, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          # Caches ~/.npm (the download cache), not node_modules. `npm ci` still
+          # deletes and rebuilds the tree from the lockfile on every run, so a
+          # dependency graph that cannot resolve still fails here — which is the
+          # whole point. Caching node_modules instead would have hidden VEC-48.
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install from a clean tree
+        # No `--legacy-peer-deps`, and never add it: that flag silently accepts
+        # an incorrect resolution and suppresses every *other* peer conflict in
+        # the tree along with the one someone was trying to get past. If this
+        # step fails, the dependency graph is the defect.
+        run: npm ci
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
