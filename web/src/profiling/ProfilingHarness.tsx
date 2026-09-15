@@ -44,6 +44,14 @@ export function ProfilingHarness() {
   const scrollElRef = useRef<HTMLDivElement | null>(null);
   const liveNodesRef = useRef(0);
 
+  /*
+   * Measuring the generation cost is the point of this harness, and the work
+   * being timed is the useMemo body itself, so the clock has to be read where
+   * the work happens. `genMs` is displayed as a diagnostic only — nothing
+   * renders off it conditionally — and this component is dev-only profiling
+   * scaffolding that is never mounted in the app.
+   */
+  /* eslint-disable react-hooks/purity -- deliberate instrumentation, see above */
   const { snapshot, genMs } = useMemo(() => {
     const t0 = performance.now();
     const snap = generateWorkspace({
@@ -55,6 +63,7 @@ export function ProfilingHarness() {
     });
     return { snapshot: snap, genMs: performance.now() - t0 };
   }, [scenario]);
+  /* eslint-enable react-hooks/purity */
 
   const totalDays = scenario.years * 365;
   const liveNodes = stats.rows + stats.columns;
