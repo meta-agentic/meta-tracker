@@ -53,7 +53,7 @@ public class ItemRepository {
         });
     }
 
-    /** Inserts many items in a single round trip — the import path (VEC-18/19). */
+    /** Inserts many items in a single round trip — the import path. */
     public Uni<Integer> insertAll(List<Item> items) {
         if (items.isEmpty()) {
             return Uni.createFrom().item(0);

@@ -10,7 +10,7 @@ import java.util.UUID;
  * <p>Columns are held as data rather than as an enum or a fixed set of statuses. That is
  * the "workflows are data" principle in the model itself: a team adds, renames or
  * reorders a column at runtime, and no code changes. The workflow engine that decides
- * which transitions between these columns are legal is VEC-15 and is deliberately not
+ * which transitions between these columns are legal belongs to the workflow engine and is deliberately not
  * modelled here — this type says what the columns <em>are</em>, not what may move
  * between them.
  */

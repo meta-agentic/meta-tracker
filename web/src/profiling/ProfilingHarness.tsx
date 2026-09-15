@@ -32,7 +32,7 @@ function nextFrame(): Promise<number> {
 }
 
 /**
- * VEC-21 dual-axis profiling surface. Generates N synthetic tasks across an
+ * Dual-axis profiling surface. Generates N synthetic tasks across an
  * M-year timeline, renders them through the dual-axis virtualizer, and can run a
  * scripted scroll sweep that isolates the vertical (task) and horizontal (day)
  * axes to attribute frame cost to whichever axis actually dominates.

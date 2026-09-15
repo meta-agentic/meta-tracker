@@ -10,7 +10,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * random bits, per RFC 9562 §5.7.
  *
  * <p>Vectis generates primary keys application-side rather than from a database
- * sequence. The VEC-9 benchmark recorded the reason: a central sequence serialises
+ * sequence. The identity benchmark recorded the reason: a central sequence serialises
  * concurrent inserts on a single hot page, and random UUIDv4 keys scatter B-tree
  * writes across the whole index. A time-ordered key gives both index locality and a
  * natural chronological sort, so "newest items" needs no secondary index and bulk

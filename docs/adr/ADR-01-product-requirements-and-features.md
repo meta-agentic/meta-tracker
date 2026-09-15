@@ -1,4 +1,4 @@
-# ADR-VEC-01 — Vectis product requirements & feature model
+# ADR-01 — Vectis product requirements & feature model
 
 | | |
 |---|---|

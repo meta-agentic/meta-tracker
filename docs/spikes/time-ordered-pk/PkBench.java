@@ -1,12 +1,12 @@
-// VEC-9 — Time-Ordered Primary Key Performance Matrix (spike harness).
+// Time-Ordered Primary Key Performance Matrix (spike harness).
 //
 // Dependency-free benchmark comparing application-side generation of
 // UUIDv4 (random baseline), UUIDv7 (RFC 9562) and ULID for use as the
-// lock-free, time-ordered item identity required by ADR-VEC-01 R-CORE-2.
+// lock-free, time-ordered item identity required by ADR-01 R-CORE-2.
 //
 // Deliberately zero external dependencies so it runs on a bare JDK
 // (single-file source launch) at the bootstrap stage, before the Maven
-// build lands:  java docs/spikes/vec-9/PkBench.java
+// build lands:  java docs/spikes/time-ordered-pk/PkBench.java
 //
 // It measures the things that decide the recommendation:
 //   1. single-thread generation throughput / latency percentiles,

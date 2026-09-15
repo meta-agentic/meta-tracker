@@ -3,7 +3,7 @@ import type { Locale } from "../i18n/locales";
 import type { ResolvedTheme, ThemePreference } from "../store/preferences";
 
 /**
- * The one place theme and locale are published to the tree (VEC-34 criterion 1).
+ * The one place theme and locale are published to the tree.
  * Components read from here or from `useTranslation()`; nothing reaches into
  * localStorage, `matchMedia`, or `navigator.language` on its own.
  *

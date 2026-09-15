@@ -47,7 +47,7 @@ Design goals, in priority order:
 
 Product requirements and architectural decisions are recorded as ADRs under
 [`docs/adr/`](./docs/adr/) — start with
-[ADR-VEC-01 — product requirements & feature model](./docs/adr/ADR-VEC-01-product-requirements-and-features.md).
+[ADR-01 — product requirements & feature model](./docs/adr/ADR-01-product-requirements-and-features.md).
 
 ### Principles
 

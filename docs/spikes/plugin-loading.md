@@ -1,4 +1,4 @@
-# VEC-13 — Decoupled Extension & Plugin Loading (Spike Findings)
+# Decoupled Extension & Plugin Loading (Spike Findings)
 
 **Status:** prototype / spike. Working code lands in this PR; it is deliberately
 minimal and is **not** production-hardened. See

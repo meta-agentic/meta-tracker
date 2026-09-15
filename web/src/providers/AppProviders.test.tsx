@@ -14,7 +14,7 @@ import {
 } from "../store/preferences";
 
 /**
- * Exercises the provider contract VEC-34 installs: default resolution, the
+ * Exercises the provider contract these providers install: default resolution, the
  * persisted round trip, an in-place locale swap, and dictionary completeness.
  */
 

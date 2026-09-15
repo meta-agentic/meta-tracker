@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
  *
  * The locale comes from the active i18next instance — the same provider the
  * strings come from — so a component never reads `navigator.language` or the
- * store directly (VEC-34 criterion 1), and a locale swap re-renders formatted
+ * store directly, and a locale swap re-renders formatted
  * values along with translated ones (criterion 5).
  *
  * `Intl.*Format` construction is the expensive part, so each hook memoizes on

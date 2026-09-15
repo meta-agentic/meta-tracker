@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 /**
- * The half of VEC-43 that {@link SprintPersistenceTest} cannot reach by going through
+ * The half of the sprint mechanics that {@link SprintPersistenceTest} cannot reach by going through
  * the repository.
  *
  * <p>The story asks for the single-active-sprint rule to be "enforced server-side, not

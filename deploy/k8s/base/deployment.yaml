@@ -29,7 +29,7 @@ spec:
         - name: server
           # Overwritten per-environment by the kustomize `images` transformer and
           # kept current by Argo CD Image Updater; never edited by hand.
-          image: ghcr.io/isohub-space/vectis:staging
+          image: ghcr.io/meta-agentic/meta-tracker:staging
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

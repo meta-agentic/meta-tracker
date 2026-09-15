@@ -6,9 +6,9 @@ import type { ThemePreference } from "../store/preferences";
 /**
  * The minimal surface that exercises the two providers.
  *
- * Deliberately not a settings panel: VEC-34 ships the framework, and the
+ * Deliberately not a settings panel: this ships the framework, and the
  * designed preferences surface (with server-side persistence bound to a user
- * identity) is VEC-33. Two selects are enough to prove a theme flip re-paints
+ * identity) is a later story. Two selects are enough to prove a theme flip re-paints
  * without a re-mount and a locale swap re-renders in place.
  */
 export function PreferenceControls() {

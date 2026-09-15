@@ -15,7 +15,7 @@ commonAnnotations:
 # `newTag` in place (write-back-method: git) each time a new main-<sha> image is
 # published, and Argo CD then syncs it — the automated path to staging.
 images:
-  - name: ghcr.io/isohub-space/vectis
+  - name: ghcr.io/meta-agentic/meta-tracker
     newTag: staging
 
 patches:

@@ -7,7 +7,7 @@ name: Web CI
 # author's local evidence alone. Two defects in a single sprint were invisible
 # for exactly that reason:
 #
-#   * `npm ci` failed outright on clean `main` (VEC-48): eslint 10 was declared
+#   * `npm ci` failed outright on clean `main`: eslint 10 was declared
 #     against a react-hooks plugin that peer-required eslint 9. It only ever
 #     worked for people passing `--legacy-peer-deps`.
 #   * `@testing-library/dom` was absent from the tree, so the frontend tests
@@ -73,7 +73,7 @@ jobs:
           # Caches ~/.npm (the download cache), not node_modules. `npm ci` still
           # deletes and rebuilds the tree from the lockfile on every run, so a
           # dependency graph that cannot resolve still fails here — which is the
-          # whole point. Caching node_modules instead would have hidden VEC-48.
+          # whole point. Caching node_modules instead would have hidden that.
           cache: npm
           cache-dependency-path: web/package-lock.json
 

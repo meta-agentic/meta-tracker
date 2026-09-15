@@ -22,7 +22,7 @@ import org.junit.jupiter.api.Test;
  * Exercises sprint lifecycle persistence and sprint/backlog item scope against a real
  * PostgreSQL, mirroring {@link PersistenceRoundTripTest}: every assertion here concerns
  * behaviour a mock could not report, chiefly that the single-active-sprint invariant
- * (VEC-43) actually holds under a real constraint violation.
+ * actually holds under a real constraint violation.
  */
 @QuarkusTest
 class SprintPersistenceTest {

@@ -16,17 +16,17 @@ metadata:
     # Updater bot) absorbs the automated tag bumps without needing a protection
     # bypass. Promote to prod by fast-forwarding a separate env branch.
     argocd-image-updater.argoproj.io/image-list: >-
-      vectis=ghcr.io/isohub-space/vectis
+      vectis=ghcr.io/meta-agentic/meta-tracker
     argocd-image-updater.argoproj.io/vectis.update-strategy: newest-build
     argocd-image-updater.argoproj.io/vectis.allow-tags: regexp:^main-[0-9a-f]{7,40}$
     argocd-image-updater.argoproj.io/vectis.pull-secret: pullsecret:argocd/ghcr-creds
-    argocd-image-updater.argoproj.io/vectis.kustomize.image-name: ghcr.io/isohub-space/vectis
+    argocd-image-updater.argoproj.io/vectis.kustomize.image-name: ghcr.io/meta-agentic/meta-tracker
     argocd-image-updater.argoproj.io/write-back-method: git
     argocd-image-updater.argoproj.io/git-branch: env/staging
 spec:
   project: default
   source:
-    repoURL: https://github.com/isohub-space/vectis.git
+    repoURL: https://github.com/meta-agentic/meta-tracker.git
     # Dedicated deploy branch owned by Image Updater (see annotations); keeps the
     # automated tag bumps off protected main.
     targetRevision: env/staging

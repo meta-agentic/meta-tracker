@@ -3,7 +3,7 @@
  *
  * This file is the ONLY place in `web/src` allowed to contain a colour literal.
  * Every component reads `var(--vec-*)`; a component carrying its own hex is a
- * defect (VEC-34 acceptance criterion 3 greps for exactly that).
+ * defect, and CI greps for exactly that.
  *
  * Theming is a `data-theme` attribute on `documentElement` rather than a class,
  * so the pre-paint bootstrap in index.html can set it before React exists and

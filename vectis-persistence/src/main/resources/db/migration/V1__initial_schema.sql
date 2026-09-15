@@ -1,4 +1,4 @@
--- Vectis initial schema (VEC-41).
+-- Vectis initial schema.
 --
 -- Two deliberate shape decisions, both load-bearing:
 --
@@ -59,5 +59,5 @@ create table item (
 -- The board read path: every card in a column, in display order.
 create index item_board_column_rank_idx on item (board_id, column_id, rank);
 
--- Containment queries over the open field set (fields @> '{"epic":"VEC-1"}').
+-- Containment queries over the open field set (fields @> '{"epic":"PROJ-1"}').
 create index item_fields_idx on item using gin (fields jsonb_path_ops);

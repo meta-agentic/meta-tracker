@@ -94,7 +94,7 @@ class PersistenceRoundTripTest {
         Item item = Item.create(ws.id(), board.id(), backlog, ws.key() + "-1", "First item", "m")
                 .withFields(Map.of(
                         "storyPoints", 5,
-                        "epic", "VEC-1",
+                        "epic", "PROJ-1",
                         "labels", List.of("dogfood", "persistence")));
         items.insert(item).await().indefinitely();
 
@@ -102,7 +102,7 @@ class PersistenceRoundTripTest {
 
         assertEquals("First item", loaded.title());
         assertEquals(5, loaded.fields().get("storyPoints"));
-        assertEquals("VEC-1", loaded.fields().get("epic"));
+        assertEquals("PROJ-1", loaded.fields().get("epic"));
         assertEquals(List.of("dogfood", "persistence"), loaded.fields().get("labels"));
     }
 
@@ -143,7 +143,7 @@ class PersistenceRoundTripTest {
     }
 
     /**
-     * The claim VEC-9 was run to justify: because the key is time-ordered, ordering by
+     * The claim the identity benchmark was run to justify: because the key is time-ordered, ordering by
      * the primary key <em>is</em> chronological ordering. If PostgreSQL's uuid ordering
      * disagreed with UUIDv7's layout this would fail, and every "newest first" query in
      * the product would silently need a {@code created_at} index instead.
@@ -180,12 +180,12 @@ class PersistenceRoundTripTest {
         UUID col = board.orderedColumns().getFirst().id();
 
         items.insert(Item.create(ws.id(), board.id(), col, ws.key() + "-1", "in epic", "a")
-                .withFields(Map.of("epic", "VEC-1"))).await().indefinitely();
+                .withFields(Map.of("epic", "PROJ-1"))).await().indefinitely();
         items.insert(Item.create(ws.id(), board.id(), col, ws.key() + "-2", "other epic", "b")
-                .withFields(Map.of("epic", "VEC-2"))).await().indefinitely();
+                .withFields(Map.of("epic", "PROJ-2"))).await().indefinitely();
 
         assertEquals(List.of("in epic"),
-                items.findByFieldsContaining(ws.id(), Map.of("epic", "VEC-1"))
+                items.findByFieldsContaining(ws.id(), Map.of("epic", "PROJ-1"))
                         .await().indefinitely().stream().map(Item::title).toList());
     }
 }

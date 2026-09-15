@@ -10,7 +10,7 @@
   <packaging>pom</packaging>
   <name>Vectis (parent)</name>
   <description>
-    Reactor root for the VEC-13 decoupled extension/plugin loading spike.
+    Reactor root for the decoupled extension/plugin loading spike.
     Prototype only — not the productionised hexagon described in the README.
   </description>
 

@@ -12,7 +12,7 @@ import type { Issue } from "./types";
 function issue(over: Partial<Issue>): Issue {
   return {
     id: "i1",
-    key: "VEC-1",
+    key: "PROJ-1",
     boardId: "board-0",
     epicId: null,
     columnId: "col-todo",

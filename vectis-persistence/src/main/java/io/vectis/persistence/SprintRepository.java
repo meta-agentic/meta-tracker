@@ -101,7 +101,7 @@ public class SprintRepository {
      * given item ids to their destination — a sprint, or the backlog if
      * {@code destinationSprintId} is null. Which items are "unfinished" is not this
      * repository's decision: {@link Sprint#complete()} deliberately has no notion of
-     * done, since that belongs to the workflow engine VEC-15 owns. The caller supplies
+     * done, since that belongs to the workflow engine. The caller supplies
      * the exact set.
      *
      * <p>The {@code where status = 'ACTIVE'} clause guards the same gap as {@link #start}:

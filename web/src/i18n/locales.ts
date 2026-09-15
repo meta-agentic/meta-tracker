@@ -3,7 +3,7 @@
  *
  * Adding a locale is *data, not code*: drop `web/src/locales/<lang>/common.json`
  * in place and it is picked up here. The glob below is the "one list" of
- * VEC-34 acceptance criterion 6 — there is no per-locale branch anywhere else in
+ * There is no per-locale branch anywhere else in
  * the SPA, and no component under `src/components/` or `src/profiling/` has to
  * change.
  *

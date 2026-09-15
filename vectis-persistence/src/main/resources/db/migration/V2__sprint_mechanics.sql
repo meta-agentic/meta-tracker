@@ -1,4 +1,4 @@
--- Sprint mechanics (VEC-43).
+-- Sprint mechanics.
 --
 -- Cardinality decision: a board may have at most one ACTIVE sprint. Every other space
 -- in the estate already runs one active sprint at a time per its cadence, and Jira
