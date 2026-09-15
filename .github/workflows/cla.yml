@@ -14,7 +14,7 @@ name: CLA
 #
 # Setup required (one-time, by the repository maintainer):
 #  - Create a GitHub personal access token with `repo` scope and add it
-#    as a repository secret named VECTIS_CLA_TOKEN. The default
+#    as a repository secret named CLA_SIGNATURE_TOKEN. The default
 #    GITHUB_TOKEN cannot write to branches other than the PR head, so a
 #    PAT is required to persist signatures to `cla-signatures`.
 #    See: https://github.com/contributor-assistant/github-action
@@ -35,15 +35,24 @@ jobs:
     name: cla-signed
     runs-on: ubuntu-latest
     # Only run on PRs to this repository; skip Dependabot (automated).
+    #
+    # Test the PULL-REQUEST AUTHOR, not github.actor. github.actor is whoever
+    # triggered the event, which on a Dependabot PR is the maintainer who
+    # pushed to it or commented on it - so the guard passed and the assistant
+    # went on to ask Dependabot to sign the agreement, which it cannot do.
+    #
+    # issue_comment events carry no .pull_request object; the author of the
+    # pull request is under .issue.user instead. The || picks whichever of the
+    # two is populated for the event that fired.
     if: >
-      github.actor != 'dependabot[bot]' &&
-      github.actor != 'dependabot-preview[bot]'
+      !contains(fromJSON('["dependabot[bot]", "dependabot-preview[bot]"]'),
+      github.event.pull_request.user.login || github.event.issue.user.login)
     steps:
       - name: CLA Assistant
         uses: contributor-assistant/github-action@ca4a40a7d1004f18d9960b404b97e5f30a505a08 # v2.6.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PERSONAL_ACCESS_TOKEN: ${{ secrets.VECTIS_CLA_TOKEN }}
+          PERSONAL_ACCESS_TOKEN: ${{ secrets.CLA_SIGNATURE_TOKEN }}
         with:
           path-to-document: 'CLA.md'
           branch: 'cla-signatures'
