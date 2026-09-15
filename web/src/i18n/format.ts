@@ -17,12 +17,16 @@ export function useNumberFormat(options?: Intl.NumberFormatOptions) {
   const { i18n } = useTranslation();
   const locale = i18n.language;
 
+  // `options` is expected to be a literal at the call site; JSON is a cheap,
+  // stable identity for it that avoids re-creating the formatter every render.
+  // Computed outside the dependency list because the lint rule requires that
+  // list to hold simple expressions, not calls.
+  const optionsKey = JSON.stringify(options ?? {});
+
   const formatter = useMemo(
     () => new Intl.NumberFormat(locale, options),
-    // `options` is expected to be a literal at the call site; JSON is a cheap,
-    // stable identity for it that avoids re-creating the formatter every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [locale, JSON.stringify(options ?? {})],
+    [locale, optionsKey],
   );
 
   return useMemo(() => (value: number) => formatter.format(value), [formatter]);
@@ -32,10 +36,12 @@ export function useDateFormat(options: Intl.DateTimeFormatOptions) {
   const { i18n } = useTranslation();
   const locale = i18n.language;
 
+  const optionsKey = JSON.stringify(options);
+
   const formatter = useMemo(
     () => new Intl.DateTimeFormat(locale, options),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [locale, JSON.stringify(options)],
+    [locale, optionsKey],
   );
 
   return useMemo(
