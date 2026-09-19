@@ -67,28 +67,17 @@ jobs:
     # - name: Setup runtime (example)
     #   uses: actions/setup-example@v1
 
-    # build-mode 'none' skips the *build*, but the Java extractor still runs Maven
-    # to resolve the reactor's dependency graph for the classpath. A cold run pulls
-    # 627 artifacts from Central, ~90s of a ~110s job. Cache the local repository.
-    - name: Cache Maven repository
-      if: matrix.language == 'java-kotlin'
-      uses: actions/cache@v4
-      with:
-        path: ~/.m2/repository
-        key: codeql-m2-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
-        restore-keys: |
-          codeql-m2-${{ runner.os }}-
-
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v4
       with:
         languages: ${{ matrix.language }}
         build-mode: ${{ matrix.build-mode }}
-        # Opt in to the action's own dependency cache. As of CodeQL 2.27.0 this
-        # produced no cache activity for build-mode 'none', so the explicit
-        # actions/cache step above is what actually does the work today; this is
-        # kept so the built-in path takes over if/when it starts applying here.
+        # build-mode 'none' skips the *build*, but the Java extractor still runs
+        # Maven to resolve the reactor's dependency graph for the classpath: a cold
+        # run pulled 627 artifacts from Central, ~90s of a ~110s job. This caches
+        # that (~108MB), taking the warm run to 0 downloads and ~1m7s. Note the
+        # cache is branch-scoped, so PRs only benefit once main has seeded it.
         dependency-caching: true
         # If you wish to specify custom queries, you can do so here or in a config file.
         # By default, queries listed here will override any specified in a config file.
