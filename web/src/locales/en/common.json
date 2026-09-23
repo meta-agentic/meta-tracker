@@ -1,6 +1,9 @@
 {
   "app.title": "Vectis",
   "app.loading": "Loading workspace…",
+  "app.error": "The workspace could not be loaded.",
+  "app.stale": "Showing cached data — the last refresh failed.",
+  "app.retry": "Try again",
 
   "nav.boards": "Boards",
   "nav.timeline": "Timeline profiler",
