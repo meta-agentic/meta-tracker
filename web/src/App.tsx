@@ -5,7 +5,7 @@ import {
   useWorkspaceSync,
   type WorkspaceSync,
   type WorkspaceSyncOptions,
-} from "./api/useWorkspaceSync";
+} from "./api";
 import { BoardSwitcher } from "./components/BoardSwitcher";
 import { BoardView } from "./components/BoardView";
 import { PreferenceControls } from "./components/PreferenceControls";
