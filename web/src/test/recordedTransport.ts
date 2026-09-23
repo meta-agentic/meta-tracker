@@ -27,6 +27,25 @@ export interface Recording {
   networkError?: Error;
   /** Never settles, so a timeout can be observed. */
   hang?: boolean;
+  /**
+   * Awaited before any response is produced. A test that must observe the state
+   * of the client *while* a request is in flight releases it by hand, instead of
+   * racing an immediately-resolved promise.
+   */
+  gate?: Promise<void>;
+}
+
+export interface Gate {
+  promise: Promise<void>;
+  release: () => void;
+}
+
+export function createGate(): Gate {
+  let release = () => {};
+  const promise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { promise, release };
 }
 
 export interface RecordedTransport {
@@ -41,8 +60,10 @@ export function createRecordedTransport(initial: Recording): RecordedTransport {
   let recording = initial;
   const calls: string[] = [];
 
-  const transport: Transport = (url, init) => {
+  const transport: Transport = async (url, init) => {
     calls.push(url);
+
+    if (recording.gate) await recording.gate;
 
     if (recording.hang) {
       return new Promise((_resolve, reject) => {

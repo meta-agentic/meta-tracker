@@ -47,9 +47,9 @@ export const FIELD = {
 export const EPIC_TYPE = "epic";
 
 /**
- * Fallback epic colours. Held here rather than imported from `lib/synthetic`:
- * VEC-42 requires that nothing on the application entry path reach the
- * generator, and a shared palette constant would be exactly that reach.
+ * Fallback epic colours. Deliberately duplicated rather than imported from the
+ * synthetic generator: nothing on the application entry path may reach that
+ * module, and a shared palette constant would be exactly that reach.
  */
 const EPIC_COLORS = [
   "#4f46e5",
