@@ -27,3 +27,9 @@ export type {
   WireJsonValue,
   WireWorkspace,
 } from "./wire";
+export {
+  useWorkspaceSync,
+  type SyncStatus,
+  type WorkspaceSync,
+  type WorkspaceSyncOptions,
+} from "./useWorkspaceSync";
