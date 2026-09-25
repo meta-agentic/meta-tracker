@@ -104,6 +104,23 @@ public class ItemRepository {
     }
 
     /**
+     * Every item in a workspace, grouped by board and then in column display order and
+     * rank. The workspace hydration read; unpaginated, so it grows with the workspace.
+     */
+    public Uni<List<Item>> findByWorkspace(UUID workspaceId) {
+        return pool.preparedQuery("""
+                        select i.id, i.workspace_id, i.board_id, i.column_id,
+                               i.key, i.title, i.rank, i.fields, i.sprint_id
+                          from item i
+                          join board_column c on c.id = i.column_id
+                         where i.workspace_id = $1
+                         order by i.board_id, c.ordinal, i.rank
+                        """)
+                .execute(Tuple.of(workspaceId))
+                .map(ItemRepository::mapAll);
+    }
+
+    /**
      * Moves an item to a column at a rank. One row is written however far the card
      * travelled, which is the reason rank is a sparse string rather than an index.
      */
