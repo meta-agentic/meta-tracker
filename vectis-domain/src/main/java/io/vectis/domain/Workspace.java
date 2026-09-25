@@ -21,13 +21,18 @@ public record Workspace(UUID id, String key, String name) {
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(key, "key");
         Objects.requireNonNull(name, "name");
-        if (!KEY_FORMAT.matcher(key).matches()) {
+        if (!isValidKey(key)) {
             throw new IllegalArgumentException(
                     "workspace key must be 2-10 chars, upper-case alphanumeric, leading letter: " + key);
         }
         if (name.isBlank()) {
             throw new IllegalArgumentException("workspace name must not be blank");
         }
+    }
+
+    /** Whether {@code key} is an acceptable workspace key; false for null. */
+    public static boolean isValidKey(String key) {
+        return key != null && KEY_FORMAT.matcher(key).matches();
     }
 
     /** A new workspace with a freshly minted time-ordered identifier. */

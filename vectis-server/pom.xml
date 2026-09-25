@@ -23,6 +23,10 @@
       <groupId>io.vectis</groupId>
       <artifactId>vectis-core</artifactId>
     </dependency>
+    <dependency>
+      <groupId>io.vectis</groupId>
+      <artifactId>vectis-persistence</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>io.quarkus</groupId>
