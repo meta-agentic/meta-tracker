@@ -9,8 +9,8 @@
   "nav.timeline": "Timeline profiler",
 
   "board.empty": "Select a board.",
-  "board.columnCount": "({{value}})",
-  "board.moreIssues": "+{{value}} more",
+  "board.columnCount": "({{count}})",
+  "board.moreIssues": "+{{count}} more",
 
   "prefs.theme.label": "Theme",
   "prefs.theme.system": "System",
