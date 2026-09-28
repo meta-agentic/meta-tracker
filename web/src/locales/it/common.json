@@ -9,8 +9,8 @@
   "nav.timeline": "Profilatore cronologia",
 
   "board.empty": "Seleziona una bacheca.",
-  "board.columnCount": "({{value}})",
-  "board.moreIssues": "+{{value}} altri",
+  "board.columnCount": "({{count}})",
+  "board.moreIssues": "+{{count}} altri",
 
   "prefs.theme.label": "Tema",
   "prefs.theme.system": "Sistema",
