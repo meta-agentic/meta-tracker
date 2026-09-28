@@ -1,6 +1,9 @@
 {
   "app.title": "Vectis",
   "app.loading": "Caricamento dello spazio di lavoro…",
+  "app.error": "Impossibile caricare lo spazio di lavoro.",
+  "app.stale": "Dati dalla cache — l'ultimo aggiornamento non è riuscito.",
+  "app.retry": "Riprova",
 
   "nav.boards": "Bacheche",
   "nav.timeline": "Profilatore cronologia",
