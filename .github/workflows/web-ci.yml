@@ -24,15 +24,20 @@ name: Web CI
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
     # Scoped to the SPA and this workflow. Deliberately *not* `**/src/**` or
     # `**/package.json` — the point of the filter is that a `.java`-only PR
     # matches nothing here, just as a `web/`-only PR matches nothing in
     # `jvm-test.yml`.
-    paths:
+    #
+    # The same list filters `push` and `pull_request` (YAML anchor). Path filters
+    # apply per event, so without it every merge to main installed and built the
+    # SPA whatever it touched.
+    paths: &web-paths
       - 'web/**'
       - '.github/workflows/web-ci.yml'
+  pull_request:
+    branches: [main]
+    paths: *web-paths
   workflow_dispatch:
 
 permissions:
