@@ -7,6 +7,22 @@ resources:
   - deployment.yaml
   - service.yaml
 
+# The non-secret half of the server's `VECTIS_DB_*` datasource contract (the
+# same variables CI sets for the test and native jobs). `VECTIS_DB_HOST` names
+# the in-cluster Service that `components/postgres` provides; an environment on
+# an external or managed database overrides it with a `behavior: merge`
+# generator in its overlay.
+#
+# The password is deliberately not here: it comes from the `vectis-db` Secret
+# (see deployment.yaml), which is created out of band and never committed.
+configMapGenerator:
+  - name: vectis-db
+    literals:
+      - VECTIS_DB_HOST=vectis-db
+      - VECTIS_DB_PORT=5432
+      - VECTIS_DB_NAME=vectis
+      - VECTIS_DB_USER=vectis
+
 labels:
   - pairs:
       app.kubernetes.io/part-of: vectis

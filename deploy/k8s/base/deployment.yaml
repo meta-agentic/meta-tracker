@@ -34,6 +34,24 @@ spec:
           ports:
             - name: http
               containerPort: 8080
+          # PostgreSQL connection, per the `VECTIS_DB_*` contract. Host, port,
+          # database and user come from the generated `vectis-db` ConfigMap.
+          # The password has no default anywhere, in the manifests or in the
+          # application, and is read only from the `vectis-db` Secret. That
+          # Secret is created out of band and never committed, for example:
+          #   kubectl -n <namespace> create secret generic vectis-db \
+          #     --from-literal=password="$(openssl rand -base64 32)"
+          # Until it exists the pod stays in CreateContainerConfigError, and a
+          # rolling update stalls with the previous pods still serving.
+          envFrom:
+            - configMapRef:
+                name: vectis-db
+          env:
+            - name: VECTIS_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vectis-db
+                  key: password
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
