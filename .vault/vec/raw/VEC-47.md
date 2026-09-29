@@ -18,7 +18,7 @@ labels:
 
 ## Description
 
-Give Vectis one adapter contract that any backlog can be read and written through, and implement the vault — the three-layer, file-based backlog format this repository itself ships in `.vault/` — as the reference adapter, so that pointing Vectis at a meta-os instance wires up every backlog that instance knows about — without a per-source integration each time.
+Give Vectis one adapter contract that any backlog can be read and written through, and implement the vault — the three-layer, file-based backlog format this repository itself ships in `.vault/` — as the reference adapter, so that pointing Vectis at a meta-os instance wires up every backlog that instance knows about, without a per-source integration each time.
 
 ## Why this exists
 
@@ -84,7 +84,7 @@ Both spines must land for the product owner to see real work; neither alone is s
 ## Open questions for refinement
 
 * Does the adapter read the vault's **markdown files** directly, or shell out to the backlog CLI, or does the CLI grow a machine-readable export? (It already has an export command — check what it emits before designing anything.)
-* Is Vectis the system of record, or a projection? The working method's own decision record says the vault is the tracker. If Vectis is a **projection**, write-back is a much smaller problem and this epic gets cheaper. **Decide this first — it changes everything downstream.**
+* Is Vectis the system of record, or a projection? The decision record that moved the project's planning off Jira says the vault is the tracker. If Vectis is a **projection**, write-back is a much smaller problem and this epic gets cheaper. **Decide this first — it changes everything downstream.**
 * How are ids reconciled when two sources both use `VEC-17`?
 * Does a meta-os binding imply live watching (filesystem/SSE) or periodic reconciliation?
 

@@ -166,7 +166,7 @@ of tree and out of scope here.
   are referenced or reused. Where we diverge (e.g. no built-in JS-scripted
   workflow automation in Community v1), the divergence is deliberate and recorded
   here.
-- **Publishing:** this record ships with the repository in `.vault/`, with a condensed version in `docs/adr/`, and its requirements inform the public ROADMAP. A requirement → VEC-story map is kept with the planning copy; in this repository, items cite the R-numbers they deliver.
+- **Publishing:** this record ships with the repository in `.vault/`, with a condensed version in `docs/adr/`, and its requirements inform the public ROADMAP. There is no separate requirement → VEC-story map; where an item delivers a requirement, it cites the R-number.
 
 ## References
 
