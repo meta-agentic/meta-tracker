@@ -10,18 +10,19 @@ import java.util.Optional;
  * The statuses a vault item may carry, the tier each belongs in, and the portable
  * category each reports.
  *
- * <p>The category is the tier's, with one exception: {@code REFINED} reports
- * {@link StatusCategory#REFINED}, because refined work is ready to pull and a board
- * shows it apart from the raw backlog. {@code NO GO} stays in {@code raw/} and so
- * reports {@link StatusCategory#NOT_STARTED}; an importer recognises the verbatim
- * status to place it as closed.</p>
+ * <p>The category is the tier's, with two exceptions, both in {@code raw/}:
+ * {@code REFINED} reports {@link StatusCategory#REFINED}, because refined work is ready
+ * to pull and a board shows it apart from the raw backlog; {@code NO GO} reports
+ * {@link StatusCategory#DISCONTINUED}, because a rejected or abandoned item is closed
+ * without being done. {@code NO GO} still belongs in {@code raw/}, so it is not a
+ * contradiction there.</p>
  */
 enum VaultStatus {
 
     TO_DO("TO DO", Tier.RAW, StatusCategory.NOT_STARTED),
     PLANNED("PLANNED", Tier.RAW, StatusCategory.NOT_STARTED),
     REFINED("REFINED", Tier.RAW, StatusCategory.REFINED),
-    NO_GO("NO GO", Tier.RAW, StatusCategory.NOT_STARTED),
+    NO_GO("NO GO", Tier.RAW, StatusCategory.DISCONTINUED),
     IN_PROGRESS("IN PROGRESS", Tier.WIKI, StatusCategory.IN_PROGRESS),
     IN_REVIEW("IN REVIEW", Tier.WIKI, StatusCategory.IN_PROGRESS),
     DONE("DONE", Tier.OUTPUT, StatusCategory.DONE);
