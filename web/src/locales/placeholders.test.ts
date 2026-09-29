@@ -30,7 +30,10 @@ describe("translation placeholders", () => {
   for (const [locale, strings] of Object.entries(locales)) {
     it(`${locale}: every placeholder is supplied by its call`, () => {
       const missing = calls.flatMap(({ file, key, params }) =>
-        placeholdersOf(strings[key] ?? "")
+        // A plural key lives in the dictionary only under its suffixed forms.
+        Object.entries(strings)
+          .filter(([k]) => k === key || k.replace(/_(zero|one|two|few|many|other)$/, "") === key)
+          .flatMap(([, value]) => placeholdersOf(value))
           .filter((p) => !params.has(p))
           .map((p) => `${file}: t("${key}") passes {${[...params].join(", ")}} but the string needs {{${p}}}`),
       );

@@ -1,4 +1,4 @@
-import { memo, type ComponentType } from "react";
+import { memo } from "react";
 import { useTranslation } from "react-i18next";
 import type { Epic, Issue } from "../store/types";
 import { useNumberFormat } from "../i18n/format";
@@ -15,34 +15,56 @@ import {
  * Types the client has a glyph and a translation for. Anything else the field
  * document carries is still shown — under its own name and a neutral glyph —
  * because the type vocabulary is the workspace's, not the client's.
+ *
+ * A Set and a switch, not a lookup on an object literal: the type is workspace
+ * data, and an object would find `constructor` or `__proto__` on its prototype.
  */
-const KNOWN_TYPES: Record<string, ComponentType<{ size?: number }>> = {
-  story: StoryIcon,
-  bug: BugIcon,
-  task: TaskIcon,
-  spike: SpikeIcon,
-  enabler: EnablerIcon,
-};
+const KNOWN_TYPES: ReadonlySet<string> = new Set(["story", "bug", "task", "spike", "enabler"]);
 
-/** Labels beyond this collapse into a "+N" chip, so a card keeps its height. */
-const MAX_CARD_LABELS = 3;
+function TypeGlyph({ type }: { type: string | null }) {
+  switch (type) {
+    case "story":
+      return <StoryIcon size={14} />;
+    case "bug":
+      return <BugIcon size={14} />;
+    case "task":
+      return <TaskIcon size={14} />;
+    case "spike":
+      return <SpikeIcon size={14} />;
+    case "enabler":
+      return <EnablerIcon size={14} />;
+    default:
+      return <GenericTypeIcon size={14} />;
+  }
+}
 
-export function TypeBadge({ type }: { type: string | null }) {
+/** Labels beyond this collapse into a "+N" chip, so the card's last row stays one line. */
+const MAX_CARD_LABELS = 2;
+
+/**
+ * An item's type as a glyph and a word. `compact` keeps the word for assistive
+ * technology and the tooltip only — on a card the glyph is enough, and a word
+ * on every card is noise.
+ */
+export function TypeBadge({ type, compact = false }: { type: string | null; compact?: boolean }) {
   const { t } = useTranslation();
   const normalized = type?.toLowerCase() ?? null;
-  const known = normalized !== null && normalized in KNOWN_TYPES;
-  const Glyph = known ? KNOWN_TYPES[normalized] : GenericTypeIcon;
+  const known = normalized !== null && KNOWN_TYPES.has(normalized);
   const label = known
     ? t(`type.${normalized}`)
     : // A type the client has no word for is user data, shown as the workspace wrote it.
       (type ?? t("type.none"));
 
   return (
-    <span className="vec-type" data-type={known ? normalized : "other"}>
+    <span
+      className="vec-type"
+      data-type={known ? normalized : "other"}
+      title={compact ? label : undefined}
+    >
       <span className="vec-type__glyph">
-        <Glyph size={14} />
+        <TypeGlyph type={known ? normalized : null} />
       </span>
-      <span className="vec-type__label">{label}</span>
+      <span className={compact ? "vec-sr" : "vec-type__label"}>{label}</span>
     </span>
   );
 }
@@ -77,8 +99,7 @@ export const IssueCard = memo(function IssueCard({ issue, epic, onOpen }: IssueC
   const number = useNumberFormat();
   const shownLabels = issue.labels.slice(0, MAX_CARD_LABELS);
   const hiddenLabels = issue.labels.length - shownLabels.length;
-  const hasMeta =
-    epic !== null || issue.labels.length > 0 || issue.storyPoints !== null;
+  const hasMeta = epic !== null || issue.labels.length > 0;
 
   return (
     <button
@@ -89,31 +110,32 @@ export const IssueCard = memo(function IssueCard({ issue, epic, onOpen }: IssueC
       onClick={() => onOpen(issue.id)}
     >
       <span className="vec-card__top">
-        <TypeBadge type={issue.type} />
+        <TypeBadge type={issue.type} compact />
         <span className="vec-key">{issue.key}</span>
+        {issue.storyPoints !== null && (
+          <span className="vec-points">
+            <span aria-hidden="true">{number(issue.storyPoints)}</span>
+            <span className="vec-sr">
+              {t("card.pointsLabel", {
+                points: number(issue.storyPoints),
+                count: issue.storyPoints,
+              })}
+            </span>
+          </span>
+        )}
       </span>
       <span className="vec-card__title">{issue.title}</span>
       {hasMeta && (
         <span className="vec-card__meta">
-          <span className="vec-card__chips">
-            {epic && <EpicChip epic={epic} />}
-            {shownLabels.map((label) => (
-              <span key={label} className="vec-chip">
-                {label}
-              </span>
-            ))}
-            {hiddenLabels > 0 && (
-              <span className="vec-chip">
-                {t("card.moreLabels", { count: number(hiddenLabels) })}
-              </span>
-            )}
-          </span>
-          {issue.storyPoints !== null && (
-            <span className="vec-points">
-              <span aria-hidden="true">{number(issue.storyPoints)}</span>
-              <span className="vec-sr">
-                {t("card.pointsLabel", { points: number(issue.storyPoints) })}
-              </span>
+          {epic && <EpicChip epic={epic} />}
+          {shownLabels.map((label) => (
+            <span key={label} className="vec-chip">
+              {label}
+            </span>
+          ))}
+          {hiddenLabels > 0 && (
+            <span className="vec-chip">
+              {t("card.moreLabels", { count: number(hiddenLabels) })}
             </span>
           )}
         </span>

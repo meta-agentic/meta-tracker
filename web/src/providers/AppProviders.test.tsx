@@ -167,11 +167,30 @@ describe("dictionary completeness", () => {
     expect(SUPPORTED_LOCALES).toContain("en");
   });
 
+  // Plural forms are per locale (CLDR): Italian has a "many" English lacks. So
+  // keys are compared with the plural suffix stripped, and each locale is held
+  // to its own categories below.
+  const PLURAL = /_(zero|one|two|few|many|other)$/;
+  const baseKeys = (locale: string) =>
+    [...new Set(Object.keys(resources[locale].common).map((k) => k.replace(PLURAL, "")))].sort();
+
+  it.each(SUPPORTED_LOCALES)("%s has every plural form its language needs", (locale) => {
+    const keys = Object.keys(resources[locale].common);
+    const plural = new Set(keys.filter((k) => PLURAL.test(k)).map((k) => k.replace(PLURAL, "")));
+    const categories = new Intl.PluralRules(locale).resolvedOptions().pluralCategories;
+    const missing = [...plural].flatMap((base) =>
+      categories.filter((c) => !keys.includes(`${base}_${c}`)).map((c) => `${base}_${c}`),
+    );
+    // A missing category falls back to the default locale's string, not to
+    // another form of this one — English text inside an Italian UI.
+    expect(missing).toEqual([]);
+  });
+
   it.each(SUPPORTED_LOCALES.filter((l) => l !== "en"))(
     "%s has every key en has, and no extras",
     (locale) => {
-      const en = Object.keys(resources.en.common).sort();
-      const other = Object.keys(resources[locale].common).sort();
+      const en = baseKeys("en");
+      const other = baseKeys(locale);
 
       expect(other.filter((k) => !en.includes(k))).toEqual([]);
       expect(en.filter((k) => !other.includes(k))).toEqual([]);

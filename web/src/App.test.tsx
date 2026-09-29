@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { App } from "./App";
 import { AppProviders } from "./providers/AppProviders";
 import { IndexedDbCache } from "./store/cache";
@@ -254,6 +254,41 @@ describe("board cards and the item detail panel", () => {
 
     fireEvent.click(within(dialog).getByRole("button", { name: /VEC-3/ }));
     expect(screen.getByRole("dialog", { name: "Second card" })).toHaveTextContent("Bug");
+  });
+
+  it("keeps the sheet modal when focus lands outside it", async () => {
+    const { view } = mount(snapshotRecording(richItems));
+
+    fireEvent.click((await screen.findByText("Wire the client")).closest("button")!);
+    const dialog = screen.getByRole("dialog");
+
+    // The rest of the page is inert while the sheet is open…
+    expect(view.container).toHaveAttribute("inert");
+    // …and if focus ends up outside anyway, Tab brings it back in and Escape
+    // still closes, because both are handled at the document.
+    act(() => document.body.focus());
+    fireEvent.keyDown(document.body, { key: "Tab" });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+
+    act(() => document.body.focus());
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(view.container).not.toHaveAttribute("inert");
+  });
+
+  it("renders a type named after an object prototype member", async () => {
+    mount(
+      snapshotRecording([
+        itemFixture({ fields: { type: "constructor", storyPoints: 1 } }),
+        itemFixture({ id: "item-2", key: "VEC-3", rank: "n", title: "Second card", fields: { type: "__proto__" } }),
+      ]),
+    );
+
+    const card = (await screen.findByText("Wire the client")).closest("button")!;
+    expect(card).toHaveTextContent("constructor");
+    // Singular, not "1 story points".
+    expect(within(card).getByText("1 story point")).toBeInTheDocument();
+    expect(screen.getByText("Second card")).toBeInTheDocument();
   });
 
   it("says so when the workspace has no boards", async () => {

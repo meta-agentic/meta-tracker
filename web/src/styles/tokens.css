@@ -21,7 +21,7 @@
 
   --vec-bg: #f7f7f8;
   --vec-surface: #ffffff;
-  --vec-surface-sunken: #efeff1;
+  --vec-surface-sunken: #e9e9ec;
   --vec-surface-hover: #f4f4f5;
   --vec-text: #18181b;
   --vec-text-muted: #63636b;
@@ -51,8 +51,8 @@
   --vec-type-epic: #7c3aed;
   --vec-type-other: #71717a;
 
-  --vec-skeleton: #e4e4e7;
-  --vec-skeleton-sheen: #f4f4f5;
+  --vec-skeleton: #dcdce0;
+  --vec-skeleton-sheen: #ececef;
   --vec-scrim: rgba(24, 24, 27, 0.32);
 
   --vec-shadow-sm: 0 1px 2px rgba(24, 24, 27, 0.06);

@@ -117,3 +117,26 @@ export function SyncIndicator({ status }: { status: SyncStatus }) {
     </span>
   );
 }
+
+/** What the top-level error boundary shows in place of a crashed tree. */
+export function CrashFallback({ error }: { error: Error }) {
+  const { t } = useTranslation();
+  return (
+    <div className="vec-state" role="alert">
+      <span className="vec-state__icon vec-state__icon--danger">
+        <WarningIcon size={22} />
+      </span>
+      <h2 className="vec-state__title">{t("crash.title")}</h2>
+      <p className="vec-state__body">{t("crash.body")}</p>
+      <code className="vec-state__diagnostic">{error.message}</code>
+      <button
+        type="button"
+        className="vec-button vec-button--primary"
+        onClick={() => window.location.reload()}
+      >
+        <RetryIcon size={14} />
+        {t("crash.reload")}
+      </button>
+    </div>
+  );
+}

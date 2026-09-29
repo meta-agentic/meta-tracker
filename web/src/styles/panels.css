@@ -153,6 +153,10 @@
   animation: vec-slide-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
+.vec-sheet:focus {
+  outline: none;
+}
+
 .vec-sheet__head {
   display: flex;
   align-items: center;
@@ -331,10 +335,7 @@ button.vec-link-row:hover {
     min-height: 52px;
   }
 
-  .vec-brand__name {
-    display: none;
-  }
-
+  .vec-brand__name,
   .vec-sync__label,
   .vec-pref__label {
     position: absolute;
@@ -405,7 +406,11 @@ button.vec-link-row:hover {
     border-left: 0;
   }
 
-  .vec-sheet__head {
+  .vec-sheet:focus {
+  outline: none;
+}
+
+.vec-sheet__head {
     padding-left: 16px;
   }
 

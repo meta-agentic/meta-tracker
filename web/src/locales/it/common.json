@@ -5,6 +5,9 @@
   "app.stale": "Dati dalla cache — l'ultimo aggiornamento non è riuscito.",
   "app.retry": "Riprova",
   "app.skipToContent": "Vai al contenuto",
+  "crash.title": "Qualcosa è andato storto.",
+  "crash.body": "La pagina ha incontrato un errore da cui non può riprendersi. Di solito basta ricaricarla.",
+  "crash.reload": "Ricarica",
   "app.errorHint": "Verifica che l'API sia raggiungibile e che la chiave dello spazio di lavoro sia corretta.",
 
   "nav.boards": "Bacheche",
@@ -14,7 +17,7 @@
   "sync.loading": "Connessione…",
   "sync.revalidating": "Aggiornamento…",
   "sync.ready": "Aggiornato",
-  "sync.stale": "Offline · dalla cache",
+  "sync.stale": "Dalla cache · aggiornamento non riuscito",
   "sync.error": "Non connesso",
 
   "boards.label": "Bacheche di questo spazio di lavoro",
@@ -30,7 +33,9 @@
   "board.stats.items": "Elementi",
   "board.stats.points": "Punti",
 
-  "card.pointsLabel": "{{points}} story point",
+  "card.pointsLabel_one": "{{points}} story point",
+  "card.pointsLabel_many": "{{points}} story point",
+  "card.pointsLabel_other": "{{points}} story point",
   "card.moreLabels": "+{{count}}",
 
   "type.story": "Storia",
