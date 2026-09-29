@@ -7,9 +7,10 @@
     "todo": {"name": "To Do", "category": "NOT_STARTED"},
     "in-progress": {"name": "In Progress", "category": "IN_PROGRESS"},
     "in-review": {"name": "In Review", "category": "IN_PROGRESS"},
-    "done": {"name": "Done", "category": "DONE"}
+    "done": {"name": "Done", "category": "DONE"},
+    "no-go": {"name": "No Go", "category": "DISCONTINUED", "onBoard": false}
   },
-  "stateOrder": ["backlog", "todo", "in-progress", "in-review", "done"],
+  "stateOrder": ["backlog", "todo", "in-progress", "in-review", "done", "no-go"],
   "itemTypes": {
     "story": {"name": "Story"},
     "task": {"name": "Task"},

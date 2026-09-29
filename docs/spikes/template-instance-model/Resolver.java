@@ -32,7 +32,8 @@ final class Resolver {
     /** Sections whose members are keyed elements, merged by key. */
     static final List<String> KEYED = List.of("states", "itemTypes", "fields");
 
-    static final Set<String> CATEGORIES = Set.of("NOT_STARTED", "IN_PROGRESS", "DONE");
+    /** DISCONTINUED: terminal, reached when work stopped without completion and has no viable path forward. */
+    static final Set<String> CATEGORIES = Set.of("NOT_STARTED", "IN_PROGRESS", "DONE", "DISCONTINUED");
     static final Set<String> FIELD_TYPES = Set.of("number", "text", "date");
     static final Set<String> SCALES = Set.of("fibonacci", "linear");
     static final Pattern KEY = Pattern.compile("[a-z][a-zA-Z0-9-]{0,31}");
@@ -189,6 +190,9 @@ final class Resolver {
             categories.add(String.valueOf(cat));
             if (st.containsKey("after") && !(st.get("after") instanceof String)) {
                 v.add("states." + k + ".after: must be a state key");
+            }
+            if (st.containsKey("onBoard") && !(st.get("onBoard") instanceof Boolean)) {
+                v.add("states." + k + ".onBoard: must be true or false");
             }
             Object wip = st.get("wipLimit");
             if (wip != null && !(wip instanceof Long n && n > 0)) {
@@ -428,17 +432,25 @@ final class Resolver {
             String k = newOrder.get(i);
             Object name = Json.obj(newStates.get(k)).get("name");
             if (!oldStates.containsKey(k)) {
-                ops.add("INSERT " + k + " name=" + Json.compact(name) + " ordinal=" + i);
+                ops.add("INSERT " + k + " name=" + Json.compact(name) + " ordinal=" + i + (onBoard(newStates, k) ? "" : " on_board=false"));
                 continue;
             }
             Object oldName = Json.obj(oldStates.get(k)).get("name");
             if (!name.equals(oldName)) {
                 ops.add("UPDATE " + k + " name " + Json.compact(oldName) + " -> " + Json.compact(name));
             }
+            if (onBoard(oldStates, k) != onBoard(newStates, k)) {
+                ops.add("UPDATE " + k + " on_board " + onBoard(oldStates, k) + " -> " + onBoard(newStates, k));
+            }
             if (oldOrder.indexOf(k) != i) {
                 ops.add("UPDATE " + k + " ordinal " + oldOrder.indexOf(k) + " -> " + i);
             }
         }
         return ops;
+    }
+
+    /** A state is shown on the board unless it says otherwise; its board_column row exists either way. */
+    static boolean onBoard(Map<String, Object> states, String k) {
+        return !Boolean.FALSE.equals(Json.obj(states.get(k)).get("onBoard"));
     }
 }

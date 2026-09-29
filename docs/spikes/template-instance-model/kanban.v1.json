@@ -5,9 +5,10 @@
   "states": {
     "todo": {"name": "To Do", "category": "NOT_STARTED"},
     "in-progress": {"name": "In Progress", "category": "IN_PROGRESS", "wipLimit": 5},
-    "done": {"name": "Done", "category": "DONE"}
+    "done": {"name": "Done", "category": "DONE"},
+    "no-go": {"name": "No Go", "category": "DISCONTINUED", "onBoard": false}
   },
-  "stateOrder": ["todo", "in-progress", "done"],
+  "stateOrder": ["todo", "in-progress", "done", "no-go"],
   "itemTypes": {
     "task": {"name": "Task"},
     "bug": {"name": "Bug"},

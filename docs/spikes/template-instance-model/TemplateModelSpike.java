@@ -55,13 +55,13 @@ public class TemplateModelSpike {
                 Resolver.resolve(kanban, none).violations() + " " + Resolver.resolve(scrum, none).violations());
         check("S3", "the Refined instance resolves cleanly: Refined between Backlog and To Do, no stateOrder override",
                 worked.ok() && !refined.containsKey("stateOrder")
-                        && order(worked.effective()).equals(List.of("backlog", "refined", "todo", "in-progress", "in-review", "done"))
+                        && order(worked.effective()).equals(List.of("backlog", "refined", "todo", "in-progress", "in-review", "done", "no-go"))
                         && is(state(worked.effective(), "refined").get("category"), "NOT_STARTED")
                         && Resolver.writeDelta(scrum, none, refined, empty).ok(),
                 worked);
         check("S4", "the review instance resolves cleanly, QA after the renamed review column, bug removed",
                 second.ok()
-                        && order(second.effective()).equals(List.of("backlog", "todo", "in-progress", "in-review", "qa", "done"))
+                        && order(second.effective()).equals(List.of("backlog", "todo", "in-progress", "in-review", "qa", "done", "no-go"))
                         && is(name(second.effective(), "in-review"), "Code Review")
                         && !types(second.effective()).containsKey("bug")
                         && is(state(second.effective(), "done").get("enterFrom"), List.of("qa"))
@@ -90,9 +90,9 @@ public class TemplateModelSpike {
                 has(Resolver.writeDelta(scrum, none, dropBacklog, Map.of("states.backlog", 12)).violations(),
                         "states.backlog: still used by 12"),
                 Resolver.writeDelta(scrum, none, dropBacklog, Map.of("states.backlog", 12)).violations());
-        Map<String, Object> reorder = patch("{\"stateOrder\": [\"todo\", \"backlog\", \"in-progress\", \"in-review\", \"done\"]}");
+        Map<String, Object> reorder = patch("{\"stateOrder\": [\"todo\", \"backlog\", \"in-progress\", \"in-review\", \"done\", \"no-go\"]}");
         check("I5", "reorder states: order replaced whole, projects to ordinal UPDATEs only",
-                order(eff(scrum, reorder)).equals(List.of("todo", "backlog", "in-progress", "in-review", "done"))
+                order(eff(scrum, reorder)).equals(List.of("todo", "backlog", "in-progress", "in-review", "done", "no-go"))
                         && Resolver.projection(eff(scrum, none), eff(scrum, reorder))
                         .equals(List.of("UPDATE todo ordinal 1 -> 0", "UPDATE backlog ordinal 0 -> 1")),
                 Resolver.projection(eff(scrum, none), eff(scrum, reorder)));
@@ -133,7 +133,7 @@ public class TemplateModelSpike {
                         && has(Resolver.resolve(scrum, patch("{\"states\": {\"a\": {\"name\": \"A\", " + x + ", \"after\": \"todo\"},"
                         + " \"b\": {\"name\": \"B\", " + x + ", \"after\": \"todo\"}}}")).violations(), "already placed after 'todo'")
                         && has(Resolver.resolve(scrum, Json.obj(Json.mergePatch(refined, patch("{\"stateOrder\": [\"backlog\","
-                        + " \"refined\", \"todo\", \"in-progress\", \"in-review\", \"done\"]}")))).violations(), "placed by states.refined.after"),
+                        + " \"refined\", \"todo\", \"in-progress\", \"in-review\", \"done\", \"no-go\"]}")))).violations(), "placed by states.refined.after"),
                 "");
 
         // ---- the Refined column under template evolution ------------------
@@ -142,34 +142,34 @@ public class TemplateModelSpike {
                 refined.size() == 1 && Resolver.overrides(scrum, refined).size() == 1
                         && Resolver.projection(eff(scrum, none), worked.effective()).equals(List.of(
                         "INSERT refined name=\"Refined\" ordinal=1", "UPDATE todo ordinal 1 -> 2",
-                        "UPDATE in-progress ordinal 2 -> 3", "UPDATE in-review ordinal 3 -> 4", "UPDATE done ordinal 4 -> 5")),
+                        "UPDATE in-progress ordinal 2 -> 3", "UPDATE in-review ordinal 3 -> 4", "UPDATE done ordinal 4 -> 5", "UPDATE no-go ordinal 5 -> 6")),
                 Resolver.projection(eff(scrum, none), worked.effective()));
         Map<String, Object> addBlocked = next(scrum,
                 "{\"states\": {\"blocked\": {\"name\": \"Blocked\", \"category\": \"IN_PROGRESS\"}},"
-                        + " \"stateOrder\": [\"backlog\", \"todo\", \"in-progress\", \"blocked\", \"in-review\", \"done\"]}");
+                        + " \"stateOrder\": [\"backlog\", \"todo\", \"in-progress\", \"blocked\", \"in-review\", \"done\", \"no-go\"]}");
         Resolver.Upgrade r2 = Resolver.upgrade(scrum, addBlocked, refined, empty);
         check("R2", "template adds a column elsewhere: inherited in place, Refined still after Backlog, delta untouched",
                 r2.conflicts().isEmpty() && r2.delta().equals(refined) && order(r2.effective()).equals(
-                        List.of("backlog", "refined", "todo", "in-progress", "blocked", "in-review", "done")),
+                        List.of("backlog", "refined", "todo", "in-progress", "blocked", "in-review", "done", "no-go")),
                 order(r2.effective()));
         Map<String, Object> reordered = next(scrum,
-                "{\"stateOrder\": [\"todo\", \"backlog\", \"in-progress\", \"in-review\", \"done\"]}");
+                "{\"stateOrder\": [\"todo\", \"backlog\", \"in-progress\", \"in-review\", \"done\", \"no-go\"]}");
         Resolver.Upgrade r3 = Resolver.upgrade(scrum, reordered, refined, empty);
         check("R3", "template reorders columns: the new order is inherited and Refined moves with Backlog",
                 r3.conflicts().isEmpty() && r3.delta().equals(refined) && order(r3.effective()).equals(
-                        List.of("todo", "backlog", "refined", "in-progress", "in-review", "done")),
+                        List.of("todo", "backlog", "refined", "in-progress", "in-review", "done", "no-go")),
                 order(r3.effective()));
         Map<String, Object> addTriage = next(scrum,
                 "{\"states\": {\"triage\": {\"name\": \"Triage\", \"category\": \"NOT_STARTED\"}},"
-                        + " \"stateOrder\": [\"backlog\", \"triage\", \"todo\", \"in-progress\", \"in-review\", \"done\"]}");
+                        + " \"stateOrder\": [\"backlog\", \"triage\", \"todo\", \"in-progress\", \"in-review\", \"done\", \"no-go\"]}");
         Resolver.Upgrade r4 = Resolver.upgrade(scrum, addTriage, refined, empty);
         check("R4", "template inserts a column right after Backlog: Refined stays next to its anchor, the new one follows",
                 r4.conflicts().isEmpty() && order(r4.effective()).equals(
-                        List.of("backlog", "refined", "triage", "todo", "in-progress", "in-review", "done")),
+                        List.of("backlog", "refined", "triage", "todo", "in-progress", "in-review", "done", "no-go")),
                 order(r4.effective()));
         Map<String, Object> addReady = next(scrum,
                 "{\"states\": {\"refined\": {\"name\": \"Ready\", \"category\": \"NOT_STARTED\"}},"
-                        + " \"stateOrder\": [\"backlog\", \"todo\", \"refined\", \"in-progress\", \"in-review\", \"done\"]}");
+                        + " \"stateOrder\": [\"backlog\", \"todo\", \"refined\", \"in-progress\", \"in-review\", \"done\", \"no-go\"]}");
         Resolver.Upgrade r5 = Resolver.upgrade(scrum, addReady, refined, empty);
         check("R5", "template adds the same key itself (named Ready, placed elsewhere): adopted, instance name and place win",
                 r5.conflicts().isEmpty() && is(name(r5.effective(), "refined"), "Refined")
@@ -177,46 +177,96 @@ public class TemplateModelSpike {
                         && has(r5.notes(), "states.refined: template now defines it too"),
                 r5);
         Map<String, Object> noBacklog = next(scrum,
-                "{\"states\": {\"backlog\": null}, \"stateOrder\": [\"todo\", \"in-progress\", \"in-review\", \"done\"]}");
+                "{\"states\": {\"backlog\": null}, \"stateOrder\": [\"todo\", \"in-progress\", \"in-review\", \"done\", \"no-go\"]}");
         Resolver.Upgrade r6a = Resolver.upgrade(scrum, noBacklog, refined, Map.of("states.backlog", 30));
         Resolver.Upgrade r6b = Resolver.upgrade(scrum, noBacklog, refined, empty);
         check("R6", "template removes the anchor (Backlog): refused while it holds items; empty, Refined stays first",
                 has(r6a.conflicts(), "states.backlog: still used by 30")
                         && r6b.conflicts().isEmpty()
-                        && order(r6b.effective()).equals(List.of("refined", "todo", "in-progress", "in-review", "done"))
+                        && order(r6b.effective()).equals(List.of("refined", "todo", "in-progress", "in-review", "done", "no-go"))
                         && !state(r6b.effective(), "refined").containsKey("after"),
                 r6a.conflicts() + " " + r6b);
         Map<String, Object> dropReview = next(scrum,
-                "{\"states\": {\"in-review\": null}, \"stateOrder\": [\"backlog\", \"todo\", \"in-progress\", \"done\"]}");
+                "{\"states\": {\"in-review\": null}, \"stateOrder\": [\"backlog\", \"todo\", \"in-progress\", \"done\", \"no-go\"]}");
         Map<String, Object> qaAfterReview = patch("{\"states\": {\"qa\": {\"name\": \"QA\", \"category\": \"IN_PROGRESS\","
                 + " \"after\": \"in-review\"}}}");
         Resolver.Upgrade r7 = Resolver.upgrade(scrum, dropReview, qaAfterReview, empty);
         check("R7", "template removes a mid-board anchor: the added state is re-anchored to its surviving predecessor",
                 r7.conflicts().isEmpty() && is(state(r7.effective(), "qa").get("after"), "in-progress")
-                        && order(r7.effective()).equals(List.of("backlog", "todo", "in-progress", "qa", "done")),
+                        && order(r7.effective()).equals(List.of("backlog", "todo", "in-progress", "qa", "done", "no-go")),
                 r7);
         Map<String, String> vault = Map.of("TO DO", "backlog", "REFINED", "refined", "PLANNED", "todo",
-                "IN PROGRESS", "in-progress", "IN REVIEW", "in-review", "DONE", "done", "NO GO", "done");
-        check("R8", "every backlog status maps to a state key of the Refined instance; plain Scrum lacks 'refined'",
+                "IN PROGRESS", "in-progress", "IN REVIEW", "in-review", "DONE", "done", "NO GO", "no-go");
+        check("R8", "every backlog status maps to a state key of the Refined instance; NO GO lands in DISCONTINUED, not DONE",
                 states(worked.effective()).keySet().containsAll(vault.values())
+                        && is(state(worked.effective(), vault.get("NO GO")).get("category"), "DISCONTINUED")
+                        && is(state(worked.effective(), vault.get("DONE")).get("category"), "DONE")
                         && !states(eff(scrum, none)).containsKey("refined"),
                 vault);
+
+        // ---- the DISCONTINUED end state (no-go) -----------------------
+        section("the DISCONTINUED end state");
+        check("D1", "both templates end in no-go: DISCONTINUED, off the board, still projected to a board_column row",
+                is(state(eff(kanban, none), "no-go").get("category"), "DISCONTINUED")
+                        && order(eff(kanban, none)).getLast().equals("no-go")
+                        && order(eff(scrum, none)).getLast().equals("no-go")
+                        && !Resolver.onBoard(states(eff(scrum, none)), "no-go")
+                        && Resolver.projection(none, eff(scrum, none))
+                        .contains("INSERT no-go name=\"No Go\" ordinal=5 on_board=false"),
+                Resolver.projection(none, eff(scrum, none)));
+        check("D2", "DISCONTINUED is not DONE: dropping the only DONE state is rejected; onBoard must be a boolean",
+                has(Resolver.resolve(scrum, patch("{\"states\": {\"done\": null}}")).violations(), "one NOT_STARTED and one DONE")
+                        && has(Resolver.resolve(scrum, patch("{\"states\": {\"no-go\": {\"onBoard\": \"no\"}}}")).violations(),
+                        "no-go.onBoard: must be true or false"),
+                "");
+        Map<String, Object> wontDo = patch("{\"states\": {\"no-go\": {\"name\": \"Won't Do\"}}}");
+        Resolver.Upgrade d3 = Resolver.upgrade(scrum, next(scrum, "{\"states\": {\"no-go\": {\"name\": \"Abandoned\"}}}"), wontDo, empty);
+        check("D3", "instance renames it: UPDATE of the same row, still off the board; a later template rename does not override it",
+                Resolver.projection(eff(scrum, none), eff(scrum, wontDo)).equals(List.of("UPDATE no-go name \"No Go\" -> \"Won't Do\""))
+                        && !Resolver.onBoard(states(eff(scrum, wontDo)), "no-go")
+                        && d3.conflicts().isEmpty() && is(name(d3.effective(), "no-go"), "Won't Do"),
+                Resolver.projection(eff(scrum, none), eff(scrum, wontDo)));
+        Map<String, Object> showNoGo = patch("{\"states\": {\"no-go\": {\"onBoard\": true}}}");
+        check("D4", "instance puts it on the board: one flag UPDATE, no item moves",
+                Resolver.projection(eff(scrum, none), eff(scrum, showNoGo)).equals(List.of("UPDATE no-go on_board false -> true")),
+                Resolver.projection(eff(scrum, none), eff(scrum, showNoGo)));
+        Map<String, Object> scrumWithout = Json.obj(Json.mergePatch(scrum, patch(
+                "{\"states\": {\"no-go\": null}, \"stateOrder\": [\"backlog\", \"todo\", \"in-progress\", \"in-review\", \"done\"]}")));
+        Map<String, Object> gainsNoGo = next(scrumWithout,
+                "{\"states\": {\"no-go\": {\"name\": \"No Go\", \"category\": \"DISCONTINUED\", \"onBoard\": false}},"
+                        + " \"stateOrder\": [\"backlog\", \"todo\", \"in-progress\", \"in-review\", \"done\", \"no-go\"]}");
+        Resolver.Upgrade d5 = Resolver.upgrade(scrumWithout, gainsNoGo, refined, empty);
+        check("D5", "template gains it: inherited off the board, after Done, Refined untouched, delta not rewritten",
+                d5.conflicts().isEmpty() && d5.delta().equals(refined)
+                        && order(d5.effective()).equals(List.of("backlog", "refined", "todo", "in-progress", "in-review", "done", "no-go"))
+                        && Resolver.projection(eff(scrumWithout, refined), d5.effective())
+                        .equals(List.of("INSERT no-go name=\"No Go\" ordinal=6 on_board=false")),
+                d5);
+        Resolver.Upgrade d6a = Resolver.upgrade(scrum, scrumWithout, none, Map.of("states.no-go", 2));
+        Resolver.Upgrade d6b = Resolver.upgrade(scrum, scrumWithout, none, empty);
+        Resolver.Upgrade d6c = Resolver.upgrade(scrum, scrumWithout, wontDo, Map.of("states.no-go", 2));
+        check("D6", "template removes it: refused while it holds items; empty, removed; renamed by the instance, kept off the board",
+                has(d6a.conflicts(), "states.no-go: still used by 2")
+                        && d6b.conflicts().isEmpty() && Resolver.projection(eff(scrum, none), d6b.effective()).equals(List.of("DELETE no-go"))
+                        && d6c.conflicts().isEmpty() && is(state(d6c.effective(), "no-go").get("category"), "DISCONTINUED")
+                        && !Resolver.onBoard(states(d6c.effective()), "no-go") && order(d6c.effective()).getLast().equals("no-go"),
+                d6a.conflicts() + " " + d6c);
 
         // ---- template evolution: states (columns) --------------------
         section("template evolution: states");
         Resolver.Upgrade c1 = Resolver.upgrade(scrum, addBlocked, none, empty);
         check("C1", "template adds a state; instance untouched: inherited at the template's position",
                 c1.conflicts().isEmpty()
-                        && order(c1.effective()).equals(List.of("backlog", "todo", "in-progress", "blocked", "in-review", "done")),
+                        && order(c1.effective()).equals(List.of("backlog", "todo", "in-progress", "blocked", "in-review", "done", "no-go")),
                 order(c1.effective()));
         Resolver.Upgrade c2 = Resolver.upgrade(scrum, addBlocked, reorder, empty);
         check("C2", "template adds a state; instance reordered: inherited, placed after its template predecessor",
                 c2.conflicts().isEmpty() && c2.delta().equals(reorder)
-                        && order(c2.effective()).equals(List.of("todo", "backlog", "in-progress", "blocked", "in-review", "done")),
+                        && order(c2.effective()).equals(List.of("todo", "backlog", "in-progress", "blocked", "in-review", "done", "no-go")),
                 order(c2.effective()));
         Map<String, Object> addQa = next(scrum,
                 "{\"states\": {\"qa\": {\"name\": \"Testing\", \"category\": \"IN_PROGRESS\", \"enterFrom\": [\"in-review\"]}},"
-                        + " \"stateOrder\": [\"backlog\", \"todo\", \"in-progress\", \"in-review\", \"qa\", \"done\"]}");
+                        + " \"stateOrder\": [\"backlog\", \"todo\", \"in-progress\", \"in-review\", \"qa\", \"done\", \"no-go\"]}");
         Resolver.Upgrade c3 = Resolver.upgrade(scrum, addQa, review, empty);
         check("C3", "template adds a state the instance had already added under that key: adopted, instance values win",
                 c3.conflicts().isEmpty() && is(name(c3.effective(), "qa"), "QA")
@@ -260,7 +310,7 @@ public class TemplateModelSpike {
                 c10.conflicts().isEmpty() && c10.delta().isEmpty(), c10.delta());
         check("C11", "template reorders states; instance untouched: inherits the new order",
                 order(Resolver.upgrade(scrum, reordered, none, empty).effective()).getFirst().equals("todo"), "");
-        Map<String, Object> ownOrder = patch("{\"stateOrder\": [\"backlog\", \"todo\", \"in-review\", \"in-progress\", \"done\"]}");
+        Map<String, Object> ownOrder = patch("{\"stateOrder\": [\"backlog\", \"todo\", \"in-review\", \"in-progress\", \"done\", \"no-go\"]}");
         Resolver.Upgrade c12 = Resolver.upgrade(scrum, reordered, ownOrder, empty);
         check("C12", "template reorders states; instance reordered too: instance order kept, and the upgrade says so",
                 order(c12.effective()).equals(order(eff(scrum, ownOrder)))
