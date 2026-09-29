@@ -12,9 +12,12 @@ name: Native Build & Deploy
 #   3. on main, publishes the image to GHCR with a Sigstore (cosign) keyless
 #      signature and BuildKit SBOM + SLSA provenance attestations.
 #
-# Rollout to staging is GitOps: Argo CD (deploy/argocd) watches the registry and
-# the deploy/ manifests and syncs the new digest — a merge reaches staging with
-# no manual step.
+# Rollout to staging is GitOps (deploy/argocd): Argo CD Image Updater watches the
+# registry and, for each new main-<sha> image, rewrites `newTag` on the
+# `env/staging` branch, which is the revision Argo CD tracks and syncs. A new
+# image reaches staging with no manual step. Manifest changes under deploy/ do
+# not ride along with an image; they reach staging when main is promoted into
+# `env/staging`.
 #
 # Every application-dependent job is gated on a Maven build existing (any
 # pom.xml), so — mirroring this repo's README ("CI activates as the first code
@@ -25,24 +28,25 @@ on:
   push:
     branches: [main]
     # On main this workflow *publishes*, so the filter is "anything that changes
-    # the image": application source and build manifests (the same anchored list
-    # as `jvm-test.yml`), the image definition under `deploy/docker/`, and this
-    # pipeline. Without a filter every merge to main — a web-only or docs-only
-    # one included — paid for a ~60-minute native build and a new image.
+    # the image": application source and build config (keep in sync with
+    # jvm-test.yml's `&jvm-paths`), the image definition under `deploy/docker/`,
+    # and this pipeline. Without a filter every merge to main — a web-only or
+    # docs-only one included — paid for a ~60-minute native build and a new
+    # image.
     #
-    # `deploy/k8s/` and `deploy/argocd/` are left out on purpose: Argo CD syncs
-    # manifest changes from git by itself, and rebuilding an unchanged binary
-    # for them would only mint a new tag for Image Updater to roll out.
+    # `deploy/k8s/` and `deploy/argocd/` are left out on purpose: a new image
+    # does not carry manifest changes. Image Updater only rewrites `newTag` on
+    # the `env/staging` branch, and manifest changes reach staging when main is
+    # promoted into that branch. Rebuilding an unchanged binary for them would
+    # only mint a new tag for Image Updater to roll out.
     #
     # It is a separate list from the PR one below, not an alias: publishing has
     # to follow source changes, validating the packaging on a PR must not.
     paths:
-      - 'vectis-*/**/*.java'
-      - 'vectis-*/**/*.sql'
-      - 'vectis-*/src/**'
+      - 'vectis-*/**'
       - 'pom.xml'
       - 'vectis-*/pom.xml'
-      - 'vectis-*/**/pom.xml'
+      - '.mvn/**'
       - 'deploy/docker/**'
       - '.github/workflows/native-deploy.yml'
   pull_request:
