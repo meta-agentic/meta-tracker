@@ -37,7 +37,7 @@ class VaultBacklogSourceTest {
         assertEquals("DEMO-S2", item.sprintKey());
         assertEquals(5.0, item.storyPoints());
         assertEquals("P1", item.priority());
-        assertEquals(List.of("Sprint-1", "edition-community"), item.labels());
+        assertEquals(List.of("Sprint-1", "edition-community", "2026-01-15"), item.labels(), "an unquoted date label stays as written");
         assertEquals(Map.of(SourceItem.DEPENDS_ON, List.of("DEMO-3"), SourceItem.RELATES_TO, List.of("DEMO-404")),
                 item.links(), "a dangling reference is kept, not resolved");
         assertEquals("## Why\n\nA synthetic fixture item.", item.body());

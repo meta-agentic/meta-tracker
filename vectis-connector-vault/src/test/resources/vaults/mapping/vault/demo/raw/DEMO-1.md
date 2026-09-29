@@ -12,6 +12,7 @@ storyPoints: 5.0
 labels:
 - Sprint-1
 - edition-community
+- 2026-01-15
 dependencies:
 - DEMO-3
 relates:

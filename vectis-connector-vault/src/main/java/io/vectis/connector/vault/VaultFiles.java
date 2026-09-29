@@ -32,10 +32,15 @@ final class VaultFiles {
 
     static final int MAX_FILE_BYTES = 256 * 1024;
 
-    private static final int MAX_ALIASES = 10;
+    /**
+     * No alias may point at a list or mapping. Front-matter has no use for one, and refusing
+     * them rules out both expansion bombs and self-referencing collections, which recurse
+     * without end when hashed or printed.
+     */
+    private static final int MAX_COLLECTION_ALIASES = 0;
     private static final int MAX_NESTING = 16;
     private static final String FENCE = "---";
-    private static final String BYTE_ORDER_MARK = "﻿";
+    private static final String BYTE_ORDER_MARK = "\uFEFF";
 
     /** Front-matter fields and the Markdown below them. */
     record Entry(Map<String, Object> fields, String body) {}
@@ -50,8 +55,11 @@ final class VaultFiles {
     private VaultFiles() {
     }
 
-    /** Reads a regular file as strict UTF-8, refusing symbolic links and oversized files. */
-    static String read(Path file) throws Unreadable {
+    /**
+     * Reads a regular file as strict UTF-8, refusing symbolic links and oversized files, and
+     * charges the bytes read to the budget.
+     */
+    static String read(Path file, ReadBudget budget) throws Unreadable {
         try {
             var attributes = Files.readAttributes(file, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
             if (attributes.isSymbolicLink()) {
@@ -64,6 +72,7 @@ final class VaultFiles {
             try (InputStream in = Files.newInputStream(file, LinkOption.NOFOLLOW_LINKS)) {
                 bytes = in.readNBytes(MAX_FILE_BYTES + 1);
             }
+            budget.read(bytes.length);
             if (bytes.length > MAX_FILE_BYTES) {
                 throw new Unreadable("larger than " + MAX_FILE_BYTES / 1024 + " KiB");
             }
@@ -118,14 +127,19 @@ final class VaultFiles {
             throw new Unreadable(what + " is not a mapping");
         }
         var fields = new LinkedHashMap<String, Object>();
-        map.forEach((key, value) -> fields.put(String.valueOf(key), value));
+        for (Map.Entry<?, ?> field : map.entrySet()) {
+            if (!(field.getKey() instanceof String key)) {
+                throw new Unreadable(what + " has a key that is not text");
+            }
+            fields.put(key, field.getValue());
+        }
         return fields;
     }
 
     private static Yaml parser() {
         var options = new LoaderOptions();
         options.setAllowDuplicateKeys(false);
-        options.setMaxAliasesForCollections(MAX_ALIASES);
+        options.setMaxAliasesForCollections(MAX_COLLECTION_ALIASES);
         options.setNestingDepthLimit(MAX_NESTING);
         options.setCodePointLimit(MAX_FILE_BYTES);
         options.setAllowRecursiveKeys(false);
@@ -136,9 +150,9 @@ final class VaultFiles {
     /** The parser's own diagnosis, e.g. "found duplicate key title", without its multi-line context. */
     private static String describe(YAMLException e) {
         if (e instanceof MarkedYAMLException marked && marked.getProblem() != null) {
-            return marked.getProblem().strip();
+            return Text.bounded(marked.getProblem().strip());
         }
-        return firstLine(e.getMessage());
+        return Text.bounded(firstLine(e.getMessage()));
     }
 
     private static String firstLine(String message) {

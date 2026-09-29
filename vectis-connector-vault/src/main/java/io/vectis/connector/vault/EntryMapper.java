@@ -55,11 +55,11 @@ final class EntryMapper {
             return Optional.empty();
         }
         if (!keyPattern.matcher(key).matches()) {
-            problems.accept(origin + ": id '" + key + "' is not of the form " + keyPrefix + "-<number>; skipped");
+            problems.accept(origin + ": id " + Text.quote(key) + " is not of the form " + keyPrefix + "-<number>; skipped");
             return Optional.empty();
         }
         if (!fileName.equals(key + ".md")) {
-            problems.accept(origin + ": file name does not match id '" + key + "'; skipped");
+            problems.accept(origin + ": file name does not match id " + Text.quote(key) + "; skipped");
             return Optional.empty();
         }
         String title = text(fields.get("title"));
@@ -100,7 +100,7 @@ final class EntryMapper {
             return Optional.empty();
         }
         if (!fileName.equals(key + ".md")) {
-            problems.accept(origin + ": file name does not match sprintId '" + key + "'; skipped");
+            problems.accept(origin + ": file name does not match sprintId " + Text.quote(key) + "; skipped");
             return Optional.empty();
         }
         return Optional.of(new SourceSprint(
@@ -120,11 +120,11 @@ final class EntryMapper {
         }
         Optional<VaultStatus> known = VaultStatus.of(status);
         if (known.isEmpty()) {
-            problems.accept(origin + ": unknown status '" + status + "'" + placed);
+            problems.accept(origin + ": unknown status " + Text.quote(status) + placed);
             return tier.category();
         }
         if (known.get().tier() != tier) {
-            problems.accept(origin + ": status '" + status + "' belongs in " + known.get().tier().directory()
+            problems.accept(origin + ": status " + Text.quote(status) + " belongs in " + known.get().tier().directory()
                     + "/, contradicting its directory" + placed);
             return tier.category();
         }
@@ -137,7 +137,7 @@ final class EntryMapper {
             case "active" -> SourceSprint.State.ACTIVE;
             case "future", "planned" -> SourceSprint.State.FUTURE;
             default -> {
-                String reason = state.isEmpty() ? "'state' is missing or not text" : "unknown sprint state '" + state + "'";
+                String reason = state.isEmpty() ? "'state' is missing or not text" : "unknown sprint state " + Text.quote(state);
                 problems.accept(origin + ": " + reason + "; taken as FUTURE");
                 yield SourceSprint.State.FUTURE;
             }
@@ -154,7 +154,7 @@ final class EntryMapper {
                 return points;
             }
         }
-        problems.accept(origin + ": storyPoints '" + value + "' is not a non-negative number; left unestimated");
+        problems.accept(origin + ": storyPoints " + describe(value) + " is not a non-negative number; left unestimated");
         return null;
     }
 
@@ -164,7 +164,7 @@ final class EntryMapper {
             return null;
         }
         if (value instanceof Date date) {
-            return date.toInstant().atOffset(ZoneOffset.UTC).toLocalDate();
+            return utcDate(date);
         }
         if (value instanceof String text) {
             try {
@@ -201,7 +201,11 @@ final class EntryMapper {
         List<?> values = value instanceof List<?> list ? list : List.of(value);
         var keys = new ArrayList<String>();
         for (Object element : values) {
-            String text = element instanceof Number ? element.toString() : text(element);
+            String text = switch (element) {
+                case Number number -> number.toString();
+                case Date date -> utcDate(date).toString();
+                default -> text(element);
+            };
             if (text.isEmpty()) {
                 problems.accept(origin + ": '" + name + "' has an entry that is not text; entry dropped");
             } else {
@@ -215,6 +219,22 @@ final class EntryMapper {
         if (!targets.isEmpty()) {
             links.put(type, targets);
         }
+    }
+
+    /**
+     * A bounded, escaped rendering of a scalar for a problem report. Collections are named, never
+     * rendered: a self-referencing one would recurse without end.
+     */
+    private static String describe(Object value) {
+        if (value instanceof String || value instanceof Number || value instanceof Boolean) {
+            return Text.quote(value.toString());
+        }
+        return value instanceof List<?> ? "(a list)" : value instanceof Map<?, ?> ? "(a mapping)" : "(a value)";
+    }
+
+    /** An unquoted YAML date is read as midnight UTC, so its UTC day is the written day. */
+    private static LocalDate utcDate(Date date) {
+        return date.toInstant().atOffset(ZoneOffset.UTC).toLocalDate();
     }
 
     /** A YAML string, stripped; empty for anything else, which callers treat as absent. */
