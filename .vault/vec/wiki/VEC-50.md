@@ -2,9 +2,9 @@
 kind: bug
 space: vec
 id: VEC-50
-title: 'JVM path filters are unanchored, so a future .sql or .java file under web/ would spend a
-  Maven build and a Postgres service on an SPA-only change'
-status: TO DO
+title: JVM path filters are unanchored, so a future .sql or .java file under web/ would spend a Maven
+  build and a Postgres service on an SPA-only change
+status: IN PROGRESS
 project: vectis
 priority: P3
 dependencies: []
@@ -12,6 +12,7 @@ labels:
 - VEC
 - ci
 storyPoints: 1
+sprint: VEC-S4
 ---
 
 # VEC-50 — the workflow filters are disjoint by accident, not by construction
