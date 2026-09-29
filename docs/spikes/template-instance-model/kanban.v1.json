@@ -1,0 +1,18 @@
+{
+  "template": "kanban",
+  "version": 1,
+  "name": "Kanban",
+  "states": {
+    "todo": {"name": "To Do", "category": "NOT_STARTED"},
+    "in-progress": {"name": "In Progress", "category": "IN_PROGRESS", "wipLimit": 5},
+    "done": {"name": "Done", "category": "DONE"}
+  },
+  "stateOrder": ["todo", "in-progress", "done"],
+  "itemTypes": {
+    "task": {"name": "Task"},
+    "bug": {"name": "Bug"},
+    "epic": {"name": "Epic"}
+  },
+  "fields": {},
+  "settings": {"defaultItemType": "task"}
+}
