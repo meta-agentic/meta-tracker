@@ -2,6 +2,7 @@
 package io.vectis.connector.vault;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.vectis.extension.spi.BacklogSnapshot;
@@ -29,7 +30,7 @@ class StatusMappingTest {
             DEMO-1  | TO DO       | raw    | NOT_STARTED
             DEMO-2  | REFINED     | raw    | REFINED
             DEMO-3  | PLANNED     | raw    | NOT_STARTED
-            DEMO-4  | NO GO       | raw    | NOT_STARTED
+            DEMO-4  | NO GO       | raw    | DISCONTINUED
             DEMO-8  | IN PROGRESS | wiki   | IN_PROGRESS
             DEMO-9  | IN REVIEW   | wiki   | IN_PROGRESS
             DEMO-11 | DONE        | output | DONE
@@ -73,10 +74,23 @@ class StatusMappingTest {
     }
 
     @Test
-    void onlyRefinedLeavesItsTiersCategory() {
+    void onlyRefinedAndNoGoLeaveTheirTiersCategory() {
         for (VaultStatus status : VaultStatus.values()) {
-            StatusCategory expected = status == VaultStatus.REFINED ? StatusCategory.REFINED : status.tier().category();
+            StatusCategory expected = switch (status) {
+                case REFINED -> StatusCategory.REFINED;
+                case NO_GO -> StatusCategory.DISCONTINUED;
+                default -> status.tier().category();
+            };
             assertEquals(expected, status.category(), status.label());
         }
+    }
+
+    @Test
+    void noGoIsAnEndStateOfItsOwnNeitherNotStartedNorDone() {
+        SourceItem item = Fixtures.item(snapshot, "DEMO-4");
+
+        assertEquals(StatusCategory.DISCONTINUED, item.category());
+        assertNotEquals(StatusCategory.NOT_STARTED, item.category());
+        assertNotEquals(StatusCategory.DONE, item.category());
     }
 }
