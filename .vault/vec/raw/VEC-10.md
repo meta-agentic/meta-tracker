@@ -15,6 +15,8 @@ labels:
 - tier-Core
 dependencies:
 - VEC-9
+relates:
+- VEC-42
 estimate:
   extension: 0.6
   intension: 0.8
@@ -38,6 +40,8 @@ As an Agile Coach, I want to initialize a project using an optimized template (K
 * Submitting the 'New Project' form in the React frontend must successfully initialize the workspace.
 * The workspace must render columns matching the template definition (e.g., Kanban vs. Scrum) dynamically.
 * Invalid configurations passed to the backend API must be rejected with a clear validation notification in the UI.
+* **(from VEC-42, 2026-09-28)** With the endpoints live, the Boards tab renders the boards, columns and items the server returns, and they are still there after a page reload — the end-to-end check VEC-42's merged client could not run without a backend.
+* **(from VEC-42)** The contract checklist in `web/src/api/README.md` is reconciled against the endpoints as built: `startDate`, `dueDate` and `storyPoints` are recorded as unenforced conventions unless the API defines them.
 
 **Developer Notes**
 This is a full vertical slice. Build the JAX-RS endpoint to parse template models, storing configurations inside a PostgreSQL JSONB column on the Project table. In the frontend, map the workspace columns dynamically based on this JSON structure.
@@ -83,3 +87,62 @@ owns — this story should not be the place that decision gets made silently.
 quadrant (high extension, low intension) and at that point the prescription
 changes to **split by extension** — plausibly into a provisioning endpoint +
 migration, and the client form — rather than estimating it up.
+
+## 2026-09-25: reference implementation delivered PAST this item's own blocking gate
+
+This item was placed **REFUSED, not refined** at estimation (2026-08-30): "Intension split out
+as VEC-45 (template->instance model spike; ADR-VEC-03 unwritten, R-CORE-5 inheritance semantics
+undecided)." VEC-45 is still REFINED, not done, and ADR-VEC-03 does not exist. A lane built the
+server slice anyway, under one stated assumption — provisioning COPIES the template's columns
+into a fresh board with no link back to the template — chosen as the smallest model that does
+not pre-empt R-CORE-5's reference-plus-overrides semantics. That assumption, and every REST
+convention below, is a DRAFT the lane set unilaterally, not a ratified decision. Per this
+project's own rule (shared state / distributed-model features go through an architect + spike,
+not straight into a story), this needs an architect pass against VEC-45/ADR-VEC-03 before it
+can be called delivered.
+
+**Branch:** `vec/VEC-10-template-provisioning`, head `5e63b0f`, 3 commits, cut from origin/main
+`45814b1`. `mvn verify` green: 69/69 tests. No production deploy config exists for it yet — see
+the new deployment-gap item below.
+
+**What it built, provisionally:**
+- `ProjectTemplate` enum in `vectis-domain` (Kanban, Scrum) with `instantiate(workspaceId)`.
+- `WorkspaceProvisioningRepository`, one transaction for workspace + boards, a typed
+  `WorkspaceKeyConflictException` on the unique-key violation.
+- First product REST resources under `/api/v1`: `POST /workspaces`, `GET /workspaces/{key}`,
+  `/{key}/boards`, `/{key}/items`, `GET /templates`. One error body shape across the API
+  (`{error, message, violations[]}`), codes 400/409/404.
+- No schema migration: nothing about the template is persisted.
+
+**Silently set, needs ratification when VEC-45/ADR-VEC-03 land:**
+- The whole `/api/v1` error-body shape and status-code convention — this is now precedent for
+  every future endpoint, decided by an execution lane, not by design.
+- Copy-not-reference provisioning semantics, which may conflict with whatever ADR-VEC-03 rules
+  on R-CORE-5.
+- Epics as a client-side `fields.type` convention the server never validates.
+- `startDate`/`dueDate`/`storyPoints` as unvalidated pass-through fields, not a defined contract.
+
+**Genuinely useful, independent of the above:** it confirms VEC-42's adapter needs NO code
+change — every field name, path and shape it already assumed matches. VEC-42 can proceed to
+review on that basis regardless of how this item resolves.
+
+**Not done:** this item's own first acceptance criterion, the 'New Project' React form, was
+deliberately left out — it depends on VEC-42's HTTP client, which is correctly not yet merged.
+
+**Status stays TO DO.** It does not move to IN REVIEW: what's on the branch is an unratified
+draft of a decision this item explicitly deferred, not this item's delivery. Next step: VEC-45
+closes (or is time-boxed to a decision), ADR-VEC-03 gets written, and this branch is reviewed
+AS PROPOSED INPUT to that decision — kept if the copy-semantics assumption is ratified, revised
+or discarded if not.
+
+## Local end-to-end run 2026-09-28
+
+Branch rebased onto `main` locally (not pushed) and run against a throwaway Postgres:
+Flyway applied V1+V2, `POST /api/v1/workspaces` provisioned a Scrum workspace (201, five
+columns, UUIDv7 ids), and the merged VEC-42 client rendered its board and kept it after a
+reload — the AC moved in from VEC-42 passes locally.
+
+**Bug on this branch:** `GET /api/v1/templates` returns each template's issue types twice, as
+`issueTypes` and as a misspelled `sueTypes` — the serializer reads the `issueTypes()`
+accessor as an "is"-getter. Fix before this branch merges (annotate or rename the accessor).
+
