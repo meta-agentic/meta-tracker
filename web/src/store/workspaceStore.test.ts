@@ -21,6 +21,12 @@ function issue(over: Partial<Issue>): Issue {
     startDate: null,
     dueDate: null,
     storyPoints: null,
+    type: null,
+    labels: [],
+    priority: null,
+    description: null,
+    dependsOn: [],
+    relates: [],
     ...over,
   };
 }

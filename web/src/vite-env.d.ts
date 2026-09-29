@@ -9,6 +9,8 @@ interface ImportMetaEnv {
   readonly VITE_VECTIS_API_BASE_URL?: string;
   readonly VITE_VECTIS_WORKSPACE_KEY?: string;
   readonly VITE_VECTIS_API_TIMEOUT_MS?: string;
+  /** Development only — see `src/dev/fixtureSync.ts`. */
+  readonly VITE_VECTIS_FIXTURES?: string;
 }
 
 interface ImportMeta {

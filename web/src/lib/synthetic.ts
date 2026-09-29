@@ -94,6 +94,12 @@ export function generateWorkspace(opts: GenerateOptions): WorkspaceSnapshot {
       startDate: new Date(startMs).toISOString().slice(0, 10),
       dueDate: new Date(dueMs).toISOString().slice(0, 10),
       storyPoints: [1, 2, 3, 5, 8][Math.floor(rand() * 5)],
+      type: null,
+      labels: [],
+      priority: null,
+      description: null,
+      dependsOn: [],
+      relates: [],
     };
   });
 

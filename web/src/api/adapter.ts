@@ -24,9 +24,10 @@ import type { WireBoard, WireItem, WireJsonValue, WireWorkspace } from "./wire";
  *     work-unit type, `Item`, and hierarchy therefore lives in `fields`. An item
  *     carrying `fields.type === "epic"` is lifted out of the issue list into
  *     `Epic`; every other item points at one through `fields.parentId`.
- *  3. **The long tail.** Schedule dates and story points are not relational
- *     columns on `Item`; they are read out of `fields` and are null when absent
- *     or malformed, never guessed.
+ *  3. **The long tail.** Schedule dates, story points, type, labels, priority,
+ *     description and item links are not relational columns on `Item`; they
+ *     are read out of `fields` and are null (or empty) when absent or
+ *     malformed, never guessed.
  *
  * Every assumption above is a field name, and every field name is a constant
  * below. When VEC-10 publishes the endpoint contract, a disagreement is a
@@ -41,6 +42,11 @@ export const FIELD = {
   startDate: "startDate",
   dueDate: "dueDate",
   storyPoints: "storyPoints",
+  labels: "labels",
+  priority: "priority",
+  description: "description",
+  dependencies: "dependencies",
+  relates: "relates",
 } as const;
 
 /** The `fields.type` value that marks an item as an epic rather than an issue. */
@@ -84,6 +90,16 @@ function readNumber(
 ): number | null {
   const value = fields[key];
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/** A list of non-empty strings; any other entry is dropped, not coerced. */
+function readStrings(
+  fields: Record<string, WireJsonValue>,
+  key: string,
+): string[] {
+  const value = fields[key];
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
 }
 
 function isEpic(item: WireItem): boolean {
@@ -185,8 +201,19 @@ export function toWorkspaceSnapshot(payload: WireWorkspacePayload): WorkspaceSna
       startDate: readString(item.fields, FIELD.startDate),
       dueDate: readString(item.fields, FIELD.dueDate),
       storyPoints: readNumber(item.fields, FIELD.storyPoints),
+      type: readString(item.fields, FIELD.type),
+      labels: readStrings(item.fields, FIELD.labels),
+      priority: readString(item.fields, FIELD.priority),
+      description: readString(item.fields, FIELD.description),
+      dependsOn: readStrings(item.fields, FIELD.dependencies),
+      relates: readStrings(item.fields, FIELD.relates),
     };
   });
 
-  return { boards, epics, issues };
+  return {
+    workspace: { key: workspace.key, name: workspace.name },
+    boards,
+    epics,
+    issues,
+  };
 }

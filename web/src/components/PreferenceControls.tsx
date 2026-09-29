@@ -18,14 +18,14 @@ export function PreferenceControls() {
 
   return (
     <>
-      <label style={labelStyle}>
-        {t("prefs.theme.label")}
+      <label className="vec-pref">
+        <span className="vec-pref__label">{t("prefs.theme.label")}</span>
         <select
           value={theme}
           onChange={(event) =>
             setTheme(event.target.value as ThemePreference)
           }
-          style={selectStyle}
+          className="vec-select"
         >
           {themes.map((option) => (
             <option key={option} value={option}>
@@ -35,12 +35,12 @@ export function PreferenceControls() {
         </select>
       </label>
 
-      <label style={labelStyle}>
-        {t("prefs.locale.label")}
+      <label className="vec-pref">
+        <span className="vec-pref__label">{t("prefs.locale.label")}</span>
         <select
           value={locale}
           onChange={(event) => setLocale(event.target.value)}
-          style={selectStyle}
+          className="vec-select"
         >
           {locales.map((option) => (
             <option key={option} value={option}>
@@ -52,20 +52,3 @@ export function PreferenceControls() {
     </>
   );
 }
-
-const labelStyle: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 6,
-  fontSize: 12,
-  color: "var(--vec-text-muted)",
-};
-
-const selectStyle: React.CSSProperties = {
-  padding: "3px 6px",
-  borderRadius: 6,
-  border: "1px solid var(--vec-border-strong)",
-  background: "var(--vec-surface)",
-  color: "var(--vec-text)",
-  fontSize: 12,
-};
