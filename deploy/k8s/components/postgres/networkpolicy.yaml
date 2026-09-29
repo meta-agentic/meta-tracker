@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: vectis-db
+  labels:
+    app.kubernetes.io/name: vectis-db
+    app.kubernetes.io/component: database
+spec:
+  # Only the Vectis server's pods, in this namespace, may reach PostgreSQL, and
+  # only on 5432. Everything else is denied ingress to the database pod. The
+  # probes are exec probes inside the container, so they are unaffected.
+  #
+  # Takes effect only if the cluster's CNI enforces NetworkPolicy; on one that
+  # does not, this object is accepted and ignored.
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: vectis-db
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vectis
+      ports:
+        - protocol: TCP
+          port: 5432

@@ -13,10 +13,17 @@ kind: Component
 #
 # Not a production database: one replica, no backups, no failover. Data lives on
 # the StatefulSet's PersistentVolumeClaim and survives pod restarts and
-# rollouts, but not deletion of the claim.
+# rollouts, but not deletion of the claim. The `vectis` user is the database
+# superuser, and its password is set only at initdb; statefulset.yaml documents
+# the rotation step.
+#
+# networkpolicy.yaml admits only the server's pods on 5432. It is enforced only
+# where the cluster's CNI implements NetworkPolicy; elsewhere it is inert.
 resources:
   - service.yaml
+  - service-headless.yaml
   - statefulset.yaml
+  - networkpolicy.yaml
 
 labels:
   - pairs:
