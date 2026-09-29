@@ -8,7 +8,7 @@ open-source Community edition only — the separately licensed
 [Enterprise edition](./README.md#editions) is developed out of tree and is not
 part of this roadmap.
 
-> **Status: M1 mostly delivered** (as of 2026-09-29). The reactive core, time-ordered identifiers, native build and delivery, the extension model, the first persistence slice, continuous integration and the web client's API client are in; template provisioning is in progress; live re-tagging and the multi-tenant blueprint are still planned. The backlog in `.vault/` is the item-level view, and this file is the narrative summary.
+> **Status: M1 mostly delivered** (as of 2026-09-29). The reactive core, time-ordered identifiers, native build and delivery, the extension model, the first persistence slice, continuous integration and the web client's API client are in. Template provisioning is next: its template-to-instance model spike is in progress. Live re-tagging and the multi-tenant blueprint are still planned. The backlog in `.vault/` is the item-level view, and this file is the narrative summary.
 
 **Legend:** ⬜ planned · 🟡 in progress · ✅ done
 
@@ -19,7 +19,7 @@ part of this roadmap.
 The non-blocking engine and the path to ship it.
 
 - ✅ High-throughput, lock-free **time-ordered identifiers** for items (no write hotspots or index fragmentation under heavy concurrent planning)
-- 🟡 **Project & template provisioning** — create a workspace from a Kanban or Scrum template, with columns and item types laid out automatically (the template-to-instance model is being settled first)
+- ⬜ **Project & template provisioning** — create a workspace from a Kanban or Scrum template, with columns and item types laid out automatically (the template-to-instance model spike is in progress)
 - ⬜ **Live project re-tagging** — change a project's display key without breaking
   existing references
 - ✅ **Native build + automated container/Kubernetes delivery** pipeline
@@ -33,7 +33,7 @@ The non-blocking engine and the path to ship it.
 
 Make the board live and the workflow the team's own.
 
-- ✅ **Sprint mechanics** — create, start and complete a sprint, moving items between backlog and sprint
+- ✅ **Sprint mechanics** in the domain model and persistence — create, start and complete a sprint, moving items between backlog and sprint (no API or UI yet)
 - ⬜ **Schema-flexible workflow engine** with transition guardrails (cards can't
   skip required states), enforced on the server, not just the UI
 - ⬜ **High-velocity inline task grid** — keyboard-first create/edit/delete

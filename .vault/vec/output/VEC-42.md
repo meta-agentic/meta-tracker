@@ -140,10 +140,6 @@ README checklist should say "convention, unenforced" rather than "verified again
 those three. This item can proceed to review on that basis regardless of how VEC-10 itself
 resolves against VEC-45/ADR-VEC-03.
 
-## Status check 2026-09-28
-
-PR opened: meta-agentic/meta-tracker#11 from `vec/VEC-42-real-api-client` (4 commits, 2026-09-23). Realization still waits on the contract checklist in `web/src/api/README.md` against VEC-10.
-
 ## Closed 2026-09-28 — split on the PO's call
 
 The client is merged: meta-agentic/meta-tracker#11 (`d3b98fe`). On `main`, `web/src/api/`
@@ -154,5 +150,5 @@ application-path file imports `src/lib/synthetic` (AC2). AC2–AC9 are client-si
 endpoints, and `vectis-server` on `main` still has only `ExtensionDiagnosticsResource`. That
 check now sits in VEC-10's acceptance criteria, next to the endpoints it depends on, together
 with reconciling the contract checklist in `web/src/api/README.md`. The VEC-10 link is `relates`,
-not `depends on`, so this item no longer blocks the lane.
+not `depends on`, so this item no longer blocks the sprint.
 

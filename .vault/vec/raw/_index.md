@@ -2,7 +2,7 @@
 
 _raw stage of the memory-promotion pipeline. Notes land here as `.md` files._
 
-## Contents (37)
+## Contents (36)
 
 - [[VEC-2]] — Dynamic Workspace Topology & Real-Time State Machine · TO DO
 - [[VEC-3]] — High-Density Dual-Axis Virtualized User Experience · TO DO
@@ -39,5 +39,4 @@ _raw stage of the memory-promotion pipeline. Notes land here as `.md` files._
 - [[VEC-40]] — empty task reuse me · NO GO
 - [[VEC-46]] — Real-time transport — SSE fan-out across replicas and the workspace event contract · REFINED
 - [[VEC-47]] — Tracker Adapter Architecture — one contract, many backlogs, the vault as reference adapter · TO DO
-- [[VEC-51]] — vectis-server has no deploy/k8s config for its Postgres dependency — VECTIS_DB_PASSWORD has no default · TO DO
 - [[VEC-54]] — Vectis shows its own backlog — read-only vault import behind the connector contract · TO DO

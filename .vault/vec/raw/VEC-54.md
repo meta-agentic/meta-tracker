@@ -26,29 +26,18 @@ estimate:
 
 ## Use case
 
-As a visitor to the public repository, I want to run Vectis and see the project's real backlog
-on its board, so that the tracker demonstrates itself on real data rather than demo rows.
+As a visitor to the public repository, I want to run Vectis and see the project's real backlog on its board, so that the tracker demonstrates itself on real data rather than demo rows.
 
 ## Acceptance criteria
 
-- [ ] A read-only vault connector implements the contract from VEC-53 and imports `.vault/vec`
-      into a workspace `VEC`: every item appears once, in the column its status maps to.
+- [ ] A read-only vault connector implements the contract from VEC-53 and imports `.vault/vec` into a workspace `VEC`: every item appears once, in the column its status maps to.
 - [ ] Re-running the import changes nothing; an edited item file updates its item.
-- [ ] One command brings the stack up locally (database, server, web) and the board shows the
-      real backlog; documented in the README.
+- [ ] One command brings the stack up locally (database, server, web) and the board shows the real backlog; documented in the README.
 - [ ] Tests cover the mapping and idempotency without a live database where possible.
 
 ## Open points from the VEC-53 spike (2026-09-28)
 
-- **PO decision (2026-09-28): REFINED stays REFINED.** It is not folded into To Do or Backlog:
-  the imported board carries its own *Refined* column between Backlog and To Do (PLANNED still
-  maps to To Do). Expressed as an instance delta on the Scrum template once VEC-45's model lands;
-  if VEC-45 re-refines how that is represented, that is accepted.
-  **What REFINED means (PO):** the item passed refinement and is ready — normally picked up in the
-  next sprint. If it waits too long, other changes can supersede it and it needs refining again;
-  that should be rare while the ready queue stays short. So the column reads as *ready for the next
-  sprint*, distinct from To Do. Follow-up idea (not in this story): flag a REFINED item that has
-  waited more than about one sprint as "may need re-refinement".
+- **PO decision (2026-09-28): REFINED stays REFINED.** It is not folded into To Do or Backlog: the imported board carries its own *Refined* column between Backlog and To Do (PLANNED still maps to To Do). Expressed as an instance delta on the Scrum template once VEC-45's model lands; if VEC-45 re-refines how that is represented, that is accepted. **What REFINED means (PO):** the item passed refinement and is ready — normally picked up in the next sprint. If it waits too long, other changes can supersede it and it needs refining again; that should be rare while the ready queue stays short. So the column reads as *ready for the next sprint*, distinct from To Do. Follow-up idea (not in this story): flag a REFINED item that has waited more than about one sprint as "may need re-refinement".
 - **Unverified:** the YAML parsing library in the native build — check before relying on the import in a native image.
 - `.vault/README.md` lines 85–87 ("nothing in the application reads these files") must be reworded in this story's PR.
 

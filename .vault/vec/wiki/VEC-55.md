@@ -27,8 +27,7 @@ estimate:
 
 ## Use case
 
-As a visitor, I want the web client to look like a finished product, so that the first minute
-with Vectis reads as craft, not scaffolding.
+As a visitor, I want the web client to look like a finished product, so that the first minute with Vectis reads as craft, not scaffolding.
 
 ## Acceptance criteria
 
