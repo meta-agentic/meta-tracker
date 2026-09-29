@@ -22,7 +22,7 @@ The README commits Vectis to "workspaces, boards, sprints, and real-time collabo
 
 ## Not on the dogfooding critical path — filed to close the gap, not to schedule it
 
-VEC currently runs **without sprints**: a `sprint in openSprints()` query across the whole site returns 84 issues in IOS, MOS and IAM only, and none in VEC. So Vectis can hold the VEC backlog and be genuinely dogfooded before this exists.
+VEC currently runs **without sprints**: a `sprint in openSprints()` query across the whole Jira site returns 84 issues, all in other projects, and none in VEC. So Vectis can hold the VEC backlog and be genuinely dogfooded before this exists.
 
 It does, however, block dogfooding any of the other spaces, and it blocks VEC-28 and VEC-31 regardless of sequencing. Filing it so the dependency is visible rather than discovered later.
 
@@ -31,7 +31,7 @@ It does, however, block dogfooding any of the other spaces, and it blocks VEC-28
 * Sprint entity with a lifecycle: future → active → completed.
 * Assign and remove items from a sprint; a backlog scope distinct from sprint scope.
 * Completing a sprint moves unfinished items somewhere explicit (next sprint or backlog) rather than silently.
-* Whether several sprints may be active at once is a real design decision, not an implementation detail — Jira makes it an opt-in board setting, and the estate's per-space cadence is the reason the question matters. Decide it here.
+* Whether several sprints may be active at once is a real design decision, not an implementation detail — Jira makes it an opt-in board setting, and the separate cadence each backlog space keeps is the reason the question matters. Decide it here.
 
 ## Acceptance
 
@@ -49,12 +49,4 @@ open design decision — sprint cardinality — plus transition-legality turned
 out to be a second one, found by review after the DB-enforced cardinality
 invariant landed) → **complex + broad → 8**, this story's original full scope.
 
-Correctly **not committed unsplit**: the architect scoped this delivery to
-domain + persistence only, explicitly deferring the REST API (no entity has
-one yet — adding the first inside this PR would invent an estate-wide
-convention unreviewed) and the frontend sprint UI (blocked on that API). That
-is the prescribed move for this quadrant, applied inline rather than as a
-separate PO-visible split beforehand. The 8 points this row carries are for
-the slice actually delivered; REST API and frontend UI are real remaining
-scope, not folded into this estimate, and want their own item(s) when
-picked up.
+Correctly **not committed unsplit**: the architect scoped this delivery to domain + persistence only, explicitly deferring the REST API (no entity has one yet — adding the first inside this PR would invent a project-wide convention unreviewed) and the frontend sprint UI (blocked on that API). That is the prescribed move for this quadrant, applied inline rather than as a separate PO-visible split beforehand. The 8 points this row carries are for the slice actually delivered; REST API and frontend UI are real remaining scope, not folded into this estimate, and want their own item(s) when picked up.
