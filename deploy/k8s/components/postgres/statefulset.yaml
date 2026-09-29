@@ -6,7 +6,10 @@ metadata:
     app.kubernetes.io/name: vectis-db
     app.kubernetes.io/component: database
 spec:
-  serviceName: vectis-db
+  # The governing Service is the headless one: `spec.clusterIP` is immutable,
+  # so it has to be headless from the first apply. The app connects through
+  # the ClusterIP `vectis-db` Service instead.
+  serviceName: vectis-db-headless
   replicas: 1
   selector:
     matchLabels:
@@ -17,25 +20,39 @@ spec:
         app.kubernetes.io/name: vectis-db
         app.kubernetes.io/component: database
     spec:
+      # The database never talks to the Kubernetes API.
+      automountServiceAccountToken: false
       # Same hardening as the server. The alpine image's `postgres` user is uid
       # 70, and fsGroup makes the volume writable for it without a root init step.
+      # OnRootMismatch skips the recursive chown on every restart once the volume
+      # root already has the right group.
       securityContext:
         runAsNonRoot: true
         runAsUser: 70
         runAsGroup: 70
         fsGroup: 70
+        fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: RuntimeDefault
       containers:
         - name: postgres
           # Same major and variant as the CI service containers in jvm-test.yml
-          # and native-deploy.yml, so the database the tests ran against is the
-          # one that gets deployed.
-          image: postgres:16-alpine
+          # and native-deploy.yml (`postgres:16-alpine`), pinned to an exact minor
+          # and Alpine release so a deployed database only changes on purpose.
+          image: postgres:16.15-alpine3.24
           imagePullPolicy: IfNotPresent
           ports:
             - name: postgres
               containerPort: 5432
+          # Credentials, and what they are not:
+          #   * `POSTGRES_USER` (`vectis`) is the cluster *superuser*, and the
+          #     server connects as it. A separate least-privilege application
+          #     role, created by an init script, is a known follow-up.
+          #   * `POSTGRES_PASSWORD` is applied only by initdb, the first time the
+          #     volume is initialised. Changing the Secret afterwards does not
+          #     change the database password: rotation needs a manual
+          #     `ALTER ROLE vectis PASSWORD '...'` in the database, done before
+          #     the Secret is updated and the server restarted.
           env:
             - name: POSTGRES_DB
               valueFrom:
@@ -95,6 +112,7 @@ spec:
           emptyDir: {}
         - name: tmp
           emptyDir: {}
+  # No storageClassName: the claim relies on the cluster's default StorageClass.
   volumeClaimTemplates:
     - metadata:
         name: data
