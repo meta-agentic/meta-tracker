@@ -2,7 +2,7 @@
 
 _raw stage of the memory-promotion pipeline. Notes land here as `.md` files._
 
-## Contents (38)
+## Contents (36)
 
 - [[VEC-2]] — Dynamic Workspace Topology & Real-Time State Machine · TO DO
 - [[VEC-3]] — High-Density Dual-Axis Virtualized User Experience · TO DO
@@ -37,8 +37,6 @@ _raw stage of the memory-promotion pipeline. Notes land here as `.md` files._
 - [[VEC-38]] — Non-Breaking Rolling Upgrades for Schema-less Schema States · TO DO
 - [[VEC-39]] — Automated Backup Fabric & Cryptographic Key Rotation (KMS) · TO DO
 - [[VEC-40]] — empty task reuse me · NO GO
-- [[VEC-42]] — Replace the synthetic workspace generator with a real API client in the SPA · REFINED
-- [[VEC-45]] — Template to instance model — inheritance and override semantics for workspace provisioning · REFINED
 - [[VEC-46]] — Real-time transport — SSE fan-out across replicas and the workspace event contract · REFINED
 - [[VEC-47]] — Tracker Adapter Architecture — one contract, many backlogs, the vault as reference adapter · TO DO
-- [[VEC-50]] — JVM path filters are unanchored, so a future .sql or .java file under web/ would spend a Maven build and a Postgres service on an SPA-only change · TO DO
+- [[VEC-54]] — Vectis shows its own backlog — read-only vault import behind the connector contract · TO DO

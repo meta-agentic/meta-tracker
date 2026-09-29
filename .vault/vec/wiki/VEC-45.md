@@ -3,7 +3,7 @@ kind: spike
 space: vec
 id: VEC-45
 title: Template to instance model — inheritance and override semantics for workspace provisioning
-status: REFINED
+status: IN PROGRESS
 project: VEC
 epic: VEC-2
 priority: P1
@@ -12,6 +12,7 @@ labels:
 - spike
 - tier-Core
 storyPoints: 5
+sprint: VEC-S4
 estimate:
   extension: -0.3
   intension: 0.9

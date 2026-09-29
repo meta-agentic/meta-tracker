@@ -6,7 +6,29 @@ namespace: vectis-staging
 resources:
   - ../../base
 
+# Staging has no managed database, so it runs the in-cluster PostgreSQL. The
+# `vectis-db` Secret it and the server read has to exist in this namespace
+# before the first sync (see ../../base/deployment.yaml).
+components:
+  - ../../components/postgres
+
 nameSuffix: -staging
+
+# `nameSuffix` renames the database Service to `vectis-db-staging` but cannot
+# reach the hostname stored as a plain string in the ConfigMap. Copy the final
+# Service name into `VECTIS_DB_HOST` instead of restating it by hand, so the two
+# cannot drift if the suffix changes.
+replacements:
+  - source:
+      kind: Service
+      name: vectis-db
+      fieldPath: metadata.name
+    targets:
+      - select:
+          kind: ConfigMap
+          name: vectis-db
+        fieldPaths:
+          - data.VECTIS_DB_HOST
 
 commonAnnotations:
   vectis.dev/environment: staging
