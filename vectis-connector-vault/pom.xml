@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.vectis</groupId>
+    <artifactId>vectis-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>vectis-connector-vault</artifactId>
+  <name>Vectis :: Connector :: Vault (read-only)</name>
+  <description>
+    A community BacklogSource that reads a `.vault/` backlog — one Markdown file per
+    item with a YAML front-matter header, the directory being the status tier — into
+    a BacklogSnapshot. Plain Java against the SPI only: no framework, no database,
+    no engine types. Mapping the snapshot onto a workspace belongs to the importer.
+  </description>
+
+  <dependencies>
+    <!-- The published contract: the ONLY Vectis artifact a connector may see. -->
+    <dependency>
+      <groupId>io.vectis</groupId>
+      <artifactId>vectis-extension-spi</artifactId>
+    </dependency>
+
+    <!--
+      Front-matter parser. Version managed by the Quarkus platform BOM, Apache-2.0.
+      Used directly rather than through jackson-dataformat-yaml (which wraps it) so the
+      untrusted-input limits (aliases, size, nesting, duplicate keys) are set on the
+      parser itself and the connector pulls in one artifact instead of three.
+    -->
+    <dependency>
+      <groupId>org.yaml</groupId>
+      <artifactId>snakeyaml</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>
