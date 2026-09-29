@@ -22,4 +22,3 @@ each item's `sprint` field. Close record is appended at close.
 ## Close record (2026-08-01)
 
 Delivered **13.0 SP · 5 items** of 5 in sprint.
-Ceremony notes: `mova-os/memory/wiki/`.

@@ -1,0 +1,31 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# A single-instance, in-cluster PostgreSQL for the server's datasource, for
+# environments that have no managed database (staging today). An environment
+# with a managed database leaves this component out and points `VECTIS_DB_HOST`
+# at that database instead (see ../../base/kustomization.yaml).
+#
+# It reads the same `vectis-db` ConfigMap as the server for the database name and
+# user, and the same `vectis-db` Secret for the password. That Secret is created
+# out of band, and its value is never committed (see ../../base/deployment.yaml).
+# Both sides therefore share one source for the credentials and cannot drift.
+#
+# Not a production database: one replica, no backups, no failover. Data lives on
+# the StatefulSet's PersistentVolumeClaim and survives pod restarts and
+# rollouts, but not deletion of the claim. The `vectis` user is the database
+# superuser, and its password is set only at initdb; statefulset.yaml documents
+# the rotation step.
+#
+# networkpolicy.yaml admits only the server's pods on 5432. It is enforced only
+# where the cluster's CNI implements NetworkPolicy; elsewhere it is inert.
+resources:
+  - service.yaml
+  - service-headless.yaml
+  - statefulset.yaml
+  - networkpolicy.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: vectis
+    includeSelectors: false
