@@ -151,11 +151,7 @@ operational tooling is out of tree and out of scope here — see
 - Backlog items **cite R-numbers** in their acceptance criteria instead of
   restating thresholds; the numbers above become the single source (500 ms
   SSE, 60 fps × 2,500 × 365, 100k-write identity target, <3 s / 100k report).
-- R-UX-2/3/6 and R-REP-1/2/5/6 are **new scope** relative to the current
-  roadmap detail: the roadmap's reporting milestone gains the query language,
-  command dialog, distribution reports, dashboard/widget framework, and
-  report sharing/export as explicit deliverables (internal backlog mapping is
-  maintained privately, per publish governance).
+- R-UX-2/3/6 and R-REP-1/2/5/6 are **new scope** relative to the current roadmap detail: the roadmap's reporting milestone gains the query language, command dialog, distribution reports, dashboard/widget framework, and report sharing/export as explicit deliverables. The backlog ships with the repository in `.vault/`; where an item delivers a requirement, it cites the R-number.
 - Follow-on ADRs planned: **02** identity strategy, **03** workflow model,
   **04** real-time transport, **05** client store & virtualization,
   **06** extension/plugin loading, **07** multi-tenant isolation &
