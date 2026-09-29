@@ -7,6 +7,7 @@ import "./styles/panels.css";
 import { App } from "./App";
 import type { WorkspaceSyncOptions } from "./api";
 import { AppProviders } from "./providers/AppProviders";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { applyPersistedThemeSync } from "./providers/applyTheme";
 
 // Before render, not in an effect: an effect runs after the first paint, which
@@ -18,7 +19,9 @@ function mount(sync?: WorkspaceSyncOptions) {
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
       <AppProviders>
-        <App sync={sync} />
+        <ErrorBoundary>
+          <App sync={sync} />
+        </ErrorBoundary>
       </AppProviders>
     </StrictMode>,
   );
