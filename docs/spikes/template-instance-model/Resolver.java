@@ -1,7 +1,7 @@
 // Template + delta resolution, the operation the whole model rests on (spike, throwaway).
 //
 // A template is an immutable, versioned configuration document. A workspace stores a
-// reference (template id + pinned version) and a delta, which is an RFC 7396 merge patch
+// reference (template key + pinned version) and a delta, which is an RFC 7396 merge patch
 // over the template's configurable sections. The effective configuration is
 //
 //     effective = normalise(mergePatch(template, delta))   then validated
@@ -10,8 +10,8 @@
 //   - resolve():     read-time merge, order normalisation, validation
 //   - writeDelta():  what an instance edit must pass (resolution + occupancy)
 //   - upgrade():     re-pinning to a newer template version (the "evolution" operation)
-//   - overrides():   the reviewable diff surface derived from the delta
-//   - projection():  the board_column rows a change implies (items FK into those rows)
+// The two views of a change, the reviewable override list and the board_column
+// statements it implies, are in Diff.java.
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -19,6 +19,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.regex.Pattern;
 
 final class Resolver {
@@ -47,46 +49,50 @@ final class Resolver {
     record Upgrade(Map<String, Object> delta, Map<String, Object> effective, List<String> notes, List<String> conflicts) {
     }
 
-    /** One line of the reviewable diff: what the instance changed relative to its template. */
-    record Change(String op, String path, Object template, Object instance) {
-        @Override
-        public String toString() {
-            return switch (op) {
-                case "add" -> "add     " + path + " = " + Json.compact(instance);
-                case "remove" -> "remove  " + path + "   (template: " + Json.compact(template) + ")";
-                case "unset" -> "unset   " + path + "   (template: " + Json.compact(template) + ")";
-                default -> "change  " + path + ": " + Json.compact(template) + " -> " + Json.compact(instance);
-            };
-        }
-    }
-
     // ---- resolution ---------------------------------------------------
 
     static Resolution resolve(Map<String, Object> template, Map<String, Object> delta) {
         List<String> v = new ArrayList<>();
-        for (String k : delta.keySet()) {
+        // Shape first: a section is an object (stateOrder an array of keys), never null. A
+        // section-level null would be a legal merge patch that silently drops the whole
+        // template section while the overrides list shows nothing, so it is rejected.
+        Map<String, Object> patch = new LinkedHashMap<>();
+        delta.forEach((k, x) -> {
             if (!SECTIONS.contains(k)) {
                 v.add("delta may not set '" + k + "'");
+            } else if (k.equals("stateOrder") ? !isKeyList(x) : !(x instanceof Map<?, ?>)) {
+                v.add(k + ": must be " + (k.equals("stateOrder") ? "an array of state keys" : "an object")
+                        + (x == null ? "; a whole section cannot be removed" : ""));
+            } else {
+                patch.put(k, Json.deepCopy(x));
             }
-        }
+        });
+        List<String> listed = Json.strings(patch.get("stateOrder"));
         for (String s : KEYED) {
             Map<String, Object> t = Json.obj(template.get(s));
-            Json.obj(delta.get(s)).forEach((k, x) -> {
+            Map<String, Object> section = Json.obj(patch.get(s));
+            for (String k : List.copyOf(section.keySet())) {
+                Object x = section.get(k);
                 if (!KEY.matcher(k).matches()) {
                     v.add(s + "." + k + ": key must match " + KEY.pattern());
                 }
                 if (x == null && !t.containsKey(k)) {
                     v.add(s + "." + k + ": removes an element the template does not have");
+                } else if (x != null && !(x instanceof Map<?, ?>)) {
+                    v.add(s + "." + k + ": must be an object, or null to remove it");
+                    section.remove(k);
+                } else if (x != null && s.equals("states") && !t.containsKey(k) && !listed.contains(k)
+                        && !(Json.obj(x).get("after") instanceof String) && !(Json.obj(x).get("before") instanceof String)) {
+                    // Placement must not depend on member order, which jsonb does not keep.
+                    v.add(s + "." + k + ": an added state must be placed with 'after', 'before' or stateOrder");
                 }
-            });
+            }
         }
-        Map<String, Object> patch = new LinkedHashMap<>(delta);
-        patch.keySet().retainAll(SECTIONS);
         Map<String, Object> doc = Json.obj(Json.mergePatch(template, patch));
 
         Map<String, Object> states = Json.obj(doc.get("states"));
         List<String> order = normaliseOrder(Json.strings(template.get("stateOrder")),
-                delta.containsKey("stateOrder") ? Json.strings(delta.get("stateOrder")) : null, states, v);
+                patch.containsKey("stateOrder") ? Json.strings(patch.get("stateOrder")) : null, states, v);
         Map<String, Object> ordered = new LinkedHashMap<>();
         order.forEach(k -> ordered.put(k, states.get(k)));
         doc.put("states", ordered);
@@ -96,50 +102,60 @@ final class Resolver {
         return new Resolution(doc, v);
     }
 
+    private static boolean isKeyList(Object x) {
+        return x instanceof List<?> l && l.stream().allMatch(e -> e instanceof String);
+    }
+
     /**
      * The order rule, in three steps.
      *   1. The instance's list (or the template's, when not overridden) is kept as written,
-     *      minus keys that no longer exist and minus states placed by {@code after}.
-     *   2. A state missing from it is placed right after its nearest predecessor in
-     *      template order that is present, so a column the template gains lands where the
-     *      template put it even in a reordered instance. A state the instance added but
-     *      did not place goes last.
-     *   3. A state carrying {@code "after": "<key>"} is placed immediately after that
-     *      state. This is how an instance places a column it adds without restating (and
-     *      so freezing) the template's order.
+     *      minus keys that no longer exist and minus states placed by an anchor.
+     *   2. A template state missing from it is placed right after its nearest predecessor
+     *      in template order that is present, so a column the template gains lands where
+     *      the template put it even in a reordered instance. Anything still unplaced is
+     *      appended in key order, so the result never depends on member order; resolve()
+     *      rejects an added state that reaches this step.
+     *   3. A state carrying {@code "after": "<key>"} is placed immediately after that state,
+     *      and one carrying {@code "before": "<key>"} immediately before it. This is how an
+     *      instance places a column without restating (and so freezing) the template's order.
      */
     static List<String> normaliseOrder(List<String> templateOrder, List<String> instanceOrder,
                                        Map<String, Object> states, List<String> v) {
         Set<String> present = states.keySet();
-        Map<String, String> anchors = new LinkedHashMap<>();
-        Map<String, String> anchoredTo = new LinkedHashMap<>();
-        present.stream().sorted().forEach(k -> {
-            if (Json.obj(states.get(k)).get("after") instanceof String a) {
-                anchors.put(k, a);
-                String other = anchoredTo.putIfAbsent(a, k);
-                if (other != null) {
-                    v.add("states." + k + ".after: states." + other + " is already placed after '" + a
-                            + "'; place one after the other");
+        Map<String, String> after = new TreeMap<>();
+        Map<String, String> before = new TreeMap<>();
+        for (String k : new TreeSet<>(present)) {
+            Map<String, Object> st = Json.obj(states.get(k));
+            if (st.get("after") instanceof String a) {
+                after.put(k, a);
+                if (st.get("before") instanceof String) {
+                    v.add("states." + k + ": set 'after' or 'before', not both");
                 }
+            } else if (st.get("before") instanceof String b) {
+                before.put(k, b);
             }
-        });
+        }
+        requireDistinctAnchors(after, "after", v);
+        requireDistinctAnchors(before, "before", v);
+        Set<String> anchored = new TreeSet<>(after.keySet());
+        anchored.addAll(before.keySet());
         List<String> base = instanceOrder != null ? instanceOrder : templateOrder;
         if (new LinkedHashSet<>(base).size() != base.size()) {
             v.add("stateOrder: lists a state twice");
         }
         if (instanceOrder != null) {
-            instanceOrder.stream().filter(anchors::containsKey).forEach(k ->
-                    v.add("stateOrder: lists '" + k + "', which is placed by states." + k + ".after"));
+            instanceOrder.stream().filter(anchored::contains).forEach(k -> v.add("stateOrder: lists '" + k
+                    + "', which is placed by states." + k + "." + (after.containsKey(k) ? "after" : "before")));
         }
         List<String> order = new ArrayList<>();
         for (String k : base) {
-            if (present.contains(k) && !anchors.containsKey(k) && !order.contains(k)) {
+            if (present.contains(k) && !anchored.contains(k) && !order.contains(k)) {
                 order.add(k);
             }
         }
         for (int i = 0; i < templateOrder.size(); i++) {
             String k = templateOrder.get(i);
-            if (!present.contains(k) || anchors.containsKey(k) || order.contains(k)) {
+            if (!present.contains(k) || anchored.contains(k) || order.contains(k)) {
                 continue;
             }
             int at = 0;
@@ -152,29 +168,49 @@ final class Resolver {
             }
             order.add(at, k);
         }
-        for (String k : present) {
-            if (!anchors.containsKey(k) && !order.contains(k)) {
+        for (String k : new TreeSet<>(present)) {
+            if (!anchored.contains(k) && !order.contains(k)) {
                 order.add(k);
             }
         }
         for (boolean placed = true; placed; ) {
             placed = false;
-            for (Map.Entry<String, String> e : anchors.entrySet()) {
+            for (Map.Entry<String, String> e : after.entrySet()) {
                 if (!order.contains(e.getKey()) && order.contains(e.getValue())) {
                     order.add(order.indexOf(e.getValue()) + 1, e.getKey());
                     placed = true;
                 }
             }
+            for (Map.Entry<String, String> e : before.entrySet()) {
+                if (!order.contains(e.getKey()) && order.contains(e.getValue())) {
+                    order.add(order.indexOf(e.getValue()), e.getKey());
+                    placed = true;
+                }
+            }
         }
-        anchors.forEach((k, a) -> {
+        for (String k : anchored) {
             if (!order.contains(k)) {
-                v.add("states." + k + ".after: " + (present.contains(a)
+                String how = after.containsKey(k) ? "after" : "before";
+                String a = after.containsKey(k) ? after.get(k) : before.get(k);
+                v.add("states." + k + "." + how + ": " + (present.contains(a)
                         ? "placement cycle through '" + a + "'"
                         : "references unknown state '" + a + "'"));
                 order.add(k);
             }
-        });
+        }
         return order;
+    }
+
+    /** Two states anchored to the same side of one state would have no defined order between them. */
+    private static void requireDistinctAnchors(Map<String, String> anchors, String how, List<String> v) {
+        Map<String, String> seen = new TreeMap<>();
+        anchors.forEach((k, a) -> {
+            String other = seen.putIfAbsent(a, k);
+            if (other != null) {
+                v.add("states." + k + "." + how + ": states." + other + " is already placed " + how + " '" + a
+                        + "'; place one relative to the other");
+            }
+        });
     }
 
     static void validate(Map<String, Object> doc, List<String> v) {
@@ -188,8 +224,10 @@ final class Resolver {
                 v.add("states." + k + ".category: must be one of " + CATEGORIES + ", was " + Json.compact(cat));
             }
             categories.add(String.valueOf(cat));
-            if (st.containsKey("after") && !(st.get("after") instanceof String)) {
-                v.add("states." + k + ".after: must be a state key");
+            for (String anchor : List.of("after", "before")) {
+                if (st.containsKey(anchor) && !(st.get(anchor) instanceof String)) {
+                    v.add("states." + k + "." + anchor + ": must be a state key");
+                }
             }
             if (st.containsKey("onBoard") && !(st.get("onBoard") instanceof Boolean)) {
                 v.add("states." + k + ".onBoard: must be true or false");
@@ -286,7 +324,7 @@ final class Resolver {
      *   - a tombstone for an element the new version also removed is dropped as redundant;
      *   - an instance-added key the new version now also defines is adopted: kept as an
      *     override, so the instance's values win and the template fills the rest;
-     *   - a state placed "after" a state the new version removed is re-anchored in place;
+     *   - a state anchored to a state the new version removed is re-anchored in place;
      *   - removed states are dropped from an overridden stateOrder.
      * Anything else (additions, renames, reorders) is inherited by re-resolving.
      */
@@ -312,7 +350,10 @@ final class Resolver {
                         promotedStates.add(k);
                     }
                 } else if (x != null && !before.containsKey(k) && after.containsKey(k)) {
-                    notes.add(s + "." + k + ": template now defines it too; instance values win, template fills the rest");
+                    List<String> filled = new ArrayList<>(Json.obj(after.get(k)).keySet());
+                    filled.removeAll(Json.obj(x).keySet());
+                    notes.add(s + "." + k + ": template now defines it too; instance values win"
+                            + (filled.isEmpty() ? "" : ", template fills " + filled));
                 }
             }
             if (d.containsKey(s) && section.isEmpty()) {
@@ -322,14 +363,16 @@ final class Resolver {
         Set<String> survives = Json.obj(resolve(to, d).effective().get("states")).keySet();
         List<String> listed = Json.strings(d.get("stateOrder"));
         for (String k : promotedStates) {
-            if (!listed.contains(k) && !(Json.obj(Json.obj(d.get("states")).get(k)).get("after") instanceof String)) {
+            if (!listed.contains(k) && anchorOf(Json.obj(Json.obj(d.get("states")).get(k))) == null) {
                 keepInPlace(k, was, survives, d, notes);
             }
         }
         Json.obj(d.get("states")).forEach((k, x) -> {
-            if (x != null && Json.obj(x).get("after") instanceof String a && !survives.contains(a)) {
+            String a = x == null ? null : anchorOf(Json.obj(x));
+            if (a != null && !survives.contains(a)) {
                 Json.obj(x).remove("after");
-                notes.add("states." + k + ".after: template removed '" + a + "'");
+                Json.obj(x).remove("before");
+                notes.add("states." + k + ": template removed its anchor '" + a + "'");
                 keepInPlace(k, was, survives, d, notes);
             }
         });
@@ -353,10 +396,17 @@ final class Resolver {
         return new Upgrade(d, r.effective(), notes, conflicts);
     }
 
+    /** The state a state is anchored to, by "after" or "before", or null. */
+    private static String anchorOf(Map<String, Object> state) {
+        return state.get("after") instanceof String a ? a : state.get("before") instanceof String b ? b : null;
+    }
+
     /**
      * Keep an instance-owned state where it was on the board: anchor it after its nearest
-     * predecessor (in the pre-upgrade order) that survives the upgrade. When nothing before
-     * it survives (it was, or is about to become, the first column), pin stateOrder instead.
+     * predecessor (in the pre-upgrade order) that survives the upgrade or, when nothing
+     * before it survives (it was, or is about to become, the first column), before its
+     * nearest surviving successor. Either way the delta stays sparse. Only a board with no
+     * other surviving state would fall back to pinning stateOrder.
      */
     private static void keepInPlace(String k, Map<String, Object> was, Set<String> survives,
                                     Map<String, Object> d, List<String> notes) {
@@ -368,89 +418,21 @@ final class Resolver {
                 return;
             }
         }
+        for (int i = old.indexOf(k) + 1; i < old.size(); i++) {
+            if (survives.contains(old.get(i))) {
+                Json.obj(Json.obj(d.get("states")).get(k)).put("before", old.get(i));
+                notes.add("states." + k + ": placed before '" + old.get(i) + "' so it stays where it was");
+                return;
+            }
+        }
         Map<String, Object> states = Json.obj(d.get("states"));
         List<String> pinned = new ArrayList<>();
         for (String s : old) {
-            if (survives.contains(s) && !(Json.obj(states.get(s)).get("after") instanceof String)) {
+            if (survives.contains(s) && anchorOf(Json.obj(states.get(s))) == null) {
                 pinned.add(s);
             }
         }
         d.put("stateOrder", pinned);
-        notes.add("stateOrder: pinned so states." + k + " stays first");
-    }
-
-    // ---- reviewability ------------------------------------------------
-
-    /** The delta rendered against its template, one line per overridden value. */
-    static List<Change> overrides(Map<String, Object> template, Map<String, Object> delta) {
-        List<Change> out = new ArrayList<>();
-        for (String s : KEYED) {
-            Map<String, Object> t = Json.obj(template.get(s));
-            Json.obj(delta.get(s)).forEach((k, x) -> {
-                String path = s + "." + k;
-                if (x == null) {
-                    out.add(new Change("remove", path, t.get(k), null));
-                } else if (!t.containsKey(k)) {
-                    out.add(new Change("add", path, null, x));
-                } else {
-                    fieldLevel(path, Json.obj(t.get(k)), Json.obj(x), out);
-                }
-            });
-        }
-        fieldLevel("settings", Json.obj(template.get("settings")), Json.obj(delta.get("settings")), out);
-        if (delta.containsKey("stateOrder")) {
-            out.add(new Change("change", "stateOrder", template.get("stateOrder"), delta.get("stateOrder")));
-        }
-        return out;
-    }
-
-    private static void fieldLevel(String path, Map<String, Object> t, Map<String, Object> x, List<Change> out) {
-        x.forEach((f, value) -> out.add(value == null
-                ? new Change("unset", path + "." + f, t.get(f), null)
-                : new Change(t.containsKey(f) ? "change" : "add", path + "." + f, t.get(f), value)));
-    }
-
-    // ---- board projection ---------------------------------------------
-
-    /**
-     * The board_column statements that move a board from one effective configuration to
-     * the next, reconciled by state key. A rename is an UPDATE of the same row, so items
-     * (which reference board_column.id) never move.
-     */
-    static List<String> projection(Map<String, Object> before, Map<String, Object> after) {
-        List<String> ops = new ArrayList<>();
-        List<String> oldOrder = Json.strings(before.get("stateOrder"));
-        List<String> newOrder = Json.strings(after.get("stateOrder"));
-        Map<String, Object> oldStates = Json.obj(before.get("states"));
-        Map<String, Object> newStates = Json.obj(after.get("states"));
-        for (String k : oldOrder) {
-            if (!newStates.containsKey(k)) {
-                ops.add("DELETE " + k);
-            }
-        }
-        for (int i = 0; i < newOrder.size(); i++) {
-            String k = newOrder.get(i);
-            Object name = Json.obj(newStates.get(k)).get("name");
-            if (!oldStates.containsKey(k)) {
-                ops.add("INSERT " + k + " name=" + Json.compact(name) + " ordinal=" + i + (onBoard(newStates, k) ? "" : " on_board=false"));
-                continue;
-            }
-            Object oldName = Json.obj(oldStates.get(k)).get("name");
-            if (!name.equals(oldName)) {
-                ops.add("UPDATE " + k + " name " + Json.compact(oldName) + " -> " + Json.compact(name));
-            }
-            if (onBoard(oldStates, k) != onBoard(newStates, k)) {
-                ops.add("UPDATE " + k + " on_board " + onBoard(oldStates, k) + " -> " + onBoard(newStates, k));
-            }
-            if (oldOrder.indexOf(k) != i) {
-                ops.add("UPDATE " + k + " ordinal " + oldOrder.indexOf(k) + " -> " + i);
-            }
-        }
-        return ops;
-    }
-
-    /** A state is shown on the board unless it says otherwise; its board_column row exists either way. */
-    static boolean onBoard(Map<String, Object> states, String k) {
-        return !Boolean.FALSE.equals(Json.obj(states.get(k)).get("onBoard"));
+        notes.add("stateOrder: pinned so states." + k + " stays where it was");
     }
 }

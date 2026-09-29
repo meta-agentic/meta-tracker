@@ -19,40 +19,42 @@ Nothing represents that today: `workspace` has no configuration and there is no 
 
 ## Decision
 
-A **template** is an immutable, versioned JSON document stored as a row. A **workspace** stores a pinned reference to one template version and a **delta**, an [RFC 7396](https://www.rfc-editor.org/rfc/rfc7396) JSON Merge Patch over the template, in `jsonb`. The **effective configuration** is the merge, resolved on read. Elements have stable **keys** and merge by key; a state the instance adds is placed by a sparse **`after`** anchor, so adding a column never freezes the template's order. Template evolution arrives through an explicit, previewable **upgrade**. `board_column` rows become a **projection** of the effective states. Every state has one of four categories; the fourth, **`DISCONTINUED`**, is a terminal end state distinct from `DONE`, and both built-in templates end in a `no-go` state of that category that is kept off the board by default. The workflow engine (VEC-15) enforces **the same document**.
+A **template** is an immutable, versioned JSON document stored as a row. A **workspace** stores a pinned reference to one template version and a **delta**, an [RFC 7396](https://www.rfc-editor.org/rfc/rfc7396) JSON Merge Patch over the template, in `jsonb`. The **effective configuration** is the merge, resolved on read. Elements have stable **keys** and merge by key; a state the instance adds must say where it goes, normally with a sparse **`after`** or **`before`** anchor, so adding a column never freezes the template's order and never depends on member order, which `jsonb` does not keep. Template evolution arrives through an explicit, previewable **upgrade**. `board_column` rows become a **projection** of the effective states. Every state has one of four categories; the fourth, **`DISCONTINUED`**, is a terminal end state distinct from `DONE`, and both built-in templates end in a `no-go` state of that category that is kept off the board by default. The workflow engine (VEC-15) enforces **the same document**.
 
 ### 1 · Storage — template is a row; instance is reference + delta
 
-- **Template = row** in `workspace_template (id, version, document jsonb)`, one per published version, inserted by a Flyway migration. It is not a runtime file, which nothing could reference, and not a seeded workspace, which is mutable by design. A published version is **never edited** (Flyway's checksum enforces it); a change is a new migration inserting `version + 1`.
+- **Template = row** in `workspace_template (key, version, document jsonb)`, one per published version, inserted by a Flyway migration. It is not a runtime file, which nothing could reference, and not a seeded workspace, which is mutable by design. A published version is **never edited**, by convention: a change is a new migration inserting `version + 1`. Flyway's checksum only catches an edited migration file, not an `UPDATE` of the row; a `before update or delete` trigger that raises an error is the cheap database-side enforcement if one is wanted.
+- **Keyed by text, not uuid.** Unlike entity tables, a template is identified by a stable, human-readable key (`kanban`, `scrum`) that appears in the API, in the document's own `template` member and in migrations; it is named `key`, as `workspace.key` is, not `id`.
 - **v1 ships built-in templates only** (`kanban`, `scrum`). No template authoring; user-defined templates are a later decision (see *Reopen if*).
-- **Instance = reference + delta**, not a materialised copy: `workspace.template_id`, `workspace.template_version`, `workspace.config_delta jsonb`. The cost being paid is a resolver, an upgrade procedure and a projection reconciler. The prototype's `Resolver.java` holds the whole rule set in about 450 lines of pure code, so the materialised-copy fallback the brief allows is not needed.
+- **Instance = reference + delta**, not a materialised copy: `workspace.template_key`, `workspace.template_version`, `workspace.config_delta jsonb`. The cost being paid is a resolver, an upgrade procedure and a projection reconciler. The prototype's `Resolver.java` holds the whole rule set in under 450 lines of pure code, with the two diff views in `Diff.java`, so the materialised-copy fallback the brief allows is not needed.
 - **Pinned, not floating.** A workspace resolves against the version it is pinned to. A floating reference ("always latest") would let a Vectis release change live boards unreviewed, with nowhere to refuse a change that orphans items (cases C8, C13, T4). Pinning turns every template change into the same kind of reviewable diff as an instance edit. "Evolution is inheritable" holds: on upgrade the instance gets everything it did not override, without restating any of it.
 
 ### 2 · Resolution — merge on read, project on write
 
-`effective = normalise(mergePatch(template[id, version], delta))`, then validate.
+`effective = normalise(mergePatch(template[key, version], delta))`, then validate.
 
-- **On read:** resolved in the application. Templates are immutable, so all rows (a few KB) are loaded once and cached forever by `(id, version)`. Resolution is a pure function over two small documents, so there is no template query per read and no stored effective document to go stale.
-- **On write:** the one derived artefact that *is* stored is `board_column`, because `item.column_id` is a foreign key into it. Every delta write and every upgrade reconciles `board_column` by key, in the same transaction (see the [worked example](#worked-example)). A rename is an `UPDATE` of the same row, so no item moves.
+- **On read:** resolved in the application. Templates are immutable, so all rows (a few KB) are loaded once and cached forever by `(key, version)`. Resolution is a pure function over two small documents, so there is no template query per read and no stored effective document to go stale.
+- **On write:** the one derived artefact that *is* stored is `board_column`, because `item.column_id` is a foreign key into it. Every delta write and every upgrade reconciles `board_column` by key for **every board of the workspace**, in the same transaction (see the [worked example](#worked-example)); all of a workspace's boards project the same states. A rename is an `UPDATE` of the same row, so no item moves.
 
 Merge rules:
 
 | Element | Shape | Rule |
 |---|---|---|
-| `states`, `itemTypes`, `fields` | object keyed by stable key | **merge by key**. A delta member merges field by field into the template member. `null` is a **tombstone** (element removed). A key the template lacks is an **addition** and must be complete. |
+| a section (`states`, `itemTypes`, `fields`, `settings`) | object, never `null` | a section-level `null` or non-object is **rejected**: as a merge patch it would silently drop the whole template section while the overrides list showed nothing. `stateOrder`, when present, must be an array of keys. |
+| `states`, `itemTypes`, `fields` | object keyed by stable key | **merge by key**. A delta member merges field by field into the template member. `null` is a **tombstone** (element removed). A key the template lacks is an **addition** and must be complete; a member that is neither an object nor `null` is rejected. |
 | scalar fields (`name`, `category`, `wipLimit`, `scale`, …) | scalar | delta value replaces; `null` unsets |
 | list-valued fields (`enterFrom`) | array of keys | **replaced whole**. Arrays are values in RFC 7396, and a policy list is one decision. |
 | `states.<k>.onBoard` | boolean, default `true` | whether the board renders the state's column. The `board_column` row exists either way. |
-| `states.<k>.after` | state key | **placement anchor**: state `k` sits immediately after the named state, wherever that state ends up. The sparse way to place a state. |
-| `stateOrder` | array of state keys | the wholesale way to reorder: replaced whole when overridden. May not list a state that has `after`. |
+| `states.<k>.after`, `states.<k>.before` | state key | **placement anchor**: state `k` sits immediately after (or before) the named state, wherever that state ends up. The sparse way to place a state; a state sets at most one. |
+| `stateOrder` | array of state keys | the wholesale way to reorder: replaced whole when overridden. May not list an anchored state. |
 | `settings` | object of scalars | merge by key |
 | `template`, `version`, `name` | — | not overridable; a delta setting them is rejected |
 
-The order is normalised in three steps (`Resolver.normaliseOrder`): (1) take the instance's `stateOrder` if overridden, else the template's, minus keys that no longer exist and minus anchored states; (2) place a template state missing from it right after its nearest template-order predecessor that is present, and an unanchored instance-added state last; (3) place each anchored state immediately after its anchor. Two states anchored to the same state, an anchor that does not exist and an anchor cycle are rejected, so the result is deterministic.
+**Every state the instance adds must be placed**, by `after`, by `before`, or by being listed in an overridden `stateOrder`; an unplaced addition is rejected (I2). The order is then normalised in three steps (`Resolver.normaliseOrder`): (1) take the instance's `stateOrder` if overridden, else the template's, minus keys that no longer exist and minus anchored states; (2) place a template state missing from it right after its nearest template-order predecessor that is present; (3) place each anchored state immediately after (or before) its anchor. Two states anchored to the same side of one state, an anchor that does not exist, a state with both anchors and an anchor cycle are rejected. The result is therefore a function of the document's content, never of its member order (I12).
 
-Keys match `[a-z][a-zA-Z0-9-]{0,31}` and are immutable. Separating key from name is what makes "does a rename survive evolution" answerable: a rename is a field override, not a new element. `jsonb` does not keep member order, so order lives only in `stateOrder` and `after`.
+Keys match `[a-z][a-zA-Z0-9-]{0,31}` and are immutable. Separating key from name is what makes "does a rename survive evolution" answerable: a rename is a field override, not a new element. `jsonb` does not keep member order, so order lives only in `stateOrder` and the anchors.
 
-Validation of the effective document (`Resolver.validate`): every state has a name and a category in `NOT_STARTED | IN_PROGRESS | DONE | DISCONTINUED`, with at least one `NOT_STARTED` and one `DONE` (a `DISCONTINUED` state is optional and never stands in for `DONE`); `wipLimit` is a positive integer; `onBoard` is a boolean; every `enterFrom` entry and every `after` names an existing state; at least one item type exists; `defaultItemType` names an existing type; field types and scales come from closed sets.
+Validation of the effective document (`Resolver.validate`): every state has a name and a category in `NOT_STARTED | IN_PROGRESS | DONE | DISCONTINUED`, with at least one `NOT_STARTED` and at least one `DONE` (not exactly one: a team may keep *Done* and *Released* apart; a `DISCONTINUED` state is optional and never stands in for `DONE`); `wipLimit` is a positive integer; `onBoard` is a boolean; every `enterFrom` entry and every anchor names an existing state; at least one item type exists; `defaultItemType` names an existing type; field types and scales come from closed sets.
 
 #### Categories and the `DISCONTINUED` end state
 
@@ -65,18 +67,20 @@ A state's category says what reaching it means, independently of its name:
 | `DONE` | work completed and delivered | yes |
 | `DISCONTINUED` | work stopped without completion and with no viable path forward (a *no go*) | yes |
 
-`DISCONTINUED` is its own end state rather than `DONE` plus a resolution flag, because it is neither finished nor not started: counting it as done would inflate delivery, and counting it as not started would read as open work. Both built-in templates therefore end in `"no-go": {"name": "No Go", "category": "DISCONTINUED", "onBoard": false}`, last in `stateOrder`.
+`DISCONTINUED` is its own end state, never folded into `DONE` with a resolution flag, because it is neither finished nor not started: counting it as done would inflate delivery, and counting it as not started would read as open work.
 
-**It is a state with a `board_column` row, kept off the board by default.** The row must exist, because `item.column_id` is a non-null foreign key and a discontinued item keeps its history rather than being deleted. It is off the board because a discontinued item is not in any working lane: a permanent column would fill with closed work that the team has decided not to pursue. The board renders only states with `onBoard: true`; discontinued items are reached through list and filter views. A team that wants the column shown sets `"no-go": {"onBoard": true}` in its delta, which projects to one flag update (D4). A workspace may also rename it (D3) or remove it while it is empty. The generic evolution rules apply to it unchanged (D5, D6).
+**`no-go` lives in both built-in templates**, as `"no-go": {"name": "No Go", "category": "DISCONTINUED", "onBoard": false}`, last in `stateOrder`. The argument that keeps Refined out of the Scrum template does not apply here. Refined is one team's definition-of-ready gate, and in the template it would put a visible column on every Scrum board. Discontinuing work is possible in every workspace, whatever its process, and an off-board state costs a workspace nothing it can see. Keeping it in the templates also means every workspace can discontinue an item from day one without editing its configuration, and the worked Refined delta stays one element (S3, R1).
+
+**It is a state with a `board_column` row, kept off the board by default.** The row must exist, because `item.column_id` is a non-null foreign key and a discontinued item keeps its history rather than being deleted. It is off the board because a discontinued item is not in any working lane: a permanent column would fill with closed work that the team has decided not to pursue. The board renders only states with `onBoard: true`; discontinued items are reached through list and filter views. A team that wants the column shown sets `"no-go": {"onBoard": true}` in its delta, which projects to one flag update (D4). A workspace may also rename it (D3) or remove it while it is empty. The generic evolution rules apply to it unchanged (D5, D6), including adoption: a workspace that had added its own `no-go` keeps its name when a template version adds one, and the fields the template fills in (such as `onBoard: false`, which hides a column the instance had shown by default) are listed in the upgrade's notes and previewed in its projection before anything is applied (D7).
 
 ### 3 · Evolution — case by case
 
 An **upgrade** re-pins a workspace from version *n* to *m* and rewrites the delta only where the template change would otherwise change what the delta means:
 
-- an **override** of an element the new version removed is **promoted**: it becomes a complete, instance-owned element (the old template values with the override applied) and is **kept in place** by anchoring it `after` its nearest surviving predecessor;
+- an **override** of an element the new version removed is **promoted**: it becomes a complete, instance-owned element (the old template values with the override applied) and is **kept in place** by anchoring it `after` its nearest surviving predecessor, or `before` its nearest surviving successor when nothing before it survives;
 - a **tombstone** for an element the new version also removed is **dropped** as redundant;
-- an **instance-added key the new version now also defines** is **adopted**: the delta entry is kept as an override, so the instance's values (including its placement) win and the template fills only the fields the instance never set;
-- a state **anchored after a state the new version removed** is re-anchored after its nearest surviving predecessor, so it stays where it was; if nothing before it survives, `stateOrder` is pinned so it stays first;
+- an **instance-added key the new version now also defines** is **adopted**: the delta entry is kept as an override, so the instance's values win, including its placement (every added state carries one), and the template fills only the fields the instance never set, which the upgrade lists;
+- a state **anchored to a state the new version removed** is re-anchored the same way, so it stays where it was and the delta stays sparse (R6, R7); only a board with no other surviving state would fall back to pinning `stateOrder`;
 - removed states are dropped from an overridden `stateOrder`, and a template reorder that an instance's own `stateOrder` masks is reported as a note.
 
 The result must then resolve cleanly and must not remove any state or item type that items still use. Otherwise the upgrade is **refused** with the reasons. Moving items as part of an upgrade (a remap) is **not supported in v1**: the user moves them, then retries.
@@ -85,28 +89,28 @@ Every row below is an executable assertion in the prototype (ID in the last colu
 
 | Template change | Instance has **not** overridden it | Instance **has** overridden it | Cases |
 |---|---|---|---|
-| **State (column) added** | Inherited, at the template's position. If the instance reordered, it is placed after its template predecessor. If the instance anchored a state after the same predecessor, the anchored state stays next to its anchor and the new one follows it. | *Instance had added the same key:* adopted. Instance values and placement win, the template fills the gaps, and the upgrade reports it. No item moves. | C1, C2, R2, R4 / C3, R5 |
+| **State (column) added** | Inherited, at the template's position. If the instance reordered, it is placed after its template predecessor. If the instance anchored a state after the same predecessor, the anchored state stays next to its anchor and the new one follows it. | *Instance had added the same key:* adopted. Instance values and placement win, the template fills the gaps, and the upgrade lists what it filled. No item moves. | C1, C2, R2, R4 / C3, R5, D7 |
 | **State renamed** | Inherits the new name. | *Renamed it:* keeps its own name. *Deleted it:* stays deleted. | C4 / C5, C6 |
-| **State removed** | Empty: removed (`DELETE` from `board_column`). Holding items: **upgrade refused** until they are moved. An instance state anchored after it is re-anchored in place. | *Customised it:* promoted to the instance's own state and kept in place, items untouched. *Deleted it:* tombstone dropped. | C7, C8, R6, R7 / C9, C10 |
-| **States reordered** | Inherits the new order; states the instance placed with `after` move with their anchors. | *Reordered them itself (`stateOrder`):* its own order is kept and the upgrade says so. | C11, R3 / C12 |
-| **The `no-go` end state added, removed or renamed** | Added: inherited off the board, after Done. Removed: refused while it holds items, otherwise deleted. | *Renamed it:* keeps its name, and keeps it (promoted, still off the board) if the template drops it. | D5, D6 / D3, D6 |
+| **State removed** | Empty: removed (`DELETE` from `board_column`). Holding items: **upgrade refused** until they are moved. An instance state anchored to it is re-anchored in place. | *Customised it:* promoted to the instance's own state and kept in place, items untouched. *Deleted it:* tombstone dropped. | C7, C8, R6, R7 / C9, C10 |
+| **States reordered** | Inherits the new order; states the instance placed with an anchor move with their anchors. | *Reordered them itself (`stateOrder`):* its own order is kept and the upgrade says so. | C11, R3 / C12 |
+| **The `no-go` end state added, removed or renamed** | Added: inherited off the board, after Done. Removed: refused while it holds items, otherwise deleted. | *Renamed it:* keeps its name, and keeps it (promoted, still off the board) if the template drops it. *Had added its own:* adopted, its name wins, the filled-in `onBoard` is previewed. | D5, D6 / D3, D6, D7 |
 | **State removed that an instance policy references** | — | *`enterFrom` still names it:* **upgrade refused** (dangling reference). | C13 |
 | **Item type added** | Inherited. | *Had added the same key:* adopted, the instance's name wins. | T1 / T2 |
 | **Item type removed** | Unused: removed. Used by items: **upgrade refused**. | *Renamed it:* promoted, kept. *Deleted it:* tombstone dropped. | T3, T4 / T5, T6 |
 | **Item type renamed** | Inherits (same rule as states). | *Deleted it:* stays deleted. | T7 |
 
-Instance-side edits (a delta write) follow the same rules and are asserted as cases I1–I11 in the [prototype output](#prototype). A rename is an `UPDATE` of the same row. Removing a state or item type that items still use is rejected, as is any edit that leaves a dangling reference (`enterFrom`, `after`, `defaultItemType`, `stateOrder`).
+Instance-side edits (a delta write) follow the same rules and are asserted as cases I1–I12 in the [prototype output](#prototype). A rename is an `UPDATE` of the same row. Removing a state or item type that items still use is rejected, as is any edit that leaves a dangling reference (`enterFrom`, an anchor, `defaultItemType`, `stateOrder`).
 
 **Not supported in v1:** changing an element's *key* (on either side; key = identity, so a template that needs it writes a removal plus an addition, and the rules above apply); remapping items during an upgrade; automatic upgrades; per-board state subsets; user-authored templates.
 
 ### 4 · Reviewability and API shape
 
-The delta **is** the reviewable artefact: it is sparse (only what the instance changed), it has the same shape as the template, and it reads without replay. The API returns **all three**: the reference, the delta, and the effective configuration. It also returns an `overrides` list derived from the delta (`Resolver.overrides`), so a client renders the diff without reimplementing the merge:
+The delta **is** the reviewable artefact: it is sparse (only what the instance changed), it has the same shape as the template, and it reads without replay. The API returns **all three**: the reference, the delta, and the effective configuration. It also returns an `overrides` list derived from the delta (`Diff.overrides`), so a client renders the diff without reimplementing the merge:
 
 ```
 GET /api/v1/workspaces/{key}/configuration          ETag: "7"
 {
-  "template":  {"id": "scrum", "version": 1, "latestVersion": 1},
+  "template":  {"key": "scrum", "version": 1, "latestVersion": 1},
   "revision":  7,
   "delta":     { …instance-refined.json… },
   "overrides": [
@@ -121,9 +125,9 @@ POST /api/v1/workspaces/{key}/configuration/upgrade  {"toVersion": 2, "dryRun": 
      → {delta, effective, notes[], conflicts[], projection[]}; dryRun=false applies it if conflicts is empty
 ```
 
-The delta is replaced with a PUT of the whole document, not a merge-patch PATCH. Applying a merge patch *to a delta* would give `null` two meanings (drop my override, or tombstone the element). With a whole-document PUT, `null` means only tombstone. Violations use the existing validation error shape, with the resolver's dotted path (`states.qa.category`) as the field. The delta is size-limited at the boundary (64 KiB).
+The delta is replaced with a PUT of the whole document, not a merge-patch PATCH. Applying a merge patch *to a delta* would give `null` two meanings (drop my override, or tombstone the element). With a whole-document PUT, `null` means only tombstone. Validation runs in two layers, both answering 422 with the existing path-keyed validation error shape. At the **boundary**, before the resolver runs, the body is checked for shape: a JSON object of at most 64 KiB, only known sections, each section an object (`stateOrder` an array of strings), each element an object or `null`. The **resolver** then checks meaning, with its dotted path (`states.qa.category`) as the field. The resolver repeats the shape checks (I8), so a delta written by any other path, such as an import or an upgrade, cannot bypass them.
 
-Write path, one transaction: lock the workspace row (`select … for update`); check `config_revision`; resolve and validate; count occupancy (items per column key and per `fields->>'type'`); reconcile `board_column`; store the delta; bump the revision. The FK `item.column_id → board_column.id` (no cascade) is the backstop: deleting an occupied column fails even if a concurrent insert beat the count.
+Write path, one transaction: lock the workspace row (`select … for update`); check `config_revision`; resolve and validate; count occupancy (items per column key and per `fields->>'type'`); reconcile `board_column` for every board of the workspace; store the delta; bump the revision. The FK `item.column_id → board_column.id` (no cascade) is the backstop: deleting an occupied column fails even if a concurrent insert beat the count.
 
 ### 5 · Schema landing — `jsonb` on `workspace`, template in its own table
 
@@ -132,24 +136,24 @@ Sketch against `V1`/`V2` (the version number is whatever is next when it lands):
 ```sql
 -- V3__workspace_configuration.sql (sketch)
 create table workspace_template (
-    id         text        not null,              -- 'kanban', 'scrum'
+    key        text        not null,              -- 'kanban', 'scrum': a stable public key, not a uuid
     version    int         not null check (version >= 1),
     document   jsonb       not null,
     created_at timestamptz not null default now(),
-    primary key (id, version)
+    primary key (key, version)
 );
 
-insert into workspace_template (id, version, document) values
+insert into workspace_template (key, version, document) values
     ('kanban', 1, '<kanban.v1.json, verbatim>'::jsonb),
     ('scrum',  1, '<scrum.v1.json, verbatim>'::jsonb);
 
 alter table workspace
-    add column template_id      text   not null,
+    add column template_key     text   not null,
     add column template_version int    not null,
     add column config_delta     jsonb  not null default '{}'::jsonb,
     add column config_revision  bigint not null default 0,
     add constraint workspace_template_fk
-        foreign key (template_id, template_version) references workspace_template (id, version),
+        foreign key (template_key, template_version) references workspace_template (key, version),
     add constraint workspace_config_delta_object check (jsonb_typeof(config_delta) = 'object');
 
 alter table board_column
@@ -173,9 +177,9 @@ Consequences for VEC-15's scope:
 
 - It reads `effective.states[k]` (`enterFrom`, `wipLimit`) through the configuration service; its "project's JSONB configuration payload" is this document. A new policy is a new validated document field, never a table.
 - It decides transition semantics. `enterFrom` (the allowed source states of a state; absent means any) and `wipLimit` are the v1 vocabulary proposed here. It also decides whether guards apply to moves only or to create/import placement too; **moves only** is recommended, see the backlog import below.
-- Transitions into a terminal state (`DONE` or `DISCONTINUED`) follow the same `enterFrom` rule as any other; the templates set none on `no-go`, so work can be discontinued from any state. Because `no-go` is off the board, discontinuing is an explicit action on an item, not a drop onto a column. Whether a terminal item may be reopened, and into which states, is VEC-15's decision.
+- `enterFrom` applies to entering a terminal state (`DONE` or `DISCONTINUED`) exactly as to any other state. The templates set none on `no-go`, so work can be discontinued from any state; a team that wants, say, only refined or in-progress work to be discontinued sets `enterFrom` on `no-go` in its delta. Because `no-go` is off the board, discontinuing is an explicit action on an item, not a drop onto a column. Whether a terminal item may be reopened, and into which states, is VEC-15's decision.
 - A v1 state *is* a board column (1:1), shown or not according to `onBoard`. A later status ≠ column mapping would add a `columns` section that references state keys, which is additive.
-- Likewise, VEC-28's point scale is `effective.fields.storyPoints.scale`, and it counts only `DONE` as delivered.
+- Likewise, VEC-28's point scale is `effective.fields.storyPoints.scale`, and it counts only `DONE` as delivered: an item in a `DISCONTINUED` state never counts toward velocity, throughput or burndown.
 
 ## Worked example
 
@@ -298,7 +302,7 @@ The prototype's output for it: the effective configuration, the overrides a revi
   UPDATE no-go ordinal 5 -> 6
 ```
 
-Evolution, with the cases that prove it: if Scrum v2 adds a *Blocked* column, the instance inherits it and its delta is not rewritten (R2). If v2 reorders its columns, the instance inherits the new order and Refined moves with Backlog (R3). If v2 inserts a column right after Backlog, Refined stays next to Backlog and the new column follows (R4). If v2 dropped Backlog, the upgrade is refused while Backlog holds items; once it is empty, Refined stays first (R6).
+Evolution, with the cases that prove it: if Scrum v2 adds a *Blocked* column, the instance inherits it and its delta is not rewritten (R2). If v2 reorders its columns, the instance inherits the new order and Refined moves with Backlog (R3). If v2 inserts a column right after Backlog, Refined stays next to Backlog and the new column follows (R4). If v2 dropped Backlog, the upgrade is refused while Backlog holds items; once it is empty, Refined stays first, re-anchored `before` To Do, and the delta is still one element (R6).
 
 ### A second instance: rename, added column with a policy, removed item type
 
@@ -337,7 +341,7 @@ If a Scrum v2 dropped *In Review*, upgrading this instance would rewrite exactly
 
 ## Prototype
 
-Three dependency-free source files in [`template-instance-model/`](./template-instance-model/): `Json.java` (reader/writer, RFC 7396), `Resolver.java` (the model) and `TemplateModelSpike.java` (the cases). Throwaway and outside the Maven reactor; production would use Jackson. From the repository root, JDK 22+:
+Four dependency-free source files in [`template-instance-model/`](./template-instance-model/): `Json.java` (reader/writer, RFC 7396), `Resolver.java` (the model), `Diff.java` (the override list and the `board_column` projection) and `TemplateModelSpike.java` (the cases). Throwaway and outside the Maven reactor; production would use Jackson. From the repository root, JDK 22+:
 
 ```bash
 java docs/spikes/template-instance-model/TemplateModelSpike.java
@@ -356,23 +360,24 @@ PASS S3   the Refined instance resolves cleanly: Refined between Backlog and To 
 PASS S4   the review instance resolves cleanly, QA after the renamed review column, bug removed
 -- instance edits
 PASS I1   rename a state: UPDATE of the same board_column row, items do not move
-PASS I2   add a state: unplaced goes last; placed with after lands right after its anchor
+PASS I2   add a state: unplaced is rejected (jsonb keeps no member order); after, before or stateOrder place it
 PASS I3   remove an empty state: allowed, projects to DELETE
 PASS I4   remove an occupied state: rejected
 PASS I5   reorder states: order replaced whole, projects to ordinal UPDATEs only
 PASS I6   remove an item type still used by items: rejected
 PASS I7   remove the default item type without re-pointing the default: rejected; re-pointed: allowed
-PASS I8   delta outside its sections, tombstone of an unknown key, incomplete new state: rejected
+PASS I8   delta outside its sections, tombstone of an unknown key, incomplete new state, badly shaped section: rejected
 PASS I9   remove a state another state's policy references: rejected
 PASS I10  stateOrder listing an unknown or duplicate state: rejected
-PASS I11  after naming a removed state, a cycle, two states after one anchor, or also listed in stateOrder: rejected
+PASS I11  an anchor naming a removed state, a cycle, two states on one side of an anchor, both anchors, or also listed in stateOrder: rejected
+PASS I12  resolution ignores member order (jsonb keeps none): each delta, members reversed, resolves to the same order and content
 -- template evolution: the instance-added Refined column
 PASS R1   worked instance: the delta is one element, the diff one line, the board one INSERT plus ordinal shifts
 PASS R2   template adds a column elsewhere: inherited in place, Refined still after Backlog, delta untouched
 PASS R3   template reorders columns: the new order is inherited and Refined moves with Backlog
 PASS R4   template inserts a column right after Backlog: Refined stays next to its anchor, the new one follows
 PASS R5   template adds the same key itself (named Ready, placed elsewhere): adopted, instance name and place win
-PASS R6   template removes the anchor (Backlog): refused while it holds items; empty, Refined stays first
+PASS R6   template removes the anchor (Backlog): refused while it holds items; empty, Refined stays first, anchored before To Do
 PASS R7   template removes a mid-board anchor: the added state is re-anchored to its surviving predecessor
 PASS R8   every backlog status maps to a state key of the Refined instance; NO GO lands in DISCONTINUED, not DONE
 -- the DISCONTINUED end state
@@ -382,6 +387,7 @@ PASS D3   instance renames it: UPDATE of the same row, still off the board; a la
 PASS D4   instance puts it on the board: one flag UPDATE, no item moves
 PASS D5   template gains it: inherited off the board, after Done, Refined untouched, delta not rewritten
 PASS D6   template removes it: refused while it holds items; empty, removed; renamed by the instance, kept off the board
+PASS D7   instance had added its own no-go, then the template adds one: adopted, instance name wins; the template's onBoard=false is filled in and previewed
 -- template evolution: states
 PASS C1   template adds a state; instance untouched: inherited at the template's position
 PASS C2   template adds a state; instance reordered: inherited, placed after its template predecessor
@@ -405,42 +411,42 @@ PASS T5   template removes an item type; instance renamed it: promoted, kept
 PASS T6   template removes an item type; instance deleted it: redundant tombstone dropped
 PASS T7   template renames an item type; instance deleted it: stays deleted
 
-52 passed, 0 failed
+54 passed, 0 failed
 ```
 
-The assertions were checked for teeth by mutating a scratch copy of the resolver: ignoring `after` fails S3, S4, I2, I11, R1–R7 and C9; placing anchored states last fails S3, S4, I2, R1–R4, R6, R7 and C9; skipping re-anchoring fails R6 and R7; skipping promotion, or not keeping a promoted state in place, fails C9; dropping the reorder note fails C12; ignoring `onBoard` fails D1 and D3–D6; counting `DISCONTINUED` as `DONE`, or not validating `onBoard`, fails D2; dropping the `DISCONTINUED` category fails S2 and most evolution cases. The assertions are null-safe, so a broken resolver prints FAIL lines rather than aborting the run.
+The assertions were checked for teeth by mutating a scratch copy of the prototype, and each mutant fails the cases named: ignoring `after` fails S3, S4, I2, I11, I12, R1–R7, C9 and D5; treating `before` as `after` fails I2, I12 and R6; accepting an unplaced added state fails I2; accepting a section-level `null` fails I8; skipping re-anchoring fails R6 and R7, and dropping only the `before` fallback fails R6; skipping promotion, or not keeping a promoted state in place, fails C9 and D6; dropping the reorder note fails C12; dropping the list of filled fields from an adoption note fails D7; ignoring `onBoard` fails D1 and D3–D7; counting `DISCONTINUED` as `DONE`, or not validating `onBoard`, fails D2; dropping the `DISCONTINUED` category fails S2 and most evolution cases. Two mutants survive and are equivalent: appending unplaced states in member order, and resolving anchors in member order, change nothing a valid delta can express, because unplaced additions are rejected and anchors on one side of a state are unique. The assertions are null-safe, so a broken resolver prints FAIL lines rather than aborting the run.
 
 ## What VEC-10 must change to conform
 
 **Verdict: VEC-10 needs refinement, and it is a first refinement rather than a re-refinement.** It is still TO DO: it was refused at estimation until this spike decided the model. Its draft branch (`vec/VEC-10-template-provisioning`) materialises the board at provisioning; that part **stands**, but only as the projection of the resolved configuration. The copy stops being the configuration. Its acceptance criteria should be written against the changes below, and it should be split by extension, plausibly into (a) the migration, template rows and provisioning by reference, (b) column keys on the wire and the read-only configuration endpoint, and (c) the New Project form.
 
-1. **Record the reference**: insert the workspace with `template_id`, `template_version` (latest) and a `config_delta`. Provisioning takes an optional initial delta, validated like any delta write (occupancy is empty): the form sends none, and the backlog import passes `instance-refined.json`. Drop the "nothing afterwards remembers which template it came from" contract.
+1. **Record the reference**: insert the workspace with `template_key`, `template_version` (latest) and a `config_delta`. Provisioning takes an optional initial delta, validated like any delta write (occupancy is empty): the form sends none, and the backlog import passes `instance-refined.json`. Drop the "nothing afterwards remembers which template it came from" contract.
 2. **Load templates from `workspace_template`** (once, cached) instead of the `ProjectTemplate` enum lists; provisioning becomes `project(resolve(template, delta))`.
 3. **Give columns keys**: `BoardColumn`, `BoardRepository` insert/select, `ColumnView`, `web/src/api/wire.ts`, each also carrying `onBoard`. Clients and importers address columns by key, and the board renders only `onBoard` columns.
 4. **Make item types per workspace** (the effective `itemTypes`, no longer "catalogue only"). `TemplateView` is built from the document: states `{key, name, category, onBoard}`, item types `{key, name}`.
 5. **Add read-only `GET /api/v1/workspaces/{key}/configuration`** (§4). Delta edits are a follow-on story; the upgrade endpoint waits for a template version 2.
 6. **Ship the §5 migration** (or fold it into VEC-10's own).
 
-Unchanged: `POST /api/v1/workspaces` taking a template id, one-transaction provisioning, the key-conflict mapping, and `EPIC_ISSUE_TYPE = "epic"` (now a key).
+Unchanged: `POST /api/v1/workspaces` taking a template key, one-transaction provisioning, the key-conflict mapping, and `EPIC_ISSUE_TYPE = "epic"` (now a key).
 
 ## Effect on other backlog items
 
 - **VEC-15** (workflow engine): one model, not two (§6). Its scope narrows to enforcing `enterFrom` and `wipLimit` from the effective configuration and owning the policy vocabulary; it adds no store of its own.
 - **VEC-54** (backlog import, and the import design it implements): the status table maps to state *keys*, `REFINED` goes to `refined`, `PLANNED` to `todo` and `NO GO` to the `DISCONTINUED` state `no-go` (no `resolution` field is needed), and the import provisions its workspace with `instance-refined.json` (details below).
-- **VEC-28**: reads the point scale from `effective.fields.storyPoints.scale`. Velocity counts only items in a `DONE` state as delivered; an item in a `DISCONTINUED` state is never delivered, and burndown treats it as scope removed, not burned.
-- **VEC-57** (vault reader): its `StatusCategory` gains the same `DISCONTINUED` value, so a source category and a state category mean the same thing.
+- **VEC-28**: reads the point scale from `effective.fields.storyPoints.scale`. Only an item in a `DONE` state is delivered. An item in a `DISCONTINUED` state never counts toward velocity, throughput or the burned line of a burndown; its points leave the remaining scope as a scope change.
+- **VEC-57** (the read-only `BacklogSource` contract): its `StatusCategory` should gain a `DISCONTINUED` value (see below).
 - **VEC-11** (re-keying): unaffected. Configuration hangs off the workspace row, and state keys are not workspace keys.
 - **No REFINED item is invalidated.** Two gain an additive note: **VEC-46**'s event contract should carry a configuration-changed event with the new `revision`, since a delta write or an upgrade changes every open board's columns; **VEC-14**'s RLS design must leave the global, built-in `workspace_template` rows readable to every tenant, while `config_delta` inherits the workspace row's scoping. VEC-22, VEC-23 and VEC-32 are unaffected.
 
-## Compatibility with the backlog import design (VEC-53)
+## Compatibility with the backlog import
 
-Compatible, with the Refined column expressed entirely as configuration:
+The import design (VEC-53) and its implementation (VEC-54) are not yet in the public backlog, so the rules this model relies on are stated here in full, and the items are cited only for traceability. The import reads this repository's `.vault/` backlog through the read-only `BacklogSource` contract now on `main` (`vectis-extension-spi`), whose items carry a verbatim `status` and a portable `StatusCategory`, and writes them into one workspace. For that, the model requires:
 
-- **Map vault status to a state *key*** and look up `board_column` by key, not name: `TO DO` → `backlog`, `REFINED` → `refined`, `PLANNED` → `todo`, `IN PROGRESS` → `in-progress`, `IN REVIEW` → `in-review`, `DONE` → `done`, `NO GO` → `no-go`. R8 checks every target key exists in the worked instance, and that NO GO lands in a `DISCONTINUED` state, not a `DONE` one.
-- **Provision the import's workspace from `scrum` with `instance-refined.json` as the initial delta.** A plain Scrum workspace has no `refined` state (R8), so an import into one fails before writing rather than guessing, which is the import design's existing rule for a missing column.
-- A column beyond the template is now a reviewable delta rather than template divergence, so Refined needs no template change. NO GO needs none either: `no-go` is part of both templates, and its category, not a `resolution` field, keeps it out of delivery reports.
-- Its `StatusCategory`, with `DISCONTINUED` added, is this model's `category`, so its fallback becomes "first state in effective order with that category".
-- Kind → type should validate against the effective `itemTypes`, not the Scrum catalogue.
+- **Status maps to a state *key***, and `board_column` is looked up by key, not name: `TO DO` → `backlog`, `REFINED` → `refined`, `PLANNED` → `todo`, `IN PROGRESS` → `in-progress`, `IN REVIEW` → `in-review`, `DONE` → `done`, `NO GO` → `no-go`. A rename in the workspace then never breaks the import. R8 checks every target key exists in the worked instance, and that NO GO lands in a `DISCONTINUED` state, not a `DONE` one.
+- **The import's workspace is provisioned from `scrum` with `instance-refined.json` as its initial delta.** A plain Scrum workspace has no `refined` state (R8); an import into one fails before writing anything rather than guessing a column.
+- **An unrecognised status falls back by category** to the first state in effective order with that category. `StatusCategory` differs from the state categories in two ways. It has a source-side `REFINED` value, which in workspace terms is `NOT_STARTED`: its fallback is the state keyed `refined` if the workspace has one, otherwise the last `NOT_STARTED` state, the one nearest to being pulled. And it has no `DISCONTINUED` value yet, so the vault reader reports NO GO as `NOT_STARTED` and the import recognises it by its verbatim status. It should gain `DISCONTINUED`, so that source and state categories agree on end states.
+- **No column beyond the template needs a template change**: Refined is a reviewable delta, and `no-go` is already in both templates. Its category, not a `resolution` field, keeps NO GO out of delivery reports.
+- **Kind → type** is validated against the effective `itemTypes`, not a fixed Scrum catalogue.
 - Guards enforced on every `column_id` write would refuse importing a DONE item into a workspace like the review instance, hence the moves-only recommendation in §6.
 
 ## Alternatives considered
@@ -453,10 +459,10 @@ Compatible, with the Refined column expressed entirely as configuration:
 
 ## Consequences
 
-- Every configuration write is one transaction: lock, count occupancy, reconcile `board_column`.
+- Every configuration write is one transaction: lock, count occupancy, reconcile `board_column` for every board of the workspace.
 - Columns exist twice (configuration and `board_column`). Only the configuration service writes `board_column`; a test that `projection(effective, rows)` is empty catches drift.
 - Upgrades are explicit and manual in v1. Bulk "upgrade every conflict-free workspace" is a later convenience.
-- Element keys become part of the API and of item data (`fields.type`) and are immutable. `after` and `onBoard` are part of the delta vocabulary and appear in the effective document.
+- Element keys become part of the API and of item data (`fields.type`) and are immutable. The anchors (`after`, `before`) and `onBoard` are part of the delta vocabulary and appear in the effective document.
 - Reports must treat the two terminal categories separately: `DONE` is delivery, `DISCONTINUED` is scope that left without delivery.
 - Removing an item type races a concurrent item create, because `fields.type` has no foreign-key backstop. Item creates should take `for share` on the workspace row.
 
