@@ -61,12 +61,7 @@ restating their own.
 - **R-CORE-4** State changes propagate to all connected clients over SSE.
   *(target)* visible on every open board within 500 ms; remote updates are
   visually highlighted.
-- **R-CORE-5** A workspace is provisioned from a **template** (Kanban, Scrum) and
-  lives on as a **custom instance**: the instance references its template and
-  carries only its overrides (states, item types, fields, policies). Template
-  evolution is inheritable; instance deltas are explicit and reviewable. *(This
-  template → instance model is a core Vectis concept, not an implementation
-  detail — dogfooded in `scrum/_templates/` + `scripts/harness.py`.)*
+- **R-CORE-5** A workspace is provisioned from a **template** (Kanban, Scrum) and lives on as a **custom instance**: the instance references its template and carries only its overrides (states, item types, fields, policies). Template evolution is inheritable; instance deltas are explicit and reviewable. *(This template → instance model is a core Vectis concept, not an implementation detail — dogfooded in the project's own planning templates and tooling.)*
 - **R-CORE-6** Projects can be re-keyed/rebranded live without breaking existing
   references.
 
@@ -166,23 +161,16 @@ of tree and out of scope here.
   detail: the roadmap's reporting milestone gains the query language, command
   dialog, distribution reports, dashboard/widget framework, and report
   sharing/export as explicit deliverables.
-- Follow-on ADRs planned (all internal, in `scrum/vec/adr/`): **02** identity
-  strategy, **03** workflow model, **04** real-time transport, **05** client store
-  & virtualization, **06** extension/plugin loading, **07** multi-tenant isolation
-  & feature gating, **08** identity & auth, **09** integration & MCP contract,
-  **10** query language (OD1), **11** reporting engine (OD2).
+- Follow-on ADRs are planned: **02** identity strategy, **03** workflow model, **04** real-time transport, **05** client store & virtualization, **06** extension/plugin loading, **07** multi-tenant isolation & feature gating, **08** identity & auth, **09** integration & MCP contract, **10** query language (OD1), **11** reporting engine (OD2).
 - Non-goals: cloning YouTrack's UI or scope wholesale; no proprietary code/assets
   are referenced or reused. Where we diverge (e.g. no built-in JS-scripted
   workflow automation in Community v1), the divergence is deliberate and recorded
   here.
-- **Publishing:** nothing in this ADR is published verbatim. Requirements inform
-  the public ROADMAP and sanitized Project cards only, per the `oss` publish
-  governance. The requirement → VEC-story map lives in `scrum/vec/adr-map.md`.
+- **Publishing:** this record ships with the repository in `.vault/`, with a condensed version in `docs/adr/`, and its requirements inform the public ROADMAP. A requirement → VEC-story map is kept with the planning copy; in this repository, items cite the R-numbers they deliver.
 
 ## References
 
 - Vectis product repo `README.md` / `ROADMAP.md` (design principles, milestones)
-- `scrum/_templates/` + `scripts/harness.py` — the template → instance model
-  (R-CORE-5) dogfooded on our own process
+- The project's own planning templates and tooling — the template → instance model (R-CORE-5) dogfooded on our own process
 - JetBrains YouTrack — public product documentation studied for conceptual
   inspiration on query language, command dialog, reports, and dashboards
