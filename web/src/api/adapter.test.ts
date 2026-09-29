@@ -155,12 +155,12 @@ describe("toWorkspaceSnapshot", () => {
     });
   });
 
-  it("keeps only the string entries of a list field, and empties a non-list", () => {
+  it("keeps only the distinct string entries of a list field, and empties a non-list", () => {
     const { issues } = toWorkspaceSnapshot({
       ...base,
       items: [
         itemFixture({
-          fields: { labels: ["web", 3, "", null, "api"], dependencies: "VEC-7", relates: {} },
+          fields: { labels: ["web", 3, "", null, "api", "web"], dependencies: "VEC-7", relates: {} },
         }),
       ],
     });
@@ -170,6 +170,14 @@ describe("toWorkspaceSnapshot", () => {
     expect(issues[0].relates).toEqual([]);
     expect(issues[0].type).toBeNull();
     expect(issues[0].description).toBeNull();
+  });
+
+  it("tolerates a type named after an object prototype member", () => {
+    const { issues } = toWorkspaceSnapshot({
+      ...base,
+      items: [itemFixture({ fields: { type: "constructor" } })],
+    });
+    expect(issues[0].type).toBe("constructor");
   });
 
   it("carries the workspace identity the app shell names", () => {

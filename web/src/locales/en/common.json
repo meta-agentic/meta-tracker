@@ -5,6 +5,9 @@
   "app.stale": "Showing cached data — the last refresh failed.",
   "app.retry": "Try again",
   "app.skipToContent": "Skip to content",
+  "crash.title": "Something went wrong.",
+  "crash.body": "The page hit an error it could not recover from. Reloading usually fixes it.",
+  "crash.reload": "Reload",
   "app.errorHint": "Check that the API is reachable and that the workspace key is correct.",
 
   "nav.boards": "Boards",
@@ -14,7 +17,7 @@
   "sync.loading": "Connecting…",
   "sync.revalidating": "Refreshing…",
   "sync.ready": "Up to date",
-  "sync.stale": "Offline · cached",
+  "sync.stale": "Cached · refresh failed",
   "sync.error": "Not connected",
 
   "boards.label": "Boards in this workspace",
@@ -30,7 +33,8 @@
   "board.stats.items": "Items",
   "board.stats.points": "Points",
 
-  "card.pointsLabel": "{{points}} story points",
+  "card.pointsLabel_one": "{{points}} story point",
+  "card.pointsLabel_other": "{{points}} story points",
   "card.moreLabels": "+{{count}}",
 
   "type.story": "Story",

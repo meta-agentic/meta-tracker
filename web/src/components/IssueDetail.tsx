@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, type RefObject } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useWorkspaceStore } from "../store/workspaceStore";
 import { useDateFormat, useNumberFormat } from "../i18n/format";
@@ -25,12 +26,74 @@ function parseDay(value: string): Date | null {
 }
 
 /**
+ * Makes the sheet modal for as long as it is mounted.
+ *
+ * Everything else on the page is made `inert` — not focusable, not clickable,
+ * hidden from assistive technology — so focus cannot leave the sheet by a click
+ * or a Tab. Escape and Tab are handled at the document, not on the sheet, so
+ * they still work when focus sits somewhere a keydown on the sheet would never
+ * see. Only the `inert` attributes this added are removed again.
+ */
+function useModal(
+  rootRef: RefObject<HTMLElement | null>,
+  panelRef: RefObject<HTMLElement | null>,
+  onClose: () => void,
+) {
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
+  useEffect(() => {
+    const root = rootRef.current;
+    // Nothing rendered (the item vanished and the panel is about to close).
+    if (!root) return;
+    const made: Element[] = [];
+    for (const element of Array.from(document.body.children)) {
+      if (element !== root && !element.hasAttribute("inert")) {
+        element.setAttribute("inert", "");
+        made.push(element);
+      }
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      const panel = panelRef.current;
+      if (!panel) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE));
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const inside = panel.contains(document.activeElement);
+      if (!inside || (event.shiftKey && document.activeElement === first)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      for (const element of made) element.removeAttribute("inert");
+    };
+  }, [rootRef, panelRef]);
+}
+
+/**
  * The item detail panel: a modal side sheet over the board.
  *
- * Modal, so focus is held inside it while it is open and Escape closes it; the
- * caller owns returning focus to the card that opened it, because only the
- * caller knows which card that was. The board underneath is not unmounted, so
- * closing the panel returns to the same scroll position.
+ * Portalled to `<body>` so the rest of the page can be made inert around it
+ * (see `useModal`). The caller owns returning focus to the card that opened it,
+ * because only the caller knows which card that was. The board underneath is
+ * not unmounted, so closing the panel returns to the same scroll position.
  */
 export function IssueDetail({ issueId, onClose, onNavigate }: IssueDetailProps) {
   const { t } = useTranslation();
@@ -42,6 +105,7 @@ export function IssueDetail({ issueId, onClose, onNavigate }: IssueDetailProps) 
   );
   const board = useWorkspaceStore((s) => (issue ? (s.boardsById[issue.boardId] ?? null) : null));
   const issuesById = useWorkspaceStore((s) => s.issuesById);
+  const rootRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
@@ -57,6 +121,8 @@ export function IssueDetail({ issueId, onClose, onNavigate }: IssueDetailProps) 
   useEffect(() => {
     if (!issue) onClose();
   }, [issue, onClose]);
+
+  useModal(rootRef, panelRef, onClose);
 
   useEffect(() => {
     closeRef.current?.focus();
@@ -77,33 +143,13 @@ export function IssueDetail({ issueId, onClose, onNavigate }: IssueDetailProps) 
   const due = issue.dueDate ? parseDay(issue.dueDate) : null;
   const titleId = `vec-detail-title-${issue.id}`;
 
-  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.key === "Escape") {
-      event.stopPropagation();
-      onClose();
-      return;
-    }
-    if (event.key !== "Tab" || !panelRef.current) return;
-    const focusable = Array.from(panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE));
-    if (focusable.length === 0) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  };
-
   const linkGroups = [
     { key: "dependsOn", label: t("detail.dependsOn"), keys: issue.dependsOn },
     { key: "relates", label: t("detail.relates"), keys: issue.relates },
   ].filter((group) => group.keys.length > 0);
 
-  return (
-    <div className="vec-sheet-root">
+  return createPortal(
+    <div className="vec-sheet-root" ref={rootRef}>
       <div className="vec-scrim" aria-hidden="true" onClick={onClose} />
       <aside
         ref={panelRef}
@@ -111,7 +157,9 @@ export function IssueDetail({ issueId, onClose, onNavigate }: IssueDetailProps) 
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        onKeyDown={onKeyDown}
+        // Focusable itself, so a click on the sheet's text lands focus here
+        // rather than on something outside it.
+        tabIndex={-1}
       >
         <div className="vec-sheet__head">
           <TypeBadge type={issue.type} />
@@ -238,6 +286,7 @@ export function IssueDetail({ issueId, onClose, onNavigate }: IssueDetailProps) 
           </section>
         </div>
       </aside>
-    </div>
+    </div>,
+    document.body,
   );
 }

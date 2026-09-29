@@ -168,9 +168,11 @@ button {
   color: var(--vec-text);
 }
 
+/* accent-text, not accent: the underline must hold 3:1 against the bar in
+   both themes, and the fill-strength accent does not on dark. */
 .vec-nav__item[aria-current="page"] {
   color: var(--vec-text);
-  border-bottom-color: var(--vec-accent);
+  border-bottom-color: var(--vec-accent-text);
 }
 
 .vec-topbar__end {
@@ -181,6 +183,7 @@ button {
 }
 
 .vec-pref {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;

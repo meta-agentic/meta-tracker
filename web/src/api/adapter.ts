@@ -92,14 +92,21 @@ function readNumber(
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-/** A list of non-empty strings; any other entry is dropped, not coerced. */
+/**
+ * A list of distinct non-empty strings, in first-seen order. Any other entry is
+ * dropped, not coerced; a repeat is dropped because every consumer treats the
+ * list as a set (and keys its rendering on the value).
+ */
 function readStrings(
   fields: Record<string, WireJsonValue>,
   key: string,
 ): string[] {
   const value = fields[key];
   if (!Array.isArray(value)) return [];
-  return value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
+  const strings = value.filter(
+    (entry): entry is string => typeof entry === "string" && entry.length > 0,
+  );
+  return [...new Set(strings)];
 }
 
 function isEpic(item: WireItem): boolean {
