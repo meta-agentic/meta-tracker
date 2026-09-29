@@ -18,37 +18,42 @@ name: JVM Tests
 #
 # Gated on a Maven build existing, matching the other workflows in this repo: a
 # green no-op until application modules land, active automatically once they do.
+#
+# Making `mvn verify (JVM)` (or the web-ci job) a required status check needs a
+# job-level skip instead of the workflow-level `paths` filter below: a filtered-
+# out workflow never creates the check, so a PR that doesn't match would wait
+# for it forever.
 
 on:
   push:
     branches: [main]
-    # Application source and the build manifests that decide what it compiles
-    # against. Every entry is anchored to the `vectis-*` Maven modules (or is a
-    # single root file) on purpose: an unanchored `**/*.java`, `**/*.sql` or
-    # `**/src/**` also matches under `web/`, so the first `.sql` fixture added to
-    # the SPA would spend a Maven build and a PostgreSQL service on an SPA-only
-    # change. Disjointness from `web-ci.yml` has to hold by construction, not
-    # because today's tree happens not to contain such a file.
+    # Everything the Maven build reads: the `vectis-*` modules in full (source,
+    # resources, migrations, module manifests and build config such as
+    # `lombok.config`), the root `pom.xml`, and the root `.mvn/` build config.
+    # Every entry is anchored to a root file or directory on purpose: an
+    # unanchored `**/*.java`, `**/*.sql` or `**/src/**` also matches under
+    # `web/`, so the first `.sql` fixture added to the SPA would spend a Maven
+    # build and a PostgreSQL service on an SPA-only change. Disjointness from
+    # `web-ci.yml` has to hold by construction, not because today's tree happens
+    # not to contain such a file.
     #
     # A new Maven module outside the `vectis-*` naming convention is not covered
     # here and must be added. The PR that introduces it still runs, because it
     # has to touch the root `pom.xml` to register the module.
     #
-    # The root and module-level `pom.xml` are listed literally as well as under
-    # `vectis-*/**/pom.xml`: that relies on `**` matching zero directories, which
-    # is not something to stake the repo's only test gate on. The literal
-    # entries cost nothing and settle it; the `**` entry catches nested modules.
+    # The root `pom.xml` is outside every module and has to be listed. The
+    # module-level `pom.xml` is also covered by `vectis-*/**`, and is listed
+    # literally anyway so the manifests that decide the build stay visible here.
     #
-    # The same list filters `push` and `pull_request` (YAML anchor). Path filters
+    # The same list filters `push` and `pull_request` (YAML anchor), and
+    # `native-deploy.yml` keeps a copy of it for its push trigger. Path filters
     # apply per event, so without it every merge to main ran a full `mvn verify`
     # whatever it touched.
     paths: &jvm-paths
-      - 'vectis-*/**/*.java'
-      - 'vectis-*/**/*.sql'
-      - 'vectis-*/src/**'
+      - 'vectis-*/**'
       - 'pom.xml'
       - 'vectis-*/pom.xml'
-      - 'vectis-*/**/pom.xml'
+      - '.mvn/**'
       - '.github/workflows/jvm-test.yml'
   pull_request:
     branches: [main]
