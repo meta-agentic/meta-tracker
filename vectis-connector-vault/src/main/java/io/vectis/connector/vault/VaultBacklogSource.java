@@ -18,6 +18,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -31,7 +33,9 @@ import java.util.stream.Stream;
  * {@code _index.md} files, and takes the key prefix from {@code _backlog-meta.yaml}.
  * The input is untrusted — a vault is contributed through public pull requests — so
  * files are read under the limits in {@link VaultFiles}, and every file that is
- * skipped or degraded is named in {@link BacklogSnapshot#problems()}.</p>
+ * skipped or degraded is named in {@link BacklogSnapshot#problems()}. A read also stops
+ * after 20,000 directory entries or 64 MiB of files in total, and then marks the snapshot
+ * incomplete with a {@link BacklogSnapshot#FATAL} problem.</p>
  *
  * <p>Plain Java with no framework: the vault location comes from the caller's
  * configuration, never from a request.</p>
@@ -46,16 +50,24 @@ public final class VaultBacklogSource implements BacklogSource {
     private static final String INDEX = "_index.md";
     private static final String META = "_backlog-meta.yaml";
     private static final String SPRINTS = "sprints";
+    private static final int MAX_ENTRIES = 20_000;
+    private static final long MAX_TOTAL_BYTES = 64L * 1024 * 1024;
 
     private final Path vaultRoot;
     private final String space;
     private final String originBase;
+    private final int maxEntries;
+    private final long maxTotalBytes;
 
     /**
      * @param vaultRoot the {@code .vault} directory
      * @param space     the space to read, a lower-case directory name such as {@code "vec"}
      */
     public VaultBacklogSource(Path vaultRoot, String space) {
+        this(vaultRoot, space, MAX_ENTRIES, MAX_TOTAL_BYTES);
+    }
+
+    VaultBacklogSource(Path vaultRoot, String space, int maxEntries, long maxTotalBytes) {
         Objects.requireNonNull(vaultRoot, "vaultRoot");
         Objects.requireNonNull(space, "space");
         if (!SPACE.matcher(space).matches()) {
@@ -64,7 +76,9 @@ public final class VaultBacklogSource implements BacklogSource {
         this.vaultRoot = vaultRoot.toAbsolutePath().normalize();
         this.space = space;
         Path rootName = this.vaultRoot.getFileName();
-        this.originBase = (rootName == null ? "" : rootName + "/") + space;
+        this.originBase = (rootName == null ? "" : Text.escape(rootName.toString()) + "/") + space;
+        this.maxEntries = maxEntries;
+        this.maxTotalBytes = maxTotalBytes;
     }
 
     @Override
@@ -84,15 +98,19 @@ public final class VaultBacklogSource implements BacklogSource {
             throw new BacklogSourceException("vault space '" + space + "' is not a directory under the vault root");
         }
         var problems = new ArrayList<String>();
-        String keyPrefix = keyPrefix(root, problems);
+        var budget = new ReadBudget(maxEntries, maxTotalBytes);
+        String keyPrefix = keyPrefix(root, budget, problems);
         var mapper = new EntryMapper(keyPrefix);
 
         var items = new LinkedHashMap<String, SourceItem>();
         for (Tier tier : Tier.values()) {
-            for (Path file : markdownFiles(root.resolve(tier.directory()), tier.directory(), true, problems)) {
+            for (Path file : markdownFiles(root.resolve(tier.directory()), tier.directory(), true, budget, problems)) {
+                if (budget.exhausted()) {
+                    break;
+                }
                 String origin = origin(tier.directory(), file);
-                load(file, origin, problems)
-                        .flatMap(entry -> mapper.item(entry, tier, fileName(file), origin, problems::add))
+                parse(file, origin, budget, problems,
+                        (entry, report) -> mapper.item(entry, tier, fileName(file), origin, report))
                         .ifPresent(item -> {
                             SourceItem stale = items.put(item.key(), item);
                             if (stale != null) {
@@ -104,13 +122,20 @@ public final class VaultBacklogSource implements BacklogSource {
         }
 
         var sprints = new ArrayList<SourceSprint>();
-        for (Path file : markdownFiles(root.resolve(SPRINTS), SPRINTS, false, problems)) {
+        for (Path file : markdownFiles(root.resolve(SPRINTS), SPRINTS, false, budget, problems)) {
+            if (budget.exhausted()) {
+                break;
+            }
             String origin = origin(SPRINTS, file);
-            load(file, origin, problems)
-                    .flatMap(entry -> mapper.sprint(entry, fileName(file), origin, problems::add))
+            parse(file, origin, budget, problems,
+                    (entry, report) -> mapper.sprint(entry, fileName(file), origin, report))
                     .ifPresent(sprints::add);
         }
 
+        if (budget.exhausted()) {
+            problems.add(BacklogSnapshot.FATAL + originBase + ": stopped reading after " + budget.exceeded()
+                    + "; the snapshot is incomplete");
+        }
         List<SourceItem> ordered = items.values().stream().sorted(Comparator.comparing(
                 SourceItem::key, Comparator.comparingInt(String::length).thenComparing(Comparator.naturalOrder())))
                 .toList();
@@ -119,7 +144,7 @@ public final class VaultBacklogSource implements BacklogSource {
     }
 
     /** The prefix from {@code idPolicy.prefix}, or the upper-cased space name when the meta file does not say. */
-    private String keyPrefix(Path root, List<String> problems) {
+    private String keyPrefix(Path root, ReadBudget budget, List<String> problems) {
         String origin = originBase + "/" + META;
         String fallback = space.toUpperCase(Locale.ROOT);
         String prefix = fallback;
@@ -128,7 +153,7 @@ public final class VaultBacklogSource implements BacklogSource {
             problems.add(origin + ": missing; key prefix taken from the space name as " + fallback);
         } else {
             try {
-                Object idPolicy = VaultFiles.mapping(VaultFiles.read(meta), "meta file").get("idPolicy");
+                Object idPolicy = VaultFiles.mapping(VaultFiles.read(meta, budget), "meta file").get("idPolicy");
                 if (idPolicy instanceof Map<?, ?> policy && policy.get("prefix") instanceof String declared) {
                     prefix = declared.strip();
                 } else {
@@ -140,15 +165,22 @@ public final class VaultBacklogSource implements BacklogSource {
             }
         }
         if (!KEY_PREFIX.matcher(prefix).matches()) {
-            throw new BacklogSourceException("vault space '" + space + "' has key prefix '" + prefix
-                    + "', which is not 2-10 upper-case letters or digits starting with a letter");
+            throw new BacklogSourceException("vault space '" + space + "' has key prefix " + Text.quote(prefix)
+                    + ", which is not 2-10 upper-case letters or digits starting with a letter");
         }
         return prefix;
     }
 
-    /** The {@code .md} files directly in {@code dir}, in name order, without {@code _index.md}. */
-    private List<Path> markdownFiles(Path dir, String label, boolean required, List<String> problems) {
+    /**
+     * The {@code .md} files directly in {@code dir}, in name order, without {@code _index.md}.
+     * Listing stops once the budget's entry allowance is spent.
+     */
+    private List<Path> markdownFiles(Path dir, String label, boolean required, ReadBudget budget,
+                                     List<String> problems) {
         String origin = originBase + "/" + label + "/";
+        if (budget.exhausted()) {
+            return List.of();
+        }
         if (Files.isSymbolicLink(dir)) {
             problems.add(origin + ": a symbolic link, not followed; skipped");
             return List.of();
@@ -159,25 +191,38 @@ public final class VaultBacklogSource implements BacklogSource {
             }
             return List.of();
         }
+        List<Path> listed;
         try (Stream<Path> entries = Files.list(dir)) {
-            return entries
-                    .filter(path -> fileName(path).endsWith(".md") && !fileName(path).equals(INDEX))
-                    .filter(path -> !Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS))
-                    .sorted(Comparator.comparing(VaultBacklogSource::fileName))
-                    .toList();
+            listed = entries.limit(budget.remainingEntries() + 1L).toList();
         } catch (IOException e) {
             problems.add(origin + ": directory cannot be listed; skipped");
             return List.of();
         }
+        budget.listed(listed.size());
+        return listed.stream()
+                .filter(path -> fileName(path).endsWith(".md") && !fileName(path).equals(INDEX))
+                .filter(path -> !Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS))
+                .sorted(Comparator.comparing(VaultBacklogSource::fileName))
+                .toList();
     }
 
-    private static Optional<VaultFiles.Entry> load(Path file, String origin, List<String> problems) {
+    /**
+     * Reads and maps one file. A file that is unreadable, or that makes the parser or the
+     * mapping fail in any way, becomes exactly one problem; the rest of the read goes on.
+     */
+    private static <T> Optional<T> parse(Path file, String origin, ReadBudget budget, List<String> problems,
+                                         BiFunction<VaultFiles.Entry, Consumer<String>, Optional<T>> mapping) {
+        var reported = new ArrayList<String>();
         try {
-            return Optional.of(VaultFiles.entry(VaultFiles.read(file)));
+            Optional<T> result = mapping.apply(VaultFiles.entry(VaultFiles.read(file, budget)), reported::add);
+            problems.addAll(reported);
+            return result;
         } catch (VaultFiles.Unreadable e) {
             problems.add(origin + ": " + e.getMessage() + "; skipped");
-            return Optional.empty();
+        } catch (RuntimeException | StackOverflowError e) {
+            problems.add(origin + ": could not be parsed safely; skipped");
         }
+        return Optional.empty();
     }
 
     private Path spaceRoot() {
@@ -185,7 +230,7 @@ public final class VaultBacklogSource implements BacklogSource {
     }
 
     private String origin(String directory, Path file) {
-        return originBase + "/" + directory + "/" + fileName(file);
+        return originBase + "/" + directory + "/" + Text.escape(fileName(file));
     }
 
     private static String fileName(Path path) {

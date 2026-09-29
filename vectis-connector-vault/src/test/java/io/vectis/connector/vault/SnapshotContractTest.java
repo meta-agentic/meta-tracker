@@ -2,7 +2,9 @@
 package io.vectis.connector.vault;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.vectis.extension.spi.BacklogSnapshot;
 import io.vectis.extension.spi.SourceItem;
@@ -10,6 +12,7 @@ import io.vectis.extension.spi.SourceSprint;
 import io.vectis.extension.spi.StatusCategory;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -64,6 +67,26 @@ class SnapshotContractTest {
         assertEquals(List.of(), snapshot.problems());
         assertThrows(NullPointerException.class, () -> new BacklogSnapshot(null, List.of(), List.of(), List.of()));
         assertThrows(IllegalArgumentException.class, () -> new BacklogSnapshot("", List.of(), List.of(), List.of()));
+    }
+
+    @Test
+    void itemKeepsTheSourcesLinkOrder() {
+        var links = new LinkedHashMap<String, List<String>>();
+        links.put(SourceItem.RELATES_TO, List.of("DEMO-4"));
+        links.put(SourceItem.DEPENDS_ON, List.of("DEMO-2"));
+        var item = new SourceItem("DEMO-1", "Title", "story", "TO DO", StatusCategory.NOT_STARTED,
+                null, null, null, null, null, links, "", "origin");
+
+        assertEquals(List.of(SourceItem.RELATES_TO, SourceItem.DEPENDS_ON), List.copyOf(item.links().keySet()));
+        assertThrows(UnsupportedOperationException.class, () -> item.links().put("x", List.of()));
+    }
+
+    @Test
+    void aSnapshotIsIncompleteOnlyWithAFatalProblem() {
+        assertTrue(new BacklogSnapshot("DEMO", List.of(), List.of(), List.of("vault/demo/raw/DEMO-1.md: skipped"))
+                .complete());
+        assertFalse(new BacklogSnapshot("DEMO", List.of(), List.of(), List.of(BacklogSnapshot.FATAL + "stopped"))
+                .complete());
     }
 
     @Test

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package io.vectis.extension.spi;
 
-import java.util.HashMap;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -27,7 +28,7 @@ import java.util.Objects;
  * @param priority    the source's priority, verbatim, e.g. {@code "P0"}; {@code null} when none
  * @param labels      never {@code null}
  * @param links       outgoing links by link type (see {@link #DEPENDS_ON}, {@link #RELATES_TO})
- *                    to target keys; never {@code null}
+ *                    to target keys, in the source's order; never {@code null}
  * @param body        the item's free-text description; never {@code null}, may be empty
  * @param origin      where the item came from inside the source, for provenance,
  *                    e.g. {@code ".vault/vec/raw/VEC-42.md"}; never {@code null}
@@ -75,9 +76,9 @@ public record SourceItem(
         if (links == null) {
             return Map.of();
         }
-        var copy = new HashMap<String, List<String>>();
+        var copy = new LinkedHashMap<String, List<String>>();
         links.forEach((type, targets) -> copy.put(
                 Objects.requireNonNull(type, "link type"), List.copyOf(Objects.requireNonNull(targets, type))));
-        return Map.copyOf(copy);
+        return Collections.unmodifiableMap(copy);
     }
 }

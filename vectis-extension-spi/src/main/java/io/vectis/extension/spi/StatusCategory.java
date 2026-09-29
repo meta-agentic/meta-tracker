@@ -19,7 +19,11 @@ public enum StatusCategory {
     /** Not started and not yet ready to pull. */
     NOT_STARTED,
 
-    /** Not started, but refined and ready to pull. */
+    /**
+     * Not started, but refined and ready to pull. A consumer whose model has no refined
+     * category folds this to {@link #NOT_STARTED}, and should prefer the verbatim source
+     * status when it can map that more precisely.
+     */
     REFINED,
 
     /** Being worked on or reviewed. */
