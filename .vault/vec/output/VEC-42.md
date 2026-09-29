@@ -3,7 +3,10 @@ kind: story
 space: vec
 id: VEC-42
 title: Replace the synthetic workspace generator with a real API client in the SPA
-status: REFINED
+status: DONE
+dependencies: []
+relates:
+- VEC-10
 project: VEC
 epic: VEC-3
 priority: P0
@@ -21,6 +24,7 @@ estimate:
     as the REST/SSE payload, cache.ts already does the layering), and the one genuinely undefined thing
     — the endpoint contract — is owned by VEC-10, so it is a blocking dependency rather than an unknown
     this story must resolve. Refined but NOT pullable until VEC-10 (itself blocked on VEC-45) lands.'
+sprint: VEC-S4
 ---
 
 ## Problem
@@ -70,8 +74,8 @@ Explicitly out of scope:
 
 ## Acceptance criteria
 
-1. The Boards tab renders boards, columns and items served by the backend, and
-   they are still there after a page reload.
+1. ~~The Boards tab renders boards, columns and items served by the backend, and
+   they are still there after a page reload.~~ **Moved to VEC-10 (2026-09-28)** — needs its endpoints.
 2. `src/App.tsx` contains **no import from `src/lib/synthetic`**. Verified by
    `grep -rn "lib/synthetic" web/src --include=*.tsx --include=*.ts` returning
    matches only under `src/profiling/`, `src/lib/synthetic.test.ts` and other
@@ -123,3 +127,28 @@ behaviour, but there is no server-side endpoint to call yet — `vectis-server`
 contains exactly one resource, `ExtensionDiagnosticsResource.java`. Do not
 schedule this before VEC-10 lands; the alternative is inventing an API contract
 here, which is precisely the mistake VEC-45 exists to prevent.
+
+## 2026-09-25: server-side reconciliation
+
+VEC-10's server slice (branch `vec/VEC-10-template-provisioning`, draft, not ratified — see
+VEC-10's note) confirms this branch's adapter needs NO code change. Every field name, path and
+shape in `web/src/api/` matches what the server actually returns: `/workspaces/{key}`,
+`/boards`, `/items` under `/api/v1`; `Item.rank` stays sparse with no dense position; epics stay
+a client-side `fields.type === "epic"` convention the server never enforces; `startDate`,
+`dueDate` and `storyPoints` are unvalidated `fields` pass-through, not a defined contract — the
+README checklist should say "convention, unenforced" rather than "verified against a spec" for
+those three. This item can proceed to review on that basis regardless of how VEC-10 itself
+resolves against VEC-45/ADR-VEC-03.
+
+## Closed 2026-09-28 — split on the PO's call
+
+The client is merged: meta-agentic/meta-tracker#11 (`d3b98fe`). On `main`, `web/src/api/`
+carries the client, the wire→store adapter and `useWorkspaceSync` with their tests, and no
+application-path file imports `src/lib/synthetic` (AC2). AC2–AC9 are client-side and delivered.
+
+**AC1 moved to VEC-10.** Rendering server-served boards after a reload needs workspace
+endpoints, and `vectis-server` on `main` still has only `ExtensionDiagnosticsResource`. That
+check now sits in VEC-10's acceptance criteria, next to the endpoints it depends on, together
+with reconciling the contract checklist in `web/src/api/README.md`. The VEC-10 link is `relates`,
+not `depends on`, so this item no longer blocks the sprint.
+

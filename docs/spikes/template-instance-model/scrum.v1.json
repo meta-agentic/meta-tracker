@@ -1,0 +1,23 @@
+{
+  "template": "scrum",
+  "version": 1,
+  "name": "Scrum",
+  "states": {
+    "backlog": {"name": "Backlog", "category": "NOT_STARTED"},
+    "todo": {"name": "To Do", "category": "NOT_STARTED"},
+    "in-progress": {"name": "In Progress", "category": "IN_PROGRESS"},
+    "in-review": {"name": "In Review", "category": "IN_PROGRESS"},
+    "done": {"name": "Done", "category": "DONE"}
+  },
+  "stateOrder": ["backlog", "todo", "in-progress", "in-review", "done"],
+  "itemTypes": {
+    "story": {"name": "Story"},
+    "task": {"name": "Task"},
+    "bug": {"name": "Bug"},
+    "epic": {"name": "Epic"}
+  },
+  "fields": {
+    "storyPoints": {"name": "Story points", "type": "number", "scale": "fibonacci"}
+  },
+  "settings": {"defaultItemType": "story"}
+}

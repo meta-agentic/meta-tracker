@@ -1,0 +1,123 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: vectis-db
+  labels:
+    app.kubernetes.io/name: vectis-db
+    app.kubernetes.io/component: database
+spec:
+  # The governing Service is the headless one: `spec.clusterIP` is immutable,
+  # so it has to be headless from the first apply. The app connects through
+  # the ClusterIP `vectis-db` Service instead.
+  serviceName: vectis-db-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vectis-db
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vectis-db
+        app.kubernetes.io/component: database
+    spec:
+      # The database never talks to the Kubernetes API.
+      automountServiceAccountToken: false
+      # Same hardening as the server. The alpine image's `postgres` user is uid
+      # 70, and fsGroup makes the volume writable for it without a root init step.
+      # OnRootMismatch skips the recursive chown on every restart once the volume
+      # root already has the right group.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          # Same major and variant as the CI service containers in jvm-test.yml
+          # and native-deploy.yml (`postgres:16-alpine`), pinned to an exact minor
+          # and Alpine release so a deployed database only changes on purpose.
+          image: postgres:16.15-alpine3.24
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: postgres
+              containerPort: 5432
+          # Credentials, and what they are not:
+          #   * `POSTGRES_USER` (`vectis`) is the cluster *superuser*, and the
+          #     server connects as it. A separate least-privilege application
+          #     role, created by an init script, is a known follow-up.
+          #   * `POSTGRES_PASSWORD` is applied only by initdb, the first time the
+          #     volume is initialised. Changing the Secret afterwards does not
+          #     change the database password: rotation needs a manual
+          #     `ALTER ROLE vectis PASSWORD '...'` in the database, done before
+          #     the Secret is updated and the server restarted.
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: vectis-db
+                  key: VECTIS_DB_NAME
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: vectis-db
+                  key: VECTIS_DB_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vectis-db
+                  key: password
+            # A subdirectory, because the volume root may hold `lost+found` and
+            # initdb refuses a non-empty data directory.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" -h 127.0.0.1']
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" -h 127.0.0.1']
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            # With a read-only root filesystem, the socket directory and /tmp
+            # have to be writable volumes.
+            - name: run
+              mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+  # No storageClassName: the claim relies on the cluster's default StorageClass.
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 1Gi

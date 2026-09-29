@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  # Referenced by `VECTIS_DB_HOST` in the base ConfigMap. Kustomize does not
+  # rewrite names that appear inside ConfigMap data, so an overlay that adds a
+  # name prefix or suffix copies the final name across with `replacements`, as
+  # overlays/staging does.
+  name: vectis-db
+  labels:
+    app.kubernetes.io/name: vectis-db
+    app.kubernetes.io/component: database
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: vectis-db
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
