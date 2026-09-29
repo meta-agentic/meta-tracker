@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { App } from "./App";
 import { AppProviders } from "./providers/AppProviders";
 import { IndexedDbCache } from "./store/cache";
@@ -10,6 +10,7 @@ import { toWorkspaceSnapshot } from "./api/adapter";
 import {
   boardFixture,
   createGate,
+  epicItemFixture,
   createRecordedTransport,
   itemFixture,
   snapshotRecording,
@@ -121,9 +122,12 @@ describe("App", () => {
 
     mount({ routes: {}, networkError: new TypeError("Failed to fetch") });
 
-    await waitFor(() => expect(screen.getByRole("status")).toBeInTheDocument());
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Showing cached data — the last refresh failed.",
+    // The loading placeholder is a status region too, so wait for this one's text
+    // rather than for any status to exist.
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Showing cached data — the last refresh failed.",
+      ),
     );
     // The board is still rendered. The notice sits beside it, not over it.
     expect(screen.getByText("To Do")).toBeInTheDocument();
@@ -167,5 +171,100 @@ describe("App", () => {
 
     expect(screen.getByRole("button", { name: "Run dual-axis profile" })).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
+describe("board cards and the item detail panel", () => {
+  const richItems = [
+    epicItemFixture,
+    itemFixture({
+      fields: {
+        type: "story",
+        parentId: "epic-1",
+        storyPoints: 3,
+        labels: ["web", "design"],
+        description: "Render the board from the store.",
+        dependencies: ["VEC-3", "VEC-404"],
+      },
+    }),
+    itemFixture({
+      id: "item-2",
+      key: "VEC-3",
+      rank: "n",
+      title: "Second card",
+      fields: { type: "bug" },
+    }),
+  ];
+
+  it("names the workspace in the shell", async () => {
+    mount(snapshotRecording(richItems));
+
+    await screen.findByText("Wire the client");
+    const banner = screen.getByRole("banner");
+    expect(within(banner).getByText("Vectis", { selector: ".vec-workspace__name" })).toBeInTheDocument();
+    expect(within(banner).getByText("VEC")).toBeInTheDocument();
+  });
+
+  it("shows key, title, type, points, epic and labels on a card", async () => {
+    mount(snapshotRecording(richItems));
+
+    const card = (await screen.findByText("Wire the client")).closest("button")!;
+    expect(card).toHaveTextContent("VEC-2");
+    expect(card).toHaveTextContent("Story");
+    expect(card).toHaveTextContent("Client shell");
+    expect(card).toHaveTextContent("web");
+    expect(card).toHaveTextContent("design");
+    expect(within(card).getByText("3 story points")).toBeInTheDocument();
+  });
+
+  it("marks an empty column instead of leaving a blank gap", async () => {
+    mount(snapshotRecording(richItems));
+
+    const doing = (await screen.findByRole("heading", { name: "In Progress" })).closest("section")!;
+    expect(within(doing).getByText("No items")).toBeInTheDocument();
+  });
+
+  it("opens the detail panel from a card, closes it on Escape and returns focus", async () => {
+    mount(snapshotRecording(richItems));
+
+    const card = (await screen.findByText("Wire the client")).closest("button")!;
+    card.focus();
+    fireEvent.click(card);
+
+    const dialog = screen.getByRole("dialog", { name: "Wire the client" });
+    expect(dialog).toHaveTextContent("Render the board from the store.");
+    expect(dialog).toHaveTextContent("To Do");
+    // Focus moves into the panel, onto its close button.
+    expect(within(dialog).getByRole("button", { name: "Close" })).toHaveFocus();
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(card).toHaveFocus();
+  });
+
+  it("follows a link to a loaded item and shows an unloaded one as text", async () => {
+    mount(snapshotRecording(richItems));
+
+    fireEvent.click((await screen.findByText("Wire the client")).closest("button")!);
+    const dialog = screen.getByRole("dialog");
+
+    expect(within(dialog).getByText("VEC-404")).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /VEC-404/ })).not.toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /VEC-3/ }));
+    expect(screen.getByRole("dialog", { name: "Second card" })).toHaveTextContent("Bug");
+  });
+
+  it("says so when the workspace has no boards", async () => {
+    mount({
+      routes: {
+        "/boards": { body: [] },
+        "/items": { body: [] },
+        "/workspaces/VEC": { body: workspaceFixture },
+      },
+    });
+
+    expect(await screen.findByText("No boards yet")).toBeInTheDocument();
   });
 });

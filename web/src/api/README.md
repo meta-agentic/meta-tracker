@@ -58,6 +58,8 @@ Each item below names the single place a disagreement is fixed.
       are `FIELD.startDate`, `FIELD.dueDate` and `FIELD.storyPoints` in
       `adapter.ts`. Verify the names and the date encoding.
 
+- [ ] **The long tail: what the board card and detail panel show.** The item type (`FIELD.type`, the same key that marks an epic), `labels`, `priority`, `description`, and the item links `dependencies` and `relates` are read out of `fields` as well. `labels` follows the list of strings the persistence round-trip test stores; the two link keys hold item keys, following the backlog item format this repository dogfoods. A list keeps only its non-empty string entries, and an absent or malformed value is empty or `null`, never guessed. Verify the names, and whether links arrive as keys, as ids, or on an endpoint of their own.
+
 One prerequisite that is assumed rather than derived, and so belongs on the same
 checklist: the **endpoint paths and their envelopes**. `client.ts` addresses
 `/workspaces/{key}`, `/workspaces/{key}/boards` and `/workspaces/{key}/items`,
