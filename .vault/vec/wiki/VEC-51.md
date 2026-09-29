@@ -4,7 +4,7 @@ space: vec
 id: VEC-51
 title: vectis-server has no deploy/k8s config for its Postgres dependency — VECTIS_DB_PASSWORD has no
   default
-status: TO DO
+status: IN REVIEW
 project: VEC
 priority: P1
 epic: VEC-2
@@ -25,6 +25,7 @@ estimate:
   basis: up-front
   dated: '2026-09-25'
   note: pointed 2026-09-25
+sprint: VEC-S4
 ---
 
 ## Why

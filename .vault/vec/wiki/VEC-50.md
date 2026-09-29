@@ -4,7 +4,7 @@ space: vec
 id: VEC-50
 title: JVM path filters are unanchored, so a future .sql or .java file under web/ would spend a Maven
   build and a Postgres service on an SPA-only change
-status: IN PROGRESS
+status: IN REVIEW
 project: vectis
 priority: P3
 dependencies: []

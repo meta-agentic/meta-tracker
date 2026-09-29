@@ -92,13 +92,12 @@ migration, and the client form — rather than estimating it up.
 
 This item was placed **REFUSED, not refined** at estimation (2026-08-30): "Intension split out
 as VEC-45 (template->instance model spike; ADR-VEC-03 unwritten, R-CORE-5 inheritance semantics
-undecided)." VEC-45 is still REFINED, not done, and ADR-VEC-03 does not exist. A lane built the
+undecided)." VEC-45 is still REFINED, not done, and ADR-VEC-03 does not exist. An implementation branch built the
 server slice anyway, under one stated assumption — provisioning COPIES the template's columns
 into a fresh board with no link back to the template — chosen as the smallest model that does
 not pre-empt R-CORE-5's reference-plus-overrides semantics. That assumption, and every REST
-convention below, is a DRAFT the lane set unilaterally, not a ratified decision. Per this
-project's own rule (shared state / distributed-model features go through an architect + spike,
-not straight into a story), this needs an architect pass against VEC-45/ADR-VEC-03 before it
+convention below, is a DRAFT set unilaterally on that branch, not a ratified decision. Shared-state and
+distributed-model features go through an architect pass and a spike, not straight into a story, so this needs an architect pass against VEC-45/ADR-VEC-03 before it
 can be called delivered.
 
 **Branch:** `vec/VEC-10-template-provisioning`, head `5e63b0f`, 3 commits, cut from origin/main
@@ -116,7 +115,7 @@ the new deployment-gap item below.
 
 **Silently set, needs ratification when VEC-45/ADR-VEC-03 land:**
 - The whole `/api/v1` error-body shape and status-code convention — this is now precedent for
-  every future endpoint, decided by an execution lane, not by design.
+  every future endpoint, decided during implementation, not by design.
 - Copy-not-reference provisioning semantics, which may conflict with whatever ADR-VEC-03 rules
   on R-CORE-5.
 - Epics as a client-side `fields.type` convention the server never validates.

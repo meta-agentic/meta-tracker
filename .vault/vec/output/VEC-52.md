@@ -26,10 +26,7 @@ estimate:
 
 ## Problem
 
-`web/src/components/BoardView.tsx` calls `t("board.columnCount", { count: ... })`, but the
-English and Italian strings are `"({{value}})"`. The interpolation key does not match, so
-every column header shows the placeholder text. Seen on `main` (2026-09-28) while running the
-client against a local server.
+`web/src/components/BoardView.tsx` calls `t("board.columnCount", { count: ... })`, but the English and Italian strings are `"({{value}})"`. The interpolation key does not match, so every column header shows the placeholder text. Seen on `main` (2026-09-28) while running the client against a local server.
 
 ## Acceptance criteria
 
