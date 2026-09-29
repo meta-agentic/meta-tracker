@@ -3,7 +3,7 @@ idPolicy:
   prefix: VEC
   reserve: git-ref
   pattern: '^VEC-\d+$'
-  next: 51
+  next: 58
 sprints:
 - id: VEC-S1
   name: VEC Sprint 1
