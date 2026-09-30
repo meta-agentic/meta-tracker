@@ -12,7 +12,8 @@ import io.vectis.extension.spi.StatusCategory;
  *
  * <p>The one status the directory never overrides is {@code NO GO}. An aborted item is
  * never a delivered increment and never not started, so wherever it is filed it is placed
- * as ended and discontinued, and reported as misfiled when it is not in {@code wiki/}.</p>
+ * as ended and discontinued. It stays in the tier its work had reached, {@code raw/} or
+ * {@code wiki/}; only in {@code output/} is it reported as misfiled.</p>
  *
  * <p>Declaration order is precedence: when the same key appears in two tiers (a
  * stale copy left behind by a move), the later tier wins.</p>

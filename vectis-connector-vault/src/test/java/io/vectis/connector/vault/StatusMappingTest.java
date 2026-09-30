@@ -11,6 +11,7 @@ import io.vectis.extension.spi.SourceItem;
 import io.vectis.extension.spi.StatusCategory;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -34,6 +35,7 @@ class StatusMappingTest {
             DEMO-1  | TO DO       | raw    | START_STATE |
             DEMO-2  | REFINED     | raw    | START_STATE |
             DEMO-3  | PLANNED     | raw    | START_STATE |
+            DEMO-15 | NO GO       | raw    | END_STATE   | DISCONTINUED
             DEMO-8  | IN PROGRESS | wiki   | IN_PROGRESS |
             DEMO-9  | IN REVIEW   | wiki   | IN_PROGRESS |
             DEMO-4  | NO GO       | wiki   | END_STATE   | DISCONTINUED
@@ -73,20 +75,16 @@ class StatusMappingTest {
                 problems::toString);
     }
 
-    @ParameterizedTest(name = "NO GO misfiled in {1}/ -> END_STATE DISCONTINUED, reported")
-    @CsvSource(delimiter = '|', textBlock = """
-            DEMO-15 | raw
-            DEMO-14 | output
-            """)
-    void aMisfiledNoGoIsStillDiscontinuedAndReported(String key, String tier) {
-        SourceItem item = Fixtures.item(snapshot, key);
+    @Test
+    void aNoGoInOutputIsStillDiscontinuedAndReportedAsMisfiled() {
+        SourceItem item = Fixtures.item(snapshot, "DEMO-14");
 
         assertEquals("NO GO", item.status());
-        assertEquals(StatusCategory.END_STATE, item.category(), "an aborted item is never not started");
-        assertEquals(Outcome.DISCONTINUED, item.outcome(), "an aborted item is never delivered");
-        List<String> problems = Fixtures.problemsAbout(snapshot, tier + "/" + key + ".md");
-        assertEquals(List.of("vault/demo/" + tier + "/" + key + ".md: status 'NO GO' belongs in wiki/, so the item is "
-                + "misfiled; placed by its status as END_STATE/DISCONTINUED"), problems);
+        assertEquals(StatusCategory.END_STATE, item.category());
+        assertEquals(Outcome.DISCONTINUED, item.outcome(), "an aborted item is never delivered, even in output/");
+        assertEquals(List.of("vault/demo/output/DEMO-14.md: status 'NO GO' belongs in raw/ or wiki/, so the item is "
+                + "misfiled; placed by its status as END_STATE/DISCONTINUED"),
+                Fixtures.problemsAbout(snapshot, "output/DEMO-14.md"));
     }
 
     @Test
@@ -98,11 +96,21 @@ class StatusMappingTest {
     }
 
     @Test
-    void onlyNoGoPlacesAnItemOutsideItsTier() {
+    void onlyNoGoPlacesAnItemOutsideItsTiers() {
         for (VaultStatus status : VaultStatus.values()) {
             assertEquals(status == VaultStatus.NO_GO, status.placesAnywhere(), status.label());
         }
-        assertEquals(Tier.WIKI, VaultStatus.NO_GO.tier());
+    }
+
+    @Test
+    void noGoStaysInTheTierItsWorkReachedAndEveryOtherStatusHasOneTier() {
+        assertEquals(Set.of(Tier.RAW, Tier.WIKI), VaultStatus.NO_GO.tiers());
+        assertEquals("raw/ or wiki/", VaultStatus.NO_GO.homes());
+        for (VaultStatus status : VaultStatus.values()) {
+            if (status != VaultStatus.NO_GO) {
+                assertEquals(1, status.tiers().size(), status.label());
+            }
+        }
     }
 
     @Test
@@ -116,8 +124,10 @@ class StatusMappingTest {
     @Test
     void onlyNoGoLeavesItsTiersCategory() {
         for (VaultStatus status : VaultStatus.values()) {
-            StatusCategory expected = status == VaultStatus.NO_GO ? StatusCategory.END_STATE : status.tier().category();
-            assertEquals(expected, status.category(), status.label());
+            for (Tier tier : status.tiers()) {
+                StatusCategory expected = status == VaultStatus.NO_GO ? StatusCategory.END_STATE : tier.category();
+                assertEquals(expected, status.category(), status.label() + " in " + tier.directory());
+            }
         }
     }
 

@@ -1,7 +1,7 @@
 ---
 kind: story
 id: DEMO-15
-title: Declined before the NO GO tier moved
+title: Declined before any work started
 status: NO GO
 space: demo
 ---
