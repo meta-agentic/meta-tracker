@@ -33,9 +33,10 @@ import java.util.stream.Stream;
  * {@code _index.md} files, and takes the key prefix from {@code _backlog-meta.yaml}.
  * The input is untrusted — a vault is contributed through public pull requests — so
  * files are read under the limits in {@link VaultFiles}, and every file that is
- * skipped or degraded is named in {@link BacklogSnapshot#problems()}. A read also stops
- * after 20,000 directory entries or 64 MiB of files in total, and then marks the snapshot
- * incomplete with a {@link BacklogSnapshot#FATAL} problem.</p>
+ * skipped or degraded is named in {@link BacklogSnapshot#problems()}, with at most
+ * 16 problems for one file. A read also stops after 20,000 directory entries, 64 MiB of
+ * files or 10,000 problems in total, and then marks the snapshot incomplete with a
+ * {@link BacklogSnapshot#FATAL} problem.</p>
  *
  * <p>Plain Java with no framework: the vault location comes from the caller's
  * configuration, never from a request.</p>
@@ -52,22 +53,25 @@ public final class VaultBacklogSource implements BacklogSource {
     private static final String SPRINTS = "sprints";
     private static final int MAX_ENTRIES = 20_000;
     private static final long MAX_TOTAL_BYTES = 64L * 1024 * 1024;
+    private static final int MAX_PROBLEMS = 10_000;
+    static final int MAX_PROBLEMS_PER_FILE = 16;
 
     private final Path vaultRoot;
     private final String space;
     private final String originBase;
     private final int maxEntries;
     private final long maxTotalBytes;
+    private final int maxProblems;
 
     /**
      * @param vaultRoot the {@code .vault} directory
      * @param space     the space to read, a lower-case directory name such as {@code "vec"}
      */
     public VaultBacklogSource(Path vaultRoot, String space) {
-        this(vaultRoot, space, MAX_ENTRIES, MAX_TOTAL_BYTES);
+        this(vaultRoot, space, MAX_ENTRIES, MAX_TOTAL_BYTES, MAX_PROBLEMS);
     }
 
-    VaultBacklogSource(Path vaultRoot, String space, int maxEntries, long maxTotalBytes) {
+    VaultBacklogSource(Path vaultRoot, String space, int maxEntries, long maxTotalBytes, int maxProblems) {
         Objects.requireNonNull(vaultRoot, "vaultRoot");
         Objects.requireNonNull(space, "space");
         if (!SPACE.matcher(space).matches()) {
@@ -79,6 +83,7 @@ public final class VaultBacklogSource implements BacklogSource {
         this.originBase = (rootName == null ? "" : Text.escape(rootName.toString()) + "/") + space;
         this.maxEntries = maxEntries;
         this.maxTotalBytes = maxTotalBytes;
+        this.maxProblems = maxProblems;
     }
 
     @Override
@@ -98,7 +103,7 @@ public final class VaultBacklogSource implements BacklogSource {
             throw new BacklogSourceException("vault space '" + space + "' is not a directory under the vault root");
         }
         var problems = new ArrayList<String>();
-        var budget = new ReadBudget(maxEntries, maxTotalBytes);
+        var budget = new ReadBudget(maxEntries, maxTotalBytes, maxProblems);
         String keyPrefix = keyPrefix(root, budget, problems);
         var mapper = new EntryMapper(keyPrefix);
 
@@ -207,22 +212,35 @@ public final class VaultBacklogSource implements BacklogSource {
     }
 
     /**
-     * Reads and maps one file. A file that is unreadable, or that makes the parser or the
-     * mapping fail in any way, becomes exactly one problem; the rest of the read goes on.
+     * Reads and maps one file, reporting at most {@value #MAX_PROBLEMS_PER_FILE} problems for it
+     * and charging them to the budget. A file that cannot be read or parsed becomes exactly one
+     * problem. So does one the mapping fails on, which is a fault in this reader rather than in
+     * the file, so the problem names the exception. Either way the rest of the read goes on.
      */
-    private static <T> Optional<T> parse(Path file, String origin, ReadBudget budget, List<String> problems,
-                                         BiFunction<VaultFiles.Entry, Consumer<String>, Optional<T>> mapping) {
-        var reported = new ArrayList<String>();
+    static <T> Optional<T> parse(Path file, String origin, ReadBudget budget, List<String> problems,
+                                 BiFunction<VaultFiles.Entry, Consumer<String>, Optional<T>> mapping) {
+        Optional<T> result = Optional.empty();
         try {
-            Optional<T> result = mapping.apply(VaultFiles.entry(VaultFiles.read(file, budget)), reported::add);
-            problems.addAll(reported);
-            return result;
+            VaultFiles.Entry entry = VaultFiles.entry(VaultFiles.read(file, budget));
+            var reported = new ArrayList<String>();
+            try {
+                result = mapping.apply(entry, reported::add);
+                if (reported.size() > MAX_PROBLEMS_PER_FILE) {
+                    int shown = MAX_PROBLEMS_PER_FILE - 1;
+                    problems.addAll(reported.subList(0, shown));
+                    problems.add(origin + ": " + (reported.size() - shown) + " more problems not listed");
+                } else {
+                    problems.addAll(reported);
+                }
+            } catch (RuntimeException | StackOverflowError e) {
+                problems.add(origin + ": the reader failed on this file (" + e.getClass().getSimpleName()
+                        + "); skipped");
+            }
         } catch (VaultFiles.Unreadable e) {
             problems.add(origin + ": " + e.getMessage() + "; skipped");
-        } catch (RuntimeException | StackOverflowError e) {
-            problems.add(origin + ": could not be parsed safely; skipped");
         }
-        return Optional.empty();
+        budget.reported(problems.size());
+        return result;
     }
 
     private Path spaceRoot() {

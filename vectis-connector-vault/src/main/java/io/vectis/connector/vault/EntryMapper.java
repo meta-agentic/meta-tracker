@@ -5,10 +5,8 @@ import io.vectis.extension.spi.SourceItem;
 import io.vectis.extension.spi.SourceSprint;
 import io.vectis.extension.spi.StatusCategory;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -25,6 +23,9 @@ import java.util.regex.Pattern;
  * is kept with that field left empty. Either way the reason goes to {@code problems}.</p>
  */
 final class EntryMapper {
+
+    /** The most entries a list field keeps; the rest are cut and reported. */
+    static final int MAX_LIST_ENTRIES = 256;
 
     private final Pattern keyPattern;
     private final String keyPrefix;
@@ -158,13 +159,14 @@ final class EntryMapper {
         return null;
     }
 
+    /**
+     * A day written as {@code YYYY-MM-DD}. A timestamp with a time of day is refused rather than
+     * reduced to a day: which day it falls on depends on a zone the field does not name.
+     */
     private static LocalDate date(Map<String, Object> fields, String name, String origin, Consumer<String> problems) {
         Object value = fields.get(name);
         if (value == null) {
             return null;
-        }
-        if (value instanceof Date date) {
-            return utcDate(date);
         }
         if (value instanceof String text) {
             try {
@@ -191,7 +193,11 @@ final class EntryMapper {
         return text;
     }
 
-    /** A list of short strings, or a single one; anything else is reported and dropped. */
+    /**
+     * A list of short strings, or a single one. A list longer than {@value #MAX_LIST_ENTRIES} is
+     * cut, and entries that are not text, blank and null ones included, are dropped. Each is
+     * reported once for the field, with a count, so a hostile list costs at most two problems.
+     */
     private static List<String> keys(Map<String, Object> fields, String name, String origin,
                                      Consumer<String> problems) {
         Object value = fields.get(name);
@@ -199,18 +205,24 @@ final class EntryMapper {
             return List.of();
         }
         List<?> values = value instanceof List<?> list ? list : List.of(value);
+        if (values.size() > MAX_LIST_ENTRIES) {
+            problems.accept(origin + ": '" + name + "' has " + values.size() + " entries; only the first "
+                    + MAX_LIST_ENTRIES + " are kept");
+            values = values.subList(0, MAX_LIST_ENTRIES);
+        }
         var keys = new ArrayList<String>();
+        int dropped = 0;
         for (Object element : values) {
-            String text = switch (element) {
-                case Number number -> number.toString();
-                case Date date -> utcDate(date).toString();
-                default -> text(element);
-            };
+            String text = element instanceof Number number ? number.toString() : text(element);
             if (text.isEmpty()) {
-                problems.accept(origin + ": '" + name + "' has an entry that is not text; entry dropped");
+                dropped++;
             } else {
                 keys.add(text);
             }
+        }
+        if (dropped > 0) {
+            String count = dropped == 1 ? "1 entry that is" : dropped + " entries that are";
+            problems.accept(origin + ": '" + name + "' has " + count + " not text; dropped");
         }
         return keys;
     }
@@ -230,11 +242,6 @@ final class EntryMapper {
             return Text.quote(value.toString());
         }
         return value instanceof List<?> ? "(a list)" : value instanceof Map<?, ?> ? "(a mapping)" : "(a value)";
-    }
-
-    /** An unquoted YAML date is read as midnight UTC, so its UTC day is the written day. */
-    private static LocalDate utcDate(Date date) {
-        return date.toInstant().atOffset(ZoneOffset.UTC).toLocalDate();
     }
 
     /** A YAML string, stripped; empty for anything else, which callers treat as absent. */
