@@ -11,7 +11,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { defaultRangeExtractor, useVirtualizer, type Range } from "@tanstack/react-virtual";
-import { useWorkspaceStore } from "../store/workspaceStore";
+import { useWorkspaceStore, workspaceStore } from "../store/workspaceStore";
 import { selectFlatTree, type TreeRow } from "../store/selectors";
 import { useNumberFormat } from "../i18n/format";
 import type { ID } from "../store/types";
@@ -141,39 +141,49 @@ export const BacklogTree = forwardRef<BacklogTreeHandle, BacklogTreeProps>(funct
     rangeExtractor,
   });
 
-  // The trailing spacer: a floor under the scrollable height, set just before a
-  // single row's collapse would pull the tree's end above the viewport's
-  // bottom, and released once that can no longer clamp — the rows reach the
-  // bottom again, or the tree is scrolled to the top. Only for a row's own
-  // toggle: a bulk collapse (Collapse all) leaves no row above to hold still
-  // for, so it lets the browser clamp and bring the remaining rows into view.
-  const [heightFloor, setHeightFloor] = useState(0);
+  // The trailing spacer: a floor under the scrollable height, set by a single
+  // row's collapse that would pull the tree's end above the viewport's bottom.
+  // It belongs to that one toggle: it holds only while the expansion set and
+  // the data are exactly what the toggle left, so any other change — Expand
+  // all, Collapse all, another toggle, a refreshed snapshot — drops it and no
+  // caller has to remember to release it. A bulk collapse leaves no row above
+  // to hold still for, so it lets the browser clamp and bring the remaining
+  // rows into view. Scrolling releases it too, once it can no longer clamp.
+  const [held, setHeld] = useState<{ bottom: number; expanded: ID[]; issues: object } | null>(
+    null,
+  );
   const totalSize = virtualizer.getTotalSize();
-  const holdViewport = (shrinkBy: number) => {
-    const element = scrollRef.current;
-    if (!element || element.scrollTop === 0) return;
-    const bottom = element.scrollTop + element.clientHeight;
-    if (totalSize - shrinkBy < bottom) setHeightFloor(bottom);
-  };
+  const heightFloor =
+    held && held.expanded === treeExpanded && held.issues === issuesById && held.bottom > totalSize
+      ? held.bottom
+      : 0;
   const toggle = (index: number) => {
     const row = rows[index];
-    if (expanded.has(row.id)) {
+    const element = scrollRef.current;
+    let bottom = 0;
+    if (expanded.has(row.id) && element && element.scrollTop > 0) {
       // Collapsing removes the visible rows below this one, down to the next
       // row at its own depth or shallower.
       let end = index + 1;
       while (end < rows.length && rows[end].depth > row.depth) end += 1;
-      holdViewport((end - index - 1) * rowHeight);
+      const viewportBottom = element.scrollTop + element.clientHeight;
+      if (totalSize - (end - index - 1) * rowHeight < viewportBottom) bottom = viewportBottom;
     }
     toggleTreeRow(row.id);
+    setHeld(
+      bottom > 0
+        ? { bottom, expanded: workspaceStore.getState().treeExpanded, issues: issuesById }
+        : null,
+    );
   };
   const onScroll = () => {
     const element = scrollRef.current;
     if (
-      heightFloor > 0 &&
+      held &&
       element &&
       (element.scrollTop === 0 || element.scrollTop + element.clientHeight <= totalSize)
     ) {
-      setHeightFloor(0);
+      setHeld(null);
     }
   };
 

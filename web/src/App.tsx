@@ -222,11 +222,13 @@ export function App({ sync: syncOptions }: AppProps = {}) {
   const setTab = useWorkspaceStore((s) => s.setActiveTab);
 
   const navRef = useRef<HTMLElement>(null);
-  // On a narrow window the nav scrolls sideways. The stylesheet fades its
-  // right edge while there is more to scroll to; this marks when there is not.
-  const markNavEnd = useCallback(() => {
+  // On a narrow window the nav scrolls sideways. The stylesheet fades each
+  // edge while there is more to scroll to that way; this marks when there is not.
+  const markNavEdges = useCallback(() => {
     const nav = navRef.current;
-    if (nav) nav.dataset.atEnd = String(nav.scrollLeft + nav.clientWidth >= nav.scrollWidth - 1);
+    if (!nav) return;
+    nav.dataset.atStart = String(nav.scrollLeft <= 1);
+    nav.dataset.atEnd = String(nav.scrollLeft + nav.clientWidth >= nav.scrollWidth - 1);
   }, []);
   // Keep the open tab in view, including after a reload restores one at the
   // far end, and re-mark the edge when a language swap changes the labels'
@@ -236,12 +238,12 @@ export function App({ sync: syncOptions }: AppProps = {}) {
     navRef.current
       ?.querySelector<HTMLElement>('[aria-current="page"]')
       ?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
-    markNavEnd();
-  }, [tab, language, markNavEnd]);
+    markNavEdges();
+  }, [tab, language, markNavEdges]);
   useEffect(() => {
-    window.addEventListener("resize", markNavEnd);
-    return () => window.removeEventListener("resize", markNavEnd);
-  }, [markNavEnd]);
+    window.addEventListener("resize", markNavEdges);
+    return () => window.removeEventListener("resize", markNavEdges);
+  }, [markNavEdges]);
 
   useEffect(() => {
     const product = t("app.title");
@@ -277,7 +279,7 @@ export function App({ sync: syncOptions }: AppProps = {}) {
           ref={navRef}
           className="vec-nav"
           aria-label={t("nav.label")}
-          onScroll={markNavEnd}
+          onScroll={markNavEdges}
         >
           <button
             type="button"
