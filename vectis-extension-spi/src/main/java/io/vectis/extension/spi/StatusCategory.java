@@ -6,30 +6,27 @@ package io.vectis.extension.spi;
  * vocabulary — the fallback an importer uses to place an item whose verbatim status
  * it does not recognise.
  *
- * <p>It mirrors the status categories most trackers expose, with one addition:
- * {@link #DISCONTINUED}, a second end state beside {@link #DONE} for work that stopped
- * without being completed. A source without that notion simply never reports it.</p>
+ * <p>There are exactly three: work not begun, work under way, and work that has ended.
+ * An ended item also carries an {@link Outcome}, which says whether anything was
+ * delivered. A report that counts delivery uses {@code outcome == DELIVERED}, never
+ * the category alone.</p>
  */
 public enum StatusCategory {
 
     /**
-     * Not started. This spans raw, planned and refined items, where refined means curated
-     * well enough to be ready to work. Sources tell these apart by their verbatim status,
-     * not by category, and an importer maps a verbatim status such as {@code REFINED} to a
-     * specific state of its own.
+     * Work not begun. This spans raw, planned and refined items, where refined means
+     * curated well enough to be ready to work. Sources tell these apart by their verbatim
+     * status, not by category, and an importer maps a verbatim status such as
+     * {@code REFINED} to a specific state of its own.
      */
-    NOT_STARTED,
+    START_STATE,
 
     /** Being worked on or reviewed. */
     IN_PROGRESS,
 
-    /** Finished: the work was completed and delivered. */
-    DONE,
-
     /**
-     * A terminal state reached when work stopped without completion and has no viable
-     * path forward. It is neither not-started nor done: the item is closed, but nothing
-     * was delivered.
+     * Terminal: the work has ended and will not move again. Its {@link Outcome} says
+     * whether anything was delivered.
      */
-    DISCONTINUED
+    END_STATE
 }

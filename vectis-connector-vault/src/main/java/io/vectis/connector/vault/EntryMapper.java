@@ -3,7 +3,6 @@ package io.vectis.connector.vault;
 
 import io.vectis.extension.spi.SourceItem;
 import io.vectis.extension.spi.SourceSprint;
-import io.vectis.extension.spi.StatusCategory;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -69,6 +68,7 @@ final class EntryMapper {
             return Optional.empty();
         }
         String status = text(fields.get("status"));
+        Optional<VaultStatus> placed = placed(status, tier, origin, problems);
         var links = new LinkedHashMap<String, List<String>>();
         putLinks(links, SourceItem.DEPENDS_ON, keys(fields, "dependencies", origin, problems));
         putLinks(links, SourceItem.RELATES_TO, keys(fields, "relates", origin, problems));
@@ -77,7 +77,8 @@ final class EntryMapper {
                 title,
                 kind,
                 status,
-                category(status, tier, origin, problems),
+                placed.isPresent() ? placed.get().category() : tier.category(),
+                placed.isPresent() ? placed.get().outcome() : tier.outcome(),
                 optionalText(fields, "epic", origin, problems),
                 optionalText(fields, "sprint", origin, problems),
                 points(fields.get("storyPoints"), origin, problems),
@@ -112,24 +113,28 @@ final class EntryMapper {
                 date(fields, "closed", origin, problems)));
     }
 
-    /** The directory wins whenever the status is missing, unknown or belongs to another tier. */
-    private static StatusCategory category(String status, Tier tier, String origin, Consumer<String> problems) {
-        String placed = "; placed by its directory " + tier.directory() + "/ as " + tier.category();
+    /**
+     * The status that places the item, when it is known and belongs in the item's tier.
+     * Otherwise the directory wins, category and outcome alike, and the reason is reported:
+     * an item in {@code output/} without a status of its own is taken as delivered.
+     */
+    private static Optional<VaultStatus> placed(String status, Tier tier, String origin, Consumer<String> problems) {
+        String byDirectory = "; placed by its directory " + tier.directory() + "/ as " + tier.placement();
         if (status.isEmpty()) {
-            problems.accept(origin + ": 'status' is missing or not text" + placed);
-            return tier.category();
+            problems.accept(origin + ": 'status' is missing or not text" + byDirectory);
+            return Optional.empty();
         }
         Optional<VaultStatus> known = VaultStatus.of(status);
         if (known.isEmpty()) {
-            problems.accept(origin + ": unknown status " + Text.quote(status) + placed);
-            return tier.category();
+            problems.accept(origin + ": unknown status " + Text.quote(status) + byDirectory);
+            return Optional.empty();
         }
         if (known.get().tier() != tier) {
             problems.accept(origin + ": status " + Text.quote(status) + " belongs in " + known.get().tier().directory()
-                    + "/, contradicting its directory" + placed);
-            return tier.category();
+                    + "/, contradicting its directory" + byDirectory);
+            return Optional.empty();
         }
-        return known.get().category();
+        return known;
     }
 
     private static SourceSprint.State sprintState(String state, String origin, Consumer<String> problems) {

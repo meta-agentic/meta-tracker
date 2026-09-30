@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.vectis.extension.spi.BacklogSnapshot;
+import io.vectis.extension.spi.Outcome;
 import io.vectis.extension.spi.SourceItem;
 import io.vectis.extension.spi.SourceSprint;
 import io.vectis.extension.spi.StatusCategory;
@@ -83,7 +84,8 @@ class MalformedVaultTest {
         SourceItem item = Fixtures.item(snapshot, "DEMO-34");
 
         assertEquals("DONE", item.status());
-        assertEquals(StatusCategory.DONE, item.category());
+        assertEquals(StatusCategory.END_STATE, item.category());
+        assertEquals(Outcome.DELIVERED, item.outcome());
         assertEquals("vault/demo/output/DEMO-34.md", item.origin());
         List<String> problems = Fixtures.problemsAbout(snapshot, "output/DEMO-34.md");
         assertEquals(1, problems.size(), problems::toString);
