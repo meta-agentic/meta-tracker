@@ -457,4 +457,31 @@ describe("backlog tab", () => {
     fireEvent.click(storyRow);
     expect(screen.getByRole("dialog", { name: "Wire the client" })).toBeInTheDocument();
   });
+
+  it("shows the roots after Collapse all from a scrolled tree", async () => {
+    mount(
+      snapshotRecording([
+        epicItemFixture,
+        itemFixture({ fields: { parentId: "epic-1" } }),
+        itemFixture({ id: "item-2", key: "VEC-3", rank: "n", title: "No epic yet" }),
+      ]),
+    );
+    await screen.findByText("Wire the client");
+    fireEvent.click(screen.getByRole("button", { name: "Backlog" }));
+    fireEvent.click(screen.getByRole("button", { name: "Expand all" }));
+
+    const tree = screen.getByRole("tree");
+    act(() => {
+      tree.scrollTop = 200;
+      fireEvent.scroll(tree);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Collapse all" }));
+
+    // No row survives above the viewport to hold still for, so no spacer: the
+    // canvas is the roots' height, and the browser's clamp brings them into view.
+    const canvas = tree.firstElementChild as HTMLElement;
+    const roots = within(tree).getAllByRole("treeitem");
+    expect(roots).toHaveLength(2);
+    expect(parseFloat(canvas.style.height)).toBe(roots.length * 40);
+  });
 });
