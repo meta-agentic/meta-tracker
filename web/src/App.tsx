@@ -178,7 +178,6 @@ function BacklogTab({ sync }: { sync: WorkspaceSync }) {
   const expandAll = () => setTreeExpanded([...treeExpanded, ...boardEpics()]);
   const collapseAll = () => {
     const here = boardEpics();
-    treeRef.current?.holdViewport();
     setTreeExpanded(treeExpanded.filter((id) => !here.has(id)));
   };
 
@@ -216,20 +215,33 @@ function BacklogTab({ sync }: { sync: WorkspaceSync }) {
 }
 
 export function App({ sync: syncOptions }: AppProps = {}) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const sync = useWorkspaceSync(syncOptions);
   const workspace = useWorkspaceStore((s) => s.workspace);
   const tab = useWorkspaceStore((s) => s.activeTab);
   const setTab = useWorkspaceStore((s) => s.setActiveTab);
 
   const navRef = useRef<HTMLElement>(null);
-  // On a narrow window the nav scrolls sideways; keep the open tab in view,
-  // including after a reload restores one at the far end.
+  // On a narrow window the nav scrolls sideways. The stylesheet fades its
+  // right edge while there is more to scroll to; this marks when there is not.
+  const markNavEnd = useCallback(() => {
+    const nav = navRef.current;
+    if (nav) nav.dataset.atEnd = String(nav.scrollLeft + nav.clientWidth >= nav.scrollWidth - 1);
+  }, []);
+  // Keep the open tab in view, including after a reload restores one at the
+  // far end, and re-mark the edge when a language swap changes the labels'
+  // width.
+  const language = i18n.language;
   useEffect(() => {
     navRef.current
       ?.querySelector<HTMLElement>('[aria-current="page"]')
       ?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
-  }, [tab]);
+    markNavEnd();
+  }, [tab, language, markNavEnd]);
+  useEffect(() => {
+    window.addEventListener("resize", markNavEnd);
+    return () => window.removeEventListener("resize", markNavEnd);
+  }, [markNavEnd]);
 
   useEffect(() => {
     const product = t("app.title");
@@ -261,7 +273,12 @@ export function App({ sync: syncOptions }: AppProps = {}) {
           )}
         </div>
 
-        <nav ref={navRef} className="vec-nav" aria-label={t("nav.label")}>
+        <nav
+          ref={navRef}
+          className="vec-nav"
+          aria-label={t("nav.label")}
+          onScroll={markNavEnd}
+        >
           <button
             type="button"
             className="vec-nav__item"
