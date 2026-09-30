@@ -6,8 +6,10 @@
   "app.retry": "Riprova",
   "app.skipToContent": "Vai al contenuto",
   "crash.title": "Qualcosa è andato storto.",
-  "crash.body": "La pagina ha incontrato un errore da cui non può riprendersi. Di solito basta ricaricarla.",
+  "crash.body": "La pagina ha incontrato un errore da cui non può riprendersi. Il messaggio qui sotto indica cosa non ha funzionato: includilo se lo segnali.",
   "crash.reload": "Ricarica",
+  "crash.board.title": "Impossibile mostrare questa bacheca",
+  "crash.board.body": "Qualcosa nei suoi dati non può essere visualizzato. Le altre bacheche funzionano ancora e il messaggio qui sotto indica cosa non ha funzionato.",
   "app.errorHint": "Verifica che l'API sia raggiungibile e che la chiave dello spazio di lavoro sia corretta.",
 
   "nav.boards": "Bacheche",

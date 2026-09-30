@@ -12,7 +12,9 @@ import { BoardView } from "./components/BoardView";
 import { IssueDetail } from "./components/IssueDetail";
 import { PreferenceControls } from "./components/PreferenceControls";
 import { BoardIcon, InboxIcon, LogoMark, TimelineIcon } from "./components/icons";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import {
+  BoardCrash,
   EmptyState,
   ErrorState,
   LoadingBoard,
@@ -101,8 +103,12 @@ function BoardsTab({ sync }: { sync: WorkspaceSync }) {
       <BoardSwitcher />
       {/* Keyed on the board, never on the locale or the sync status: re-keying
           on either would re-mount the board and lose the scroll position on a
-          language swap or a background revalidation. */}
-      <BoardView key={activeBoardId} onOpenIssue={openIssue} />
+          language swap or a background revalidation. Inside its own boundary,
+          so a board that fails to render leaves the shell and the switcher
+          above it working; switching boards clears it. */}
+      <ErrorBoundary resetKey={activeBoardId} fallback={(error) => <BoardCrash error={error} />}>
+        <BoardView key={activeBoardId} onOpenIssue={openIssue} />
+      </ErrorBoundary>
       {openIssueId && (
         <IssueDetail issueId={openIssueId} onClose={closeIssue} onNavigate={showIssue} />
       )}

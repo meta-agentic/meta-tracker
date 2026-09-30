@@ -1,5 +1,6 @@
 import type { Board, ID, Issue } from "./types";
 import type { WorkspaceState } from "./workspaceStore";
+import { dict } from "./dict";
 
 /** Ordered issues for a board, assembled from the flat index — O(k) in the
  * board's issue count, never a scan of the whole workspace. */
@@ -24,7 +25,7 @@ export function boardColumns(
   boardIssueIds: Record<ID, ID[]>,
   boardId: ID,
 ): Record<ID, Issue[]> {
-  const grouped: Record<ID, Issue[]> = {};
+  const grouped = dict<Issue[]>();
   for (const issue of boardIssues(issuesById, boardIssueIds, boardId)) {
     (grouped[issue.columnId] ??= []).push(issue);
   }

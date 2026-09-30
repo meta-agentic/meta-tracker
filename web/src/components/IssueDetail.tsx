@@ -70,7 +70,11 @@ function useModal(
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
       const inside = panel.contains(document.activeElement);
-      if (!inside || (event.shiftKey && document.activeElement === first)) {
+      // The panel itself takes focus when its text is clicked. It sits before
+      // the first control, so Shift+Tab from there leaves the sheet unless it
+      // is caught here too.
+      const atStart = document.activeElement === first || document.activeElement === panel;
+      if (!inside || (event.shiftKey && atStart)) {
         event.preventDefault();
         (event.shiftKey ? last : first).focus();
       } else if (!event.shiftKey && document.activeElement === last) {

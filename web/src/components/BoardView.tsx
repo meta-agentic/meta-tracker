@@ -1,9 +1,11 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useWorkspaceStore } from "../store/workspaceStore";
 import { boardColumns, selectActiveBoard } from "../store/selectors";
+import { dict } from "../store/dict";
+import { rememberBoardColumnCount } from "../store/boardShape";
 import { useNumberFormat } from "../i18n/format";
-import type { ID } from "../store/types";
+import type { ID, Issue } from "../store/types";
 import { IssueCard } from "./IssueCard";
 import { BoardIcon } from "./icons";
 import { EmptyState } from "./states";
@@ -34,9 +36,12 @@ export function BoardView({ onOpenIssue }: BoardViewProps) {
   const boardIssueIds = useWorkspaceStore((s) => s.boardIssueIds);
 
   const columns = useMemo(
-    () => (board ? boardColumns(issuesById, boardIssueIds, board.id) : {}),
+    () => (board ? boardColumns(issuesById, boardIssueIds, board.id) : dict<Issue[]>()),
     [board, issuesById, boardIssueIds],
   );
+
+  const columnCount = board?.columns.length ?? 0;
+  useEffect(() => rememberBoardColumnCount(columnCount), [columnCount]);
 
   if (!board) return <p className="vec-muted-note">{t("board.empty")}</p>;
 

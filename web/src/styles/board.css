@@ -76,8 +76,10 @@
 }
 
 .vec-column {
-  /* Columns share the width when they fit, and scroll sideways when they do not. */
+  /* Columns share the width when they fit, and scroll sideways when they do not.
+     min-width: 0 so the widest card content cannot push a column past its basis. */
   flex: 1 0 256px;
+  min-width: 0;
   max-width: 360px;
   display: flex;
   flex-direction: column;
@@ -143,6 +145,8 @@
   flex-direction: column;
   gap: 8px;
   width: 100%;
+  /* Never wider than the column, whatever its content's widest unbroken run. */
+  min-width: 0;
   padding: 10px 12px 12px;
   border-radius: 8px;
   border: 1px solid var(--vec-border);
@@ -184,8 +188,11 @@
   color: var(--vec-text);
 }
 
-/* One line, always: epic, at most two labels, "+N". A long epic title
-   truncates rather than wrapping the row. */
+/* One line, always: epic, at most two labels, "+N". The row is shared out
+   rather than squeezed: each chip grows from nothing up to its own width, so a
+   short label is always whole, and what is left is split between the longer
+   ones, which end in an ellipsis. The epic takes three times a label's share,
+   which is its floor. Nothing here can widen the card or the column. */
 .vec-card__meta {
   display: flex;
   align-items: center;
@@ -195,12 +202,26 @@
 }
 
 .vec-card__meta .vec-chip {
-  flex: none;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: max-content;
+}
+
+/* Capped on the text, so the chip's own max-content is the capped width. */
+.vec-card__meta .vec-chip__text {
+  max-width: 96px;
 }
 
 .vec-card__meta .vec-chip--epic {
-  flex: 0 1 auto;
-  min-width: 0;
+  flex-grow: 3;
+}
+
+.vec-card__meta .vec-chip--epic .vec-chip__text {
+  max-width: 132px;
+}
+
+.vec-card__meta .vec-chip--more {
+  flex: none;
 }
 
 .vec-type {

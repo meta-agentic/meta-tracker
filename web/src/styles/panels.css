@@ -406,11 +406,7 @@ button.vec-link-row:hover {
     border-left: 0;
   }
 
-  .vec-sheet:focus {
-  outline: none;
-}
-
-.vec-sheet__head {
+  .vec-sheet__head {
     padding-left: 16px;
   }
 
