@@ -350,11 +350,21 @@ button.vec-link-row:hover {
     gap: 8px;
   }
 
+  /* A row of its own that scrolls sideways by itself when the labels are wider
+     than the window (Italian at 390px), instead of widening the page. */
   .vec-nav {
     order: 3;
     flex-basis: 100%;
+    min-width: 0;
     height: 40px;
     margin: 0 -6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+
+  .vec-nav::-webkit-scrollbar {
+    display: none;
   }
 
   .vec-boardbar {

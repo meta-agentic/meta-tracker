@@ -7,7 +7,7 @@ import { afterAll, beforeAll } from "vitest";
  * for the suite's duration; every other element keeps measuring 0.
  */
 export function giveElementSize(testId: string, size: { width: number; height: number }) {
-  const keys = ["offsetHeight", "offsetWidth"] as const;
+  const keys = ["offsetHeight", "offsetWidth", "clientHeight", "clientWidth"] as const;
   const originals = new Map<string, PropertyDescriptor | undefined>();
 
   beforeAll(() => {
@@ -18,7 +18,7 @@ export function giveElementSize(testId: string, size: { width: number; height: n
         configurable: true,
         get(this: HTMLElement) {
           if (this.dataset.testid === testId) {
-            return key === "offsetHeight" ? size.height : size.width;
+            return key.endsWith("Height") ? size.height : size.width;
           }
           return original?.get?.call(this) ?? 0;
         },
@@ -28,7 +28,10 @@ export function giveElementSize(testId: string, size: { width: number; height: n
 
   afterAll(() => {
     for (const [key, descriptor] of originals) {
+      // clientHeight and clientWidth live on Element, so there is nothing of
+      // HTMLElement's own to put back; removing the override uncovers Element's.
       if (descriptor) Object.defineProperty(HTMLElement.prototype, key, descriptor);
+      else delete (HTMLElement.prototype as unknown as Record<string, unknown>)[key];
     }
   });
 }

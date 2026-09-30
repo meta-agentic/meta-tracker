@@ -35,6 +35,11 @@ export interface NavigationState {
   setActiveTab: (tab: AppTab) => void;
   toggleTreeRow: (id: ID) => void;
   setTreeExpanded: (ids: ID[]) => void;
+  /**
+   * Drops expanded ids `keep` rejects. Called when a snapshot lands, so ids of
+   * rows that no longer exist do not pile up in storage.
+   */
+  retainTreeRows: (keep: (id: ID) => boolean) => void;
 }
 
 /** Reads the persisted values, dropping anything an older build or a hand edit left behind. */
@@ -72,5 +77,11 @@ export function createNavigationSlice(
     },
 
     setTreeExpanded: (ids) => writeExpanded([...new Set(ids)]),
+
+    retainTreeRows: (keep) => {
+      const current = get().treeExpanded;
+      const kept = current.filter(keep);
+      if (kept.length !== current.length) writeExpanded(kept);
+    },
   };
 }

@@ -35,4 +35,16 @@ describe("navigation slice", () => {
     store.getState().setTreeExpanded(["a", "b", "a"]);
     expect(store.getState().treeExpanded).toEqual(["a", "b"]);
   });
+
+  it("drops expanded ids that name no epic when a snapshot lands", () => {
+    const store = createWorkspaceStore(new MemoryCache());
+    store.getState().setTreeExpanded(["epic-1", "gone", "constructor"]);
+    store.getState().ingestSnapshot({
+      boards: [],
+      epics: [{ id: "epic-1", key: "E-1", title: "Kept", color: "red" }],
+      issues: [],
+    });
+    expect(store.getState().treeExpanded).toEqual(["epic-1"]);
+    expect(JSON.parse(localStorage.getItem(TREE_EXPANDED_KEY)!)).toEqual(["epic-1"]);
+  });
 });
