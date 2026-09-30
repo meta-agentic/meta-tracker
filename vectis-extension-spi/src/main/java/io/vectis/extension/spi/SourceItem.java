@@ -22,6 +22,8 @@ import java.util.Objects;
  * @param status      the source's status, verbatim, e.g. {@code "IN REVIEW"}; may be
  *                    blank when the source recorded none
  * @param category    the portable meaning of the status; never {@code null}
+ * @param outcome     how the item ended; present exactly when {@code category} is
+ *                    {@link StatusCategory#END_STATE}, {@code null} otherwise
  * @param epicKey     key of the parent epic; {@code null} when none
  * @param sprintKey   key of the sprint the item belongs to; {@code null} when none
  * @param storyPoints the estimate; {@code null} when unestimated
@@ -39,6 +41,7 @@ public record SourceItem(
         String kind,
         String status,
         StatusCategory category,
+        Outcome outcome,
         String epicKey,
         String sprintKey,
         Double storyPoints,
@@ -66,6 +69,9 @@ public record SourceItem(
         }
         if (title.isBlank()) {
             throw new IllegalArgumentException("item title must not be blank");
+        }
+        if ((category == StatusCategory.END_STATE) != (outcome != null)) {
+            throw new IllegalArgumentException("an item has an outcome exactly when its category is END_STATE");
         }
         labels = List.copyOf(Objects.requireNonNullElse(labels, List.of()));
         links = copyLinks(links);
