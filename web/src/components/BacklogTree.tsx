@@ -36,11 +36,6 @@ export interface BacklogTreeHandle {
    * For the caller to return focus to when a sheet it opened closes.
    */
   focusRow: (id: ID) => void;
-  /**
-   * Keeps the scrollable height at least where the viewport's bottom is now,
-   * for a change about to shorten the tree from outside it (collapse all).
-   */
-  holdViewport: () => void;
 }
 
 function rowDomId(id: ID): string {
@@ -147,12 +142,14 @@ export const BacklogTree = forwardRef<BacklogTreeHandle, BacklogTreeProps>(funct
   });
 
   // The trailing spacer: a floor under the scrollable height, set just before a
-  // change that would pull the tree's end above the viewport's bottom, and
-  // released once that can no longer clamp — the rows reach the bottom again,
-  // or the tree is scrolled to the top.
+  // single row's collapse would pull the tree's end above the viewport's
+  // bottom, and released once that can no longer clamp — the rows reach the
+  // bottom again, or the tree is scrolled to the top. Only for a row's own
+  // toggle: a bulk collapse (Collapse all) leaves no row above to hold still
+  // for, so it lets the browser clamp and bring the remaining rows into view.
   const [heightFloor, setHeightFloor] = useState(0);
   const totalSize = virtualizer.getTotalSize();
-  const holdViewport = (shrinkBy = Infinity) => {
+  const holdViewport = (shrinkBy: number) => {
     const element = scrollRef.current;
     if (!element || element.scrollTop === 0) return;
     const bottom = element.scrollTop + element.clientHeight;
@@ -201,7 +198,6 @@ export const BacklogTree = forwardRef<BacklogTreeHandle, BacklogTreeProps>(funct
       if (index >= 0) moveTo(index);
       scrollRef.current?.focus();
     },
-    holdViewport: () => holdViewport(),
   }));
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {

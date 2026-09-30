@@ -367,6 +367,13 @@ button.vec-link-row:hover {
     display: none;
   }
 
+  /* With no scrollbar, a faded right edge says there is more to scroll to.
+     The mask reads only alpha, so the colour is any opaque token. */
+  .vec-nav:not([data-at-end="true"]) {
+    -webkit-mask-image: linear-gradient(to right, var(--vec-text) 85%, transparent);
+    mask-image: linear-gradient(to right, var(--vec-text) 85%, transparent);
+  }
+
   .vec-boardbar {
     flex-wrap: wrap;
     gap: 12px;
