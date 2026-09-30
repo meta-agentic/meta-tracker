@@ -142,7 +142,7 @@ export const BacklogTree = forwardRef<BacklogTreeHandle, BacklogTreeProps>(funct
   });
 
   // The trailing spacer: a floor under the scrollable height, set by a single
-  // row's collapse that would pull the tree's end above the viewport's bottom.
+  // row's toggle that would pull the tree's end above the viewport's bottom.
   // It belongs to that one toggle: it holds only while the expansion set and
   // the data are exactly what the toggle left, so any other change — Expand
   // all, Collapse all, another toggle, a refreshed snapshot — drops it and no
@@ -161,13 +161,19 @@ export const BacklogTree = forwardRef<BacklogTreeHandle, BacklogTreeProps>(funct
     const row = rows[index];
     const element = scrollRef.current;
     let bottom = 0;
-    if (expanded.has(row.id) && element && element.scrollTop > 0) {
-      // Collapsing removes the visible rows below this one, down to the next
-      // row at its own depth or shallower.
-      let end = index + 1;
-      while (end < rows.length && rows[end].depth > row.depth) end += 1;
+    if (element && element.scrollTop > 0) {
+      // Either direction can end the rows above the viewport's bottom: a
+      // collapse removes its visible subtree, and an expand above a held
+      // spacer may add fewer rows than the spacer holds. Predicting the new
+      // length with the same selector covers both, at any depth.
+      const next = new Set(expanded);
+      if (next.has(row.id)) next.delete(row.id);
+      else next.add(row.id);
+      const nextTotal =
+        selectFlatTree({ issuesById, epicsById, boardsById, boardIssueIds }, boardId, next).length *
+        rowHeight;
       const viewportBottom = element.scrollTop + element.clientHeight;
-      if (totalSize - (end - index - 1) * rowHeight < viewportBottom) bottom = viewportBottom;
+      if (nextTotal < viewportBottom) bottom = viewportBottom;
     }
     toggleTreeRow(row.id);
     setHeld(
