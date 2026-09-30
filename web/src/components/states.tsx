@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { SyncStatus, WorkspaceSync } from "../api";
+import { skeletonColumnCount } from "../store/boardShape";
 import { CloudOffIcon, RetryIcon, WarningIcon } from "./icons";
 
 /**
@@ -23,7 +24,8 @@ function RetryButton({ sync, variant }: { sync: WorkspaceSync; variant: "primary
   );
 }
 
-const SKELETON_COLUMNS = [3, 2, 4, 1];
+/** Placeholder cards per skeleton column, repeated for as many columns as there are. */
+const SKELETON_CARDS = [3, 2, 4, 1, 2];
 
 /**
  * Cold load with no cache. A board-shaped placeholder rather than a spinner, so
@@ -32,6 +34,7 @@ const SKELETON_COLUMNS = [3, 2, 4, 1];
  */
 export function LoadingBoard() {
   const { t } = useTranslation();
+  const columns = skeletonColumnCount();
   return (
     <div className="vec-loading" role="status" aria-live="polite">
       <p className="vec-loading__caption">
@@ -39,10 +42,10 @@ export function LoadingBoard() {
         {t("app.loading")}
       </p>
       <div className="vec-board" aria-hidden="true">
-        {SKELETON_COLUMNS.map((cards, column) => (
+        {Array.from({ length: columns }, (_, column) => (
           <div key={column} className="vec-column vec-column--skeleton">
             <div className="vec-skeleton vec-skeleton--heading" />
-            {Array.from({ length: cards }, (_, card) => (
+            {Array.from({ length: SKELETON_CARDS[column % SKELETON_CARDS.length] }, (_, card) => (
               <div key={card} className="vec-skeleton vec-skeleton--card" />
             ))}
           </div>
@@ -137,6 +140,26 @@ export function CrashFallback({ error }: { error: Error }) {
         <RetryIcon size={14} />
         {t("crash.reload")}
       </button>
+    </div>
+  );
+}
+
+/**
+ * What the board's own error boundary shows in place of a board that failed to
+ * render. The shell and the board switcher above it keep working, so the way
+ * out is right there; nothing here claims a reload would fix it, because a
+ * render error from the data is usually the same on every render.
+ */
+export function BoardCrash({ error }: { error: Error }) {
+  const { t } = useTranslation();
+  return (
+    <div className="vec-state" role="alert">
+      <span className="vec-state__icon vec-state__icon--danger">
+        <WarningIcon size={22} />
+      </span>
+      <h2 className="vec-state__title">{t("crash.board.title")}</h2>
+      <p className="vec-state__body">{t("crash.board.body")}</p>
+      <code className="vec-state__diagnostic">{error.message}</code>
     </div>
   );
 }

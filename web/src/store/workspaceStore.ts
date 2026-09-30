@@ -6,6 +6,7 @@ import {
   type AsyncCache,
 } from "./cache";
 import { createPreferencesSlice, type PreferencesState } from "./preferences";
+import { dict } from "./dict";
 import type {
   Board,
   Epic,
@@ -55,23 +56,23 @@ interface NormalizedData {
 }
 
 function indexById<T extends { id: ID }>(items: T[]): Record<ID, T> {
-  const out: Record<ID, T> = {};
+  const out = dict<T>();
   for (const item of items) out[item.id] = item;
   return out;
 }
 
 function buildBoardIssueIndex(issues: Issue[]): Record<ID, ID[]> {
-  const index: Record<ID, ID[]> = {};
+  const index = dict<ID[]>();
   for (const issue of issues) (index[issue.boardId] ??= []).push(issue.id);
   return index;
 }
 
 const empty: NormalizedData = {
   workspace: null,
-  issuesById: {},
-  epicsById: {},
-  boardsById: {},
-  boardIssueIds: {},
+  issuesById: dict(),
+  epicsById: dict(),
+  boardsById: dict(),
+  boardIssueIds: dict(),
 };
 
 export function createWorkspaceStore(
@@ -116,10 +117,10 @@ export function createWorkspaceStore(
       upsertIssue: (issue) => {
         const state = get();
         const existing = state.issuesById[issue.id];
-        const issuesById = { ...state.issuesById, [issue.id]: issue };
+        const issuesById = dict({ ...state.issuesById, [issue.id]: issue });
         let boardIssueIds = state.boardIssueIds;
         if (!existing || existing.boardId !== issue.boardId) {
-          boardIssueIds = { ...boardIssueIds };
+          boardIssueIds = dict(boardIssueIds);
           if (existing) {
             boardIssueIds[existing.boardId] = (
               boardIssueIds[existing.boardId] ?? []
@@ -138,10 +139,10 @@ export function createWorkspaceStore(
         const existing = get().issuesById[issueId];
         if (!existing) return;
         set((state) => ({
-          issuesById: {
+          issuesById: dict({
             ...state.issuesById,
             [issueId]: { ...existing, columnId, order },
-          },
+          }),
         }));
         schedulePersist();
       },
@@ -159,7 +160,16 @@ export function createWorkspaceStore(
           null,
         );
         set({
-          ...(cached ?? empty),
+          // Structured clone brings the maps back with a prototype again.
+          ...(cached
+            ? {
+                workspace: cached.workspace,
+                issuesById: dict(cached.issuesById),
+                epicsById: dict(cached.epicsById),
+                boardsById: dict(cached.boardsById),
+                boardIssueIds: dict(cached.boardIssueIds),
+              }
+            : empty),
           activeBoardId,
           hydrated: true,
         });

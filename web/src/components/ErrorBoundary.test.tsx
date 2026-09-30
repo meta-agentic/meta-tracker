@@ -44,4 +44,28 @@ describe("ErrorBoundary", () => {
     );
     expect(screen.getByText("fine")).toBeInTheDocument();
   });
+
+  it("shows a region's own fallback, and renders again when its reset key changes", () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const swallow = (event: ErrorEvent) => event.preventDefault();
+    window.addEventListener("error", swallow);
+
+    const region = (board: string, crash: boolean) => (
+      <AppProviders>
+        <p>shell</p>
+        <ErrorBoundary resetKey={board} fallback={(error) => <p role="alert">board failed: {error.message}</p>}>
+          {crash ? <Boom /> : <p>board {board}</p>}
+        </ErrorBoundary>
+      </AppProviders>
+    );
+    const { rerender } = render(region("a", true));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("board failed: a value nobody anticipated");
+    expect(screen.getByText("shell")).toBeInTheDocument();
+
+    rerender(region("b", false));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByText("board b")).toBeInTheDocument();
+    window.removeEventListener("error", swallow);
+  });
 });
