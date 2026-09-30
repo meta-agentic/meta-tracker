@@ -12,20 +12,25 @@ import java.util.Optional;
  * category and outcome each reports.
  *
  * <p>The category is the tier's, with one exception: {@code NO GO} reports
- * {@link StatusCategory#END_STATE} with {@link Outcome#DISCONTINUED}, because a rejected
- * or abandoned item is closed without being done. {@code NO GO} still belongs in
- * {@code raw/}, so it is not a contradiction there. {@code DONE} ends with
- * {@link Outcome#DELIVERED}. {@code REFINED} is not started, like the rest of
- * {@code raw/}; what sets it apart is carried by the verbatim status, not the category.</p>
+ * {@link StatusCategory#END_STATE} with {@link Outcome#DISCONTINUED}. A {@code NO GO} item
+ * was aborted: it is closed, and it never counts as a delivered increment. It belongs in
+ * {@code wiki/}, where it documents the work partly done and why it stopped, so it is not a
+ * contradiction there. {@code DONE} ends with {@link Outcome#DELIVERED}. {@code REFINED} is
+ * not started, like the rest of {@code raw/}; what sets it apart is carried by the verbatim
+ * status, not the category.</p>
+ *
+ * <p>A status found outside its tier normally yields to the directory. {@code NO GO} does
+ * not (see {@link #placesAnywhere()}): wherever it is filed, the item is placed as ended
+ * and discontinued, never as delivered or not started, and reported as misfiled.</p>
  */
 enum VaultStatus {
 
     TO_DO("TO DO", Tier.RAW, StatusCategory.START_STATE, null),
     PLANNED("PLANNED", Tier.RAW, StatusCategory.START_STATE, null),
     REFINED("REFINED", Tier.RAW, StatusCategory.START_STATE, null),
-    NO_GO("NO GO", Tier.RAW, StatusCategory.END_STATE, Outcome.DISCONTINUED),
     IN_PROGRESS("IN PROGRESS", Tier.WIKI, StatusCategory.IN_PROGRESS, null),
     IN_REVIEW("IN REVIEW", Tier.WIKI, StatusCategory.IN_PROGRESS, null),
+    NO_GO("NO GO", Tier.WIKI, StatusCategory.END_STATE, Outcome.DISCONTINUED),
     DONE("DONE", Tier.OUTPUT, StatusCategory.END_STATE, Outcome.DELIVERED);
 
     private final String label;
@@ -61,5 +66,19 @@ enum VaultStatus {
     /** How an item with this status ended; {@code null} unless the category is an end state. */
     Outcome outcome() {
         return outcome;
+    }
+
+    /**
+     * Whether this status places an item even when it is filed outside its tier, instead of
+     * yielding to the directory. Only {@code NO GO} does: an aborted item must never be
+     * counted as delivered or as not started because of where it sits.
+     */
+    boolean placesAnywhere() {
+        return this == NO_GO;
+    }
+
+    /** The placement as a problem reports it, e.g. {@code END_STATE/DISCONTINUED}. */
+    String placement() {
+        return Tier.placement(category, outcome);
     }
 }

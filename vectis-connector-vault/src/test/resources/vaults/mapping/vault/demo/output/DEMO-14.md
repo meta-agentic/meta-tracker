@@ -1,7 +1,7 @@
 ---
 kind: story
 id: DEMO-14
-title: Rejected but filed as delivered
+title: Aborted but misfiled as delivered
 status: NO GO
 space: demo
 ---
