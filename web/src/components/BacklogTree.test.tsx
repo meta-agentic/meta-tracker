@@ -46,6 +46,10 @@ function scrollTo(scroller: HTMLElement, top: number) {
   });
 }
 
+// Rows from the scroll offset down: the window, without the active row, which
+// is rendered wherever it is.
+const inWindow = (row: HTMLElement, offset: number) => parseFloat(row.style.top) >= offset;
+
 const renderedIds = () => screen.getAllByTestId("backlog-row").map((row) => row.dataset.rowId);
 
 describe("BacklogTree", () => {
@@ -77,7 +81,7 @@ describe("BacklogTree", () => {
     expect(target).toHaveAttribute("aria-expanded", "true");
     const above = screen
       .getAllByTestId("backlog-row")
-      .filter((row) => parseFloat(row.style.top) < parseFloat(target.style.top))
+      .filter((row) => inWindow(row, offset) && parseFloat(row.style.top) < parseFloat(target.style.top))
       .map((row) => [row.dataset.rowId, row.style.top]);
     expect(above.length).toBeGreaterThan(0);
 
@@ -86,7 +90,7 @@ describe("BacklogTree", () => {
     expect(stats().scrollOffset).toBe(offset);
     const aboveAfter = screen
       .getAllByTestId("backlog-row")
-      .filter((row) => parseFloat(row.style.top) < parseFloat(target.style.top))
+      .filter((row) => inWindow(row, offset) && parseFloat(row.style.top) < parseFloat(target.style.top))
       .map((row) => [row.dataset.rowId, row.style.top]);
     expect(aboveAfter).toEqual(above);
 
@@ -113,5 +117,108 @@ describe("BacklogTree", () => {
     expect(tree).toHaveAttribute("aria-activedescendant", `backlog-row-${first}`);
     fireEvent.keyDown(tree, { key: "ArrowLeft" });
     expect(workspaceStore.getState().treeExpanded).not.toContain(first);
+  });
+
+  it("keeps the rows on screen still when a collapse near the end shortens the tree", () => {
+    act(() => workspaceStore.getState().setTreeExpanded(epicIds));
+    const { stats, scroller } = mount();
+    const rows = selectFlatTree(workspaceStore.getState(), "board-0", new Set(epicIds));
+    // The last epic's stories run to the end of the list: collapsing it with
+    // the epic near the top of the window leaves far less than a window below.
+    const lastEpic = rows.map((row) => row.kind).lastIndexOf("epic");
+    const offset = (lastEpic - 2) * ROW;
+    scrollTo(scroller, offset);
+    const canvas = scroller.firstElementChild as HTMLElement;
+    const target = screen
+      .getAllByTestId("backlog-row")
+      .find((row) => row.dataset.rowId === rows[lastEpic].id)!;
+    const above = screen
+      .getAllByTestId("backlog-row")
+      .filter((row) => inWindow(row, offset) && parseFloat(row.style.top) < parseFloat(target.style.top))
+      .map((row) => [row.dataset.rowId, row.style.top]);
+
+    fireEvent.click(target);
+
+    expect(target).toHaveAttribute("aria-expanded", "false");
+    // The rows alone now end above the window's bottom; a trailing spacer keeps
+    // the scrollable height there, so the browser has nothing to clamp.
+    expect((lastEpic + 1) * ROW).toBeLessThan(offset + VIEWPORT.height);
+    expect(parseFloat(canvas.style.height)).toBeGreaterThanOrEqual(offset + VIEWPORT.height);
+    expect(stats().scrollOffset).toBe(offset);
+    expect(
+      screen
+        .getAllByTestId("backlog-row")
+        .filter((row) => inWindow(row, offset) && parseFloat(row.style.top) < parseFloat(target.style.top))
+        .map((row) => [row.dataset.rowId, row.style.top]),
+    ).toEqual(above);
+
+    // Scrolled back to the top, the spacer has nothing left to hold.
+    scrollTo(scroller, 0);
+    expect(parseFloat(canvas.style.height)).toBe((rows.length - (rows.length - lastEpic - 1)) * ROW);
+  });
+
+  it("always renders the row aria-activedescendant names", () => {
+    act(() => workspaceStore.getState().setTreeExpanded(epicIds));
+    const { scroller } = mount();
+    const tree = screen.getByRole("tree");
+    fireEvent.keyDown(tree, { key: "Home" });
+
+    // Far past the virtualized window: the active row is still in the DOM.
+    scrollTo(scroller, 2_000 * ROW);
+    const active = tree.getAttribute("aria-activedescendant")!;
+    expect(document.getElementById(active)).not.toBeNull();
+    expect(renderedIds().length).toBeLessThan(VIEWPORT.height / ROW + 20);
+  });
+
+  it("hands activity to the nearest visible ancestor when the active row is hidden", () => {
+    mount();
+    const tree = screen.getByRole("tree");
+    // The second epic, not the first: row 0 is where activity lands by default.
+    fireEvent.keyDown(tree, { key: "ArrowDown" });
+    fireEvent.keyDown(tree, { key: "ArrowRight" });
+    fireEvent.keyDown(tree, { key: "ArrowRight" });
+    const epic = workspaceStore.getState().treeExpanded[0];
+    expect(renderedIds()[0]).not.toBe(epic);
+    expect(tree.getAttribute("aria-activedescendant")).not.toBe(`backlog-row-${epic}`);
+
+    // Collapse all, from outside the tree.
+    act(() => workspaceStore.getState().setTreeExpanded([]));
+    expect(tree).toHaveAttribute("aria-activedescendant", `backlog-row-${epic}`);
+  });
+
+  it("shows an epic with stories on two boards on both, each with its own count and points", () => {
+    const column = { id: "todo", name: "To Do", order: 0 };
+    const story = (id: string, boardId: string, storyPoints: number) => ({
+      id, key: id.toUpperCase(), boardId, epicId: "e1", columnId: "todo", title: id, order: 0,
+      startDate: null, dueDate: null, storyPoints, type: "story", labels: [], priority: null,
+      description: null, dependsOn: [], relates: [],
+    });
+    act(() =>
+      workspaceStore.getState().ingestSnapshot({
+        boards: [
+          { id: "b-a", key: "A", name: "Alpha", columns: [column] },
+          { id: "b-b", key: "B", name: "Beta", columns: [column] },
+        ],
+        epics: [{ id: "e1", key: "E-1", title: "Shared", color: "red" }],
+        issues: [story("a1", "b-a", 3), story("b1", "b-b", 5), story("b2", "b-b", 2)],
+      }),
+    );
+    const epicRow = (boardId: string) => {
+      const view = render(
+        <AppProviders>
+          <BacklogTree boardId={boardId} height={VIEWPORT.height} rowHeight={ROW} />
+        </AppProviders>,
+      );
+      const row = screen.getByRole("treeitem", { name: /Shared/ });
+      const shown = {
+        count: row.querySelector(".vec-tree__count span[aria-hidden]")?.textContent,
+        points: row.querySelector(".vec-points [aria-hidden]")?.textContent,
+      };
+      view.unmount();
+      return shown;
+    };
+
+    expect(epicRow("b-a")).toEqual({ count: "1", points: "3" });
+    expect(epicRow("b-b")).toEqual({ count: "2", points: "7" });
   });
 });

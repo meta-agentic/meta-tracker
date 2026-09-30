@@ -1,5 +1,6 @@
 import {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useMemo,
@@ -9,7 +10,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { defaultRangeExtractor, useVirtualizer, type Range } from "@tanstack/react-virtual";
 import { useWorkspaceStore } from "../store/workspaceStore";
 import { selectFlatTree, type TreeRow } from "../store/selectors";
 import { useNumberFormat } from "../i18n/format";
@@ -35,6 +36,11 @@ export interface BacklogTreeHandle {
    * For the caller to return focus to when a sheet it opened closes.
    */
   focusRow: (id: ID) => void;
+  /**
+   * Keeps the scrollable height at least where the viewport's bottom is now,
+   * for a change about to shorten the tree from outside it (collapse all).
+   */
+  holdViewport: () => void;
 }
 
 function rowDomId(id: ID): string {
@@ -50,9 +56,16 @@ function rowDomId(id: ID): string {
  * only inserts or removes rows *after* it, and every row has the same height,
  * so nothing above the toggled row moves and the scroll offset is untouched.
  *
+ * Near the end of the list a collapse would shorten the tree below the scroll
+ * position, and the browser would clamp it and move every row on screen. So a
+ * toggle first pins the scrollable height at the viewport's current bottom, a
+ * trailing spacer that is released once the rows fill the viewport again.
+ *
  * Keyboard model (WAI-ARIA tree view): the tree is one tab stop and the active
- * row is announced through `aria-activedescendant`, which keeps working when
- * the active row scrolls out of the virtualized window. Up/Down move, Right
+ * row is announced through `aria-activedescendant`. The active row is always
+ * rendered, even scrolled out of the virtualized window, so the id it names
+ * always exists. When the active row stops being visible (its parent was
+ * collapsed), the nearest visible ancestor takes over. Up/Down move, Right
  * expands or steps into the first child, Left collapses or steps out to the
  * parent, Home/End jump, Space toggles, and Enter toggles an epic or opens an
  * item in the detail sheet.
@@ -94,12 +107,35 @@ export const BacklogTree = forwardRef<BacklogTreeHandle, BacklogTreeProps>(funct
   }, [issuesById, boardIssueIds, boardId]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [activeId, setActiveId] = useState<ID | null>(null);
+  // The active row and its ancestors, nearest first: if the row stops being
+  // visible, the nearest ancestor still shown is the active one.
+  const [activePath, setActivePath] = useState<ID[]>([]);
+  const indexById = useMemo(() => new Map(rows.map((row, index) => [row.id, index])), [rows]);
   const activeIndex = Math.max(
     0,
-    rows.findIndex((row) => row.id === activeId),
+    activePath.map((id) => indexById.get(id)).find((index) => index !== undefined) ?? 0,
   );
   const active: TreeRow | undefined = rows[activeIndex];
+
+  const activate = (row: TreeRow) => {
+    const path = [row.id];
+    // A visible row's ancestors are all visible, so the walk stays in `rows`.
+    for (let parent = row.parentId; parent !== null; ) {
+      path.push(parent);
+      const index = indexById.get(parent);
+      parent = index === undefined ? null : rows[index].parentId;
+    }
+    setActivePath(path);
+  };
+
+  const rangeExtractor = useCallback(
+    (range: Range) => {
+      const indexes = defaultRangeExtractor(range);
+      if (activeIndex >= range.count || indexes.includes(activeIndex)) return indexes;
+      return [...indexes, activeIndex].sort((a, b) => a - b);
+    },
+    [activeIndex],
+  );
 
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -107,7 +143,42 @@ export const BacklogTree = forwardRef<BacklogTreeHandle, BacklogTreeProps>(funct
     estimateSize: () => rowHeight,
     getItemKey: (index) => rows[index].id,
     overscan: 8,
+    rangeExtractor,
   });
+
+  // The trailing spacer: a floor under the scrollable height, set just before a
+  // change that would pull the tree's end above the viewport's bottom, and
+  // released once that can no longer clamp — the rows reach the bottom again,
+  // or the tree is scrolled to the top.
+  const [heightFloor, setHeightFloor] = useState(0);
+  const totalSize = virtualizer.getTotalSize();
+  const holdViewport = (shrinkBy = Infinity) => {
+    const element = scrollRef.current;
+    if (!element || element.scrollTop === 0) return;
+    const bottom = element.scrollTop + element.clientHeight;
+    if (totalSize - shrinkBy < bottom) setHeightFloor(bottom);
+  };
+  const toggle = (index: number) => {
+    const row = rows[index];
+    if (expanded.has(row.id)) {
+      // Collapsing removes the visible rows below this one, down to the next
+      // row at its own depth or shallower.
+      let end = index + 1;
+      while (end < rows.length && rows[end].depth > row.depth) end += 1;
+      holdViewport((end - index - 1) * rowHeight);
+    }
+    toggleTreeRow(row.id);
+  };
+  const onScroll = () => {
+    const element = scrollRef.current;
+    if (
+      heightFloor > 0 &&
+      element &&
+      (element.scrollTop === 0 || element.scrollTop + element.clientHeight <= totalSize)
+    ) {
+      setHeightFloor(0);
+    }
+  };
 
   const virtualRows = virtualizer.getVirtualItems();
   const renderedRows = virtualRows.length;
@@ -117,10 +188,11 @@ export const BacklogTree = forwardRef<BacklogTreeHandle, BacklogTreeProps>(funct
   }, [onRenderStats, renderedRows, scrollOffset]);
 
   const moveTo = (index: number) => {
-    const target = rows[Math.min(Math.max(index, 0), rows.length - 1)];
+    const clamped = Math.min(Math.max(index, 0), rows.length - 1);
+    const target = rows[clamped];
     if (!target) return;
-    setActiveId(target.id);
-    virtualizer.scrollToIndex(rows.indexOf(target), { align: "auto" });
+    activate(target);
+    virtualizer.scrollToIndex(clamped, { align: "auto" });
   };
 
   useImperativeHandle(ref, () => ({
@@ -129,6 +201,7 @@ export const BacklogTree = forwardRef<BacklogTreeHandle, BacklogTreeProps>(funct
       if (index >= 0) moveTo(index);
       scrollRef.current?.focus();
     },
+    holdViewport: () => holdViewport(),
   }));
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -148,19 +221,19 @@ export const BacklogTree = forwardRef<BacklogTreeHandle, BacklogTreeProps>(funct
         moveTo(rows.length - 1);
         break;
       case "ArrowRight":
-        if (active.hasChildren && !expanded.has(active.id)) toggleTreeRow(active.id);
+        if (active.hasChildren && !expanded.has(active.id)) toggle(activeIndex);
         else if (active.hasChildren) moveTo(activeIndex + 1);
         break;
       case "ArrowLeft":
-        if (active.hasChildren && expanded.has(active.id)) toggleTreeRow(active.id);
+        if (active.hasChildren && expanded.has(active.id)) toggle(activeIndex);
         else if (active.parentId !== null) moveTo(rows.findIndex((row) => row.id === active.parentId));
         break;
       case "Enter":
-        if (active.hasChildren) toggleTreeRow(active.id);
+        if (active.hasChildren) toggle(activeIndex);
         else if (active.kind !== "epic" && onOpenIssue) onOpenIssue(active.id);
         break;
       case " ":
-        if (active.hasChildren) toggleTreeRow(active.id);
+        if (active.hasChildren) toggle(activeIndex);
         break;
       default:
         handled = false;
@@ -187,10 +260,11 @@ export const BacklogTree = forwardRef<BacklogTreeHandle, BacklogTreeProps>(funct
       aria-activedescendant={active ? rowDomId(active.id) : undefined}
       tabIndex={0}
       onKeyDown={onKeyDown}
+      onScroll={onScroll}
       data-testid="backlog-scroll"
       style={height !== undefined ? { height } : undefined}
     >
-      <div className="vec-tree__canvas" style={{ height: virtualizer.getTotalSize() }}>
+      <div className="vec-tree__canvas" style={{ height: Math.max(totalSize, heightFloor) }}>
         {virtualRows.map((virtualRow) => {
           const row = rows[virtualRow.index];
           const isEpic = row.kind === "epic";
@@ -217,10 +291,10 @@ export const BacklogTree = forwardRef<BacklogTreeHandle, BacklogTreeProps>(funct
               data-row-id={row.id}
               data-actionable={row.hasChildren || opensSheet ? "true" : undefined}
               onClick={() => {
-                setActiveId(row.id);
+                activate(row);
                 // Focus first, so the sheet's return target is the tree.
                 scrollRef.current?.focus();
-                if (row.hasChildren) toggleTreeRow(row.id);
+                if (row.hasChildren) toggle(virtualRow.index);
                 else if (opensSheet) onOpenIssue?.(row.id);
               }}
               style={
