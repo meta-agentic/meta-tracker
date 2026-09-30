@@ -68,8 +68,8 @@ class MalformedVaultTest {
         assertEquals(4, problems.size(), problems::toString);
         assertTrue(problems.stream().anyMatch(p -> p.contains("storyPoints 'lots'")), problems::toString);
         assertTrue(problems.stream().anyMatch(p -> p.contains("'epic' is not text")), problems::toString);
-        assertTrue(problems.stream().anyMatch(p -> p.contains("'labels' has an entry")), problems::toString);
-        assertTrue(problems.stream().anyMatch(p -> p.contains("'dependencies' has an entry")), problems::toString);
+        assertTrue(problems.stream().anyMatch(p -> p.contains("'labels' has 1 entry that is not text; dropped")), problems::toString);
+        assertTrue(problems.stream().anyMatch(p -> p.contains("'dependencies' has 1 entry that is not text; dropped")), problems::toString);
     }
 
     @Test

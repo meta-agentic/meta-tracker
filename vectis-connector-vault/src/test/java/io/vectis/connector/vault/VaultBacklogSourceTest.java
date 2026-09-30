@@ -76,14 +76,14 @@ class VaultBacklogSourceTest {
         assertFalse(Fixtures.keys(snapshot).contains("DEMO-99"), "_index.md is generated output, not source");
         assertTrue(snapshot.problems().stream().noneMatch(p -> p.contains("_index.md") || p.contains("adr")),
                 snapshot.problems()::toString);
-        assertEquals(13, snapshot.items().size(), Fixtures.keys(snapshot)::toString);
+        assertEquals(14, snapshot.items().size(), Fixtures.keys(snapshot)::toString);
     }
 
     @Test
     void itemsAreOrderedByKeyNumber() {
         assertEquals(
                 List.of("DEMO-1", "DEMO-2", "DEMO-3", "DEMO-4", "DEMO-5", "DEMO-6", "DEMO-7",
-                        "DEMO-8", "DEMO-9", "DEMO-10", "DEMO-11", "DEMO-12", "DEMO-13"),
+                        "DEMO-8", "DEMO-9", "DEMO-10", "DEMO-11", "DEMO-12", "DEMO-13", "DEMO-14"),
                 Fixtures.keys(Fixtures.read("mapping")));
     }
 

@@ -9,15 +9,19 @@ import io.vectis.extension.spi.BacklogSnapshot;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Files written to break the reader rather than to describe work: recursion, log
- * forging, oversized echoes, and floods. Each must cost at most one problem per file,
- * or stop the read with an explicit incomplete marker.
+ * forging, oversized echoes, and floods. Each must cost a bounded report, or stop the
+ * read with an explicit incomplete marker.
  */
 class HostileInputTest {
 
@@ -93,7 +97,7 @@ class HostileInputTest {
             Files.writeString(space.resolve("raw/DEMO-" + n + ".md"), item("DEMO-" + n, "status: TO DO\n"));
         }
 
-        BacklogSnapshot snapshot = new VaultBacklogSource(vault, "demo", 4, Long.MAX_VALUE).read();
+        BacklogSnapshot snapshot = new VaultBacklogSource(vault, "demo", 4, Long.MAX_VALUE, Integer.MAX_VALUE).read();
 
         assertFalse(snapshot.complete());
         assertEquals(List.of(), snapshot.items(), "the tier that overflowed the listing is not read");
@@ -108,11 +112,94 @@ class HostileInputTest {
         Files.writeString(space.resolve("output/DEMO-3.md"), item("DEMO-3", "status: DONE\n"));
         long firstTwoFiles = Files.size(space.resolve("_backlog-meta.yaml")) + Files.size(space.resolve("raw/DEMO-1.md"));
 
-        BacklogSnapshot snapshot = new VaultBacklogSource(vault, "demo", 1000, firstTwoFiles + 1).read();
+        BacklogSnapshot snapshot = new VaultBacklogSource(vault, "demo", 1000, firstTwoFiles + 1, Integer.MAX_VALUE).read();
 
         assertFalse(snapshot.complete());
         assertFalse(Fixtures.keys(snapshot).contains("DEMO-3"), "reading stopped before output/");
         assertTrue(snapshot.problems().stream().anyMatch(p -> p.startsWith("FATAL: ")), snapshot.problems()::toString);
+    }
+
+    @Test
+    void aFloodOfNonTextListEntriesCostsABoundedReportPerFile() throws IOException {
+        String flood = "[" + String.join(",", Collections.nCopies(5_000, "{}")) + "]";
+        int files = 50;
+        for (int n = 2; n < 2 + files; n++) {
+            Files.writeString(space.resolve("raw/DEMO-" + n + ".md"), item("DEMO-" + n,
+                    "status: TO DO\nlabels: " + flood + "\ndependencies: " + flood + "\nrelates: " + flood + "\n"));
+        }
+
+        BacklogSnapshot snapshot = read();
+
+        assertEquals(1 + files, snapshot.items().size(), "every flooded item is kept");
+        assertTrue(snapshot.items().stream().allMatch(item -> item.labels().isEmpty() && item.links().isEmpty()));
+        assertEquals(files * 6, snapshot.problems().size(), "a cut and a count for each of three fields");
+        assertTrue(snapshot.problems().stream().mapToInt(String::length).sum() < files * 6 * 120,
+                "the report does not grow with the lists");
+        assertEquals(List.of(
+                "vault/demo/raw/DEMO-2.md: 'dependencies' has 5000 entries; only the first 256 are kept",
+                "vault/demo/raw/DEMO-2.md: 'dependencies' has 256 entries that are not text; dropped",
+                "vault/demo/raw/DEMO-2.md: 'relates' has 5000 entries; only the first 256 are kept",
+                "vault/demo/raw/DEMO-2.md: 'relates' has 256 entries that are not text; dropped",
+                "vault/demo/raw/DEMO-2.md: 'labels' has 5000 entries; only the first 256 are kept",
+                "vault/demo/raw/DEMO-2.md: 'labels' has 256 entries that are not text; dropped"),
+                Fixtures.problemsAbout(snapshot, "raw/DEMO-2.md"));
+        assertTrue(snapshot.complete());
+    }
+
+    @Test
+    void aLongListOfTextIsCutToTheCap() throws IOException {
+        String ones = "[" + String.join(",", Collections.nCopies(50_000, "1")) + "]";
+        Files.writeString(space.resolve("raw/DEMO-2.md"), item("DEMO-2", "status: TO DO\nlabels: " + ones + "\n"));
+
+        BacklogSnapshot snapshot = read();
+
+        assertEquals(EntryMapper.MAX_LIST_ENTRIES, Fixtures.item(snapshot, "DEMO-2").labels().size());
+        assertEquals(List.of("vault/demo/raw/DEMO-2.md: 'labels' has 50000 entries; only the first 256 are kept"),
+                snapshot.problems());
+    }
+
+    @Test
+    void tooManyProblemsStopTheReadAndMarkItIncomplete() throws IOException {
+        for (int n = 2; n <= 10; n++) {
+            Files.writeString(space.resolve("raw/DEMO-" + n + ".md"), item("DEMO-" + n, "status: BLOCKED\n"));
+        }
+
+        BacklogSnapshot snapshot = new VaultBacklogSource(vault, "demo", 1000, Long.MAX_VALUE, 5).read();
+
+        assertFalse(snapshot.complete());
+        assertEquals(7, snapshot.problems().size(), snapshot.problems()::toString);
+        assertEquals("FATAL: vault/demo: stopped reading after more than 5 problems; the snapshot is incomplete",
+                snapshot.problems().get(6));
+    }
+
+    @Test
+    void oneFileReportsAtMostSixteenProblems() throws IOException {
+        Path file = Files.writeString(space.resolve("raw/DEMO-2.md"), item("DEMO-2", "status: TO DO\n"));
+        var problems = new ArrayList<String>();
+
+        Optional<String> result = VaultBacklogSource.parse(file, "o", budget(), problems, (entry, report) -> {
+            IntStream.range(0, 100).forEach(n -> report.accept("o: problem " + n));
+            return Optional.of("mapped");
+        });
+
+        assertEquals(Optional.of("mapped"), result);
+        assertEquals(VaultBacklogSource.MAX_PROBLEMS_PER_FILE, problems.size(), problems::toString);
+        assertEquals("o: problem 14", problems.get(14));
+        assertEquals("o: 85 more problems not listed", problems.get(15));
+    }
+
+    @Test
+    void aFaultInTheReaderIsNamedAndSkipsOnlyThatFile() throws IOException {
+        Path file = Files.writeString(space.resolve("raw/DEMO-2.md"), item("DEMO-2", "status: TO DO\n"));
+        var problems = new ArrayList<String>();
+
+        Optional<String> result = VaultBacklogSource.parse(file, "o", budget(), problems, (entry, report) -> {
+            report.accept("o: reported before the fault");
+            throw new IllegalStateException("a bug");
+        });
+
+        assertEquals(Optional.empty(), result);
+        assertEquals(List.of("o: the reader failed on this file (IllegalStateException); skipped"), problems);
     }
 
     @Test
@@ -122,6 +209,10 @@ class HostileInputTest {
 
     private BacklogSnapshot read() {
         return new VaultBacklogSource(vault, "demo").read();
+    }
+
+    private static ReadBudget budget() {
+        return new ReadBudget(Integer.MAX_VALUE, Long.MAX_VALUE, Integer.MAX_VALUE);
     }
 
     private static String item(String key, String extra) {

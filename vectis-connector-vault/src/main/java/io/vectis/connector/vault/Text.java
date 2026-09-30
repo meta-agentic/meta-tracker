@@ -30,24 +30,39 @@ final class Text {
         return escape(shown);
     }
 
-    /** Escapes C0 and C1 control characters and DEL, so the result is a single printable line. */
+    /**
+     * Escapes what could break a report onto a new line or disguise it: control characters
+     * (C0, DEL, C1), the Unicode line and paragraph separators, format characters such as
+     * bidirectional overrides and zero-width marks, and lone surrogates. A backslash is
+     * doubled, so every escape in the result is one this method made.
+     */
     static String escape(String value) {
         var out = new StringBuilder(value.length());
-        for (int i = 0; i < value.length(); i++) {
-            char c = value.charAt(i);
+        value.codePoints().forEach(c -> {
             switch (c) {
+                case '\\' -> out.append("\\\\");
                 case '\n' -> out.append("\\n");
                 case '\r' -> out.append("\\r");
                 case '\t' -> out.append("\\t");
                 default -> {
-                    if (c < 0x20 || (c >= 0x7F && c <= 0x9F)) {
-                        out.append(String.format("\\u%04X", (int) c));
+                    if (unsafe(c)) {
+                        for (char unit : Character.toChars(c)) {
+                            out.append(String.format("\\u%04X", (int) unit));
+                        }
                     } else {
-                        out.append(c);
+                        out.appendCodePoint(c);
                     }
                 }
             }
-        }
+        });
         return out.toString();
+    }
+
+    private static boolean unsafe(int codePoint) {
+        return switch (Character.getType(codePoint)) {
+            case Character.CONTROL, Character.LINE_SEPARATOR, Character.PARAGRAPH_SEPARATOR,
+                 Character.FORMAT, Character.SURROGATE -> true;
+            default -> false;
+        };
     }
 }

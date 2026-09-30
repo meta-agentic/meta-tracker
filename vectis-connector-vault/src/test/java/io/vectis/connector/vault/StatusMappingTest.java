@@ -51,6 +51,7 @@ class StatusMappingTest {
             DEMO-7  | ""      | raw    | NOT_STARTED | 'status' is missing
             DEMO-10 | REFINED | wiki   | IN_PROGRESS | status 'REFINED' belongs in raw/
             DEMO-12 | TO DO   | output | DONE        | status 'TO DO' belongs in raw/
+            DEMO-14 | NO GO   | output | DONE        | status 'NO GO' belongs in raw/
             """)
     void unknownMissingOrContradictoryStatusIsPlacedByDirectoryAndReported(
             String key, String status, String tier, StatusCategory expected, String reason) {
