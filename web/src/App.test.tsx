@@ -513,10 +513,11 @@ describe("backlog tab", () => {
       fireEvent.click(screen.getByRole("button", { name: "Expand all" }));
 
       const tree = screen.getByRole("tree");
-      // Make the big epic the active row, then scroll near the end and
-      // collapse it from the keyboard.
+      // Collapse the small epic at the top (nothing to hold there), make the
+      // big epic the active row, then scroll near the end and collapse it from
+      // the keyboard.
       fireEvent.keyDown(tree, { key: "Home" });
-      fireEvent.keyDown(tree, { key: "ArrowDown" });
+      fireEvent.keyDown(tree, { key: "ArrowLeft" });
       fireEvent.keyDown(tree, { key: "ArrowDown" });
       expect(tree).toHaveAttribute("aria-activedescendant", "backlog-row-epic-2");
       act(() => {
@@ -542,6 +543,19 @@ describe("backlog tab", () => {
       const { tree, canvas } = await collapseBigEpicNearTheEnd();
       fireEvent.click(screen.getByRole("button", { name: "Collapse all" }));
       expectRootsInView(tree, canvas);
+    });
+
+    it("keeps the spacer when a row above expands by less than it holds", async () => {
+      const { tree, canvas } = await collapseBigEpicNearTheEnd();
+      // Expanding the small epic above adds one row: the rows still end well
+      // above the held bottom, so dropping the spacer would let the browser
+      // clamp the scroll position and move every row on screen.
+      fireEvent.click(within(tree).getByRole("treeitem", { name: /Client shell/ }));
+      expect(within(tree).getByRole("treeitem", { name: /Client shell/ })).toHaveAttribute(
+        "aria-expanded",
+        "true",
+      );
+      expect(parseFloat(canvas.style.height)).toBe(700 + 600);
     });
 
     it("does not carry the spacer through Expand all into Collapse all", async () => {
