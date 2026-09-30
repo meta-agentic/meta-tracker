@@ -28,7 +28,7 @@ class StatusMappingTest {
     @ParameterizedTest(name = "{1} in {2}/ -> {3}")
     @CsvSource(delimiter = '|', quoteCharacter = '"', textBlock = """
             DEMO-1  | TO DO       | raw    | NOT_STARTED
-            DEMO-2  | REFINED     | raw    | REFINED
+            DEMO-2  | REFINED     | raw    | NOT_STARTED
             DEMO-3  | PLANNED     | raw    | NOT_STARTED
             DEMO-4  | NO GO       | raw    | DISCONTINUED
             DEMO-8  | IN PROGRESS | wiki   | IN_PROGRESS
@@ -75,15 +75,19 @@ class StatusMappingTest {
     }
 
     @Test
-    void onlyRefinedAndNoGoLeaveTheirTiersCategory() {
+    void onlyNoGoLeavesItsTiersCategory() {
         for (VaultStatus status : VaultStatus.values()) {
-            StatusCategory expected = switch (status) {
-                case REFINED -> StatusCategory.REFINED;
-                case NO_GO -> StatusCategory.DISCONTINUED;
-                default -> status.tier().category();
-            };
+            StatusCategory expected = status == VaultStatus.NO_GO ? StatusCategory.DISCONTINUED : status.tier().category();
             assertEquals(expected, status.category(), status.label());
         }
+    }
+
+    @Test
+    void refinedIsNotStartedAndKeepsItsVerbatimStatus() {
+        SourceItem item = Fixtures.item(snapshot, "DEMO-2");
+
+        assertEquals(StatusCategory.NOT_STARTED, item.category());
+        assertEquals("REFINED", item.status(), "the verbatim status is what sets refined work apart");
     }
 
     @Test
