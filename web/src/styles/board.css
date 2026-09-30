@@ -1,0 +1,300 @@
+/*
+ * The board: the board bar, columns and cards. Colour from `tokens.css` only.
+ */
+
+/* ---------- Board bar ---------- */
+
+.vec-boardbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px 4px;
+}
+
+.vec-boardbar__boards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--vec-surface-sunken);
+}
+
+.vec-board-tab {
+  padding: 4px 11px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: none;
+  color: var(--vec-text-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.vec-board-tab:hover {
+  color: var(--vec-text);
+}
+
+.vec-board-tab[aria-current="true"] {
+  border-color: var(--vec-border-strong);
+  background: var(--vec-surface);
+  color: var(--vec-text);
+  box-shadow: var(--vec-shadow-sm);
+}
+
+.vec-boardbar__stats {
+  display: flex;
+  gap: 20px;
+  margin-left: auto;
+}
+
+.vec-boardbar__stats div {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-end;
+}
+
+.vec-boardbar__stats dt {
+  font-size: 12px;
+  color: var(--vec-text-muted);
+}
+
+.vec-boardbar__stats dd {
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Board ---------- */
+
+.vec-board {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 20px 24px;
+  overflow-x: auto;
+  scroll-padding-inline: 20px;
+}
+
+.vec-column {
+  /* Columns share the width when they fit, and scroll sideways when they do not.
+     min-width: 0 so the widest card content cannot push a column past its basis. */
+  flex: 1 0 256px;
+  min-width: 0;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  background: var(--vec-surface-sunken);
+  padding: 8px;
+}
+
+.vec-column__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 10px;
+}
+
+.vec-column__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vec-text);
+}
+
+.vec-count {
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--vec-surface);
+  border: 1px solid var(--vec-border);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--vec-text-muted);
+}
+
+.vec-column__body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vec-column__empty {
+  padding: 18px 8px;
+  border: 1px dashed var(--vec-border-strong);
+  border-radius: 8px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--vec-text-muted);
+}
+
+.vec-column__more {
+  padding: 4px 6px;
+  font-size: 12px;
+  color: var(--vec-text-muted);
+}
+
+/* ---------- Card ---------- */
+
+.vec-card {
+  /* The containing block for the card's visually hidden labels. Without it they
+     position against the page and widen it. */
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  /* Never wider than the column, whatever its content's widest unbroken run. */
+  min-width: 0;
+  padding: 10px 12px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--vec-border);
+  background: var(--vec-surface);
+  box-shadow: var(--vec-shadow-sm);
+  text-align: left;
+  transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.vec-card:hover {
+  border-color: var(--vec-border-strong);
+  box-shadow: var(--vec-shadow-md);
+}
+
+.vec-card:active {
+  transform: translateY(1px);
+}
+
+/* Glyph and key on the left, points on the right. */
+.vec-card__top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 20px;
+}
+
+.vec-card__top .vec-points {
+  margin-left: auto;
+}
+
+.vec-card__title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--vec-text);
+}
+
+/* One line, always: epic, at most two labels, "+N". The row is shared out
+   rather than squeezed: each chip grows from nothing up to its own width, so a
+   short label is always whole, and what is left is split between the longer
+   ones, which end in an ellipsis. The epic takes three times a label's share,
+   which is its floor. Nothing here can widen the card or the column. */
+.vec-card__meta {
+  display: flex;
+  align-items: center;
+  /* Tighter than the chips elsewhere, so the default data fits a column whole. */
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.vec-card__meta .vec-chip {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: max-content;
+  padding: 1px 6px;
+}
+
+/* Capped on the text, so the chip's own max-content is the capped width. */
+.vec-card__meta .vec-chip__text {
+  max-width: 96px;
+}
+
+.vec-card__meta .vec-chip--epic {
+  flex-grow: 3;
+}
+
+.vec-card__meta .vec-chip--epic .vec-chip__text {
+  max-width: 132px;
+}
+
+.vec-card__meta .vec-chip--more {
+  flex: none;
+}
+
+.vec-type {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--vec-text-muted);
+}
+
+.vec-type__glyph {
+  display: inline-flex;
+  color: var(--vec-type-other);
+}
+
+.vec-type[data-type="story"] .vec-type__glyph { color: var(--vec-type-story); }
+.vec-type[data-type="bug"] .vec-type__glyph { color: var(--vec-type-bug); }
+.vec-type[data-type="task"] .vec-type__glyph { color: var(--vec-type-task); }
+.vec-type[data-type="spike"] .vec-type__glyph { color: var(--vec-type-spike); }
+.vec-type[data-type="enabler"] .vec-type__glyph { color: var(--vec-type-enabler); }
+
+.vec-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--vec-border);
+  background: var(--vec-surface-sunken);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--vec-text-muted);
+  white-space: nowrap;
+}
+
+.vec-chip--epic {
+  max-width: 160px;
+  color: var(--vec-text);
+}
+
+.vec-chip__dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.vec-chip__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vec-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.vec-points {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--vec-accent-soft);
+  color: var(--vec-accent-text);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}

@@ -1,0 +1,5 @@
+idPolicy:
+  tracker: local
+  prefix: DEMO
+  pattern: '^DEMO-\d+$'
+  next: 40

@@ -128,6 +128,63 @@ describe("toWorkspaceSnapshot", () => {
     expect(issues[0].startDate).toBeNull();
   });
 
+  it("reads type, labels, priority, description and links out of the field document", () => {
+    const { issues } = toWorkspaceSnapshot({
+      ...base,
+      items: [
+        itemFixture({
+          fields: {
+            type: "story",
+            labels: ["web", "design"],
+            priority: "P1",
+            description: "First line\nSecond line",
+            dependencies: ["VEC-7"],
+            relates: ["VEC-8", "VEC-9"],
+          },
+        }),
+      ],
+    });
+
+    expect(issues[0]).toMatchObject({
+      type: "story",
+      labels: ["web", "design"],
+      priority: "P1",
+      description: "First line\nSecond line",
+      dependsOn: ["VEC-7"],
+      relates: ["VEC-8", "VEC-9"],
+    });
+  });
+
+  it("keeps only the distinct string entries of a list field, and empties a non-list", () => {
+    const { issues } = toWorkspaceSnapshot({
+      ...base,
+      items: [
+        itemFixture({
+          fields: { labels: ["web", 3, "", null, "api", "web"], dependencies: "VEC-7", relates: {} },
+        }),
+      ],
+    });
+
+    expect(issues[0].labels).toEqual(["web", "api"]);
+    expect(issues[0].dependsOn).toEqual([]);
+    expect(issues[0].relates).toEqual([]);
+    expect(issues[0].type).toBeNull();
+    expect(issues[0].description).toBeNull();
+  });
+
+  it("tolerates a type named after an object prototype member", () => {
+    const { issues } = toWorkspaceSnapshot({
+      ...base,
+      items: [itemFixture({ fields: { type: "constructor" } })],
+    });
+    expect(issues[0].type).toBe("constructor");
+  });
+
+  it("carries the workspace identity the app shell names", () => {
+    const { workspace } = toWorkspaceSnapshot({ ...base, items: [] });
+    expect(workspace).toEqual({ key: "VEC", name: "Vectis" });
+  });
+
   it("drops an item whose board the payload does not carry", () => {
     const { issues } = toWorkspaceSnapshot({
       ...base,

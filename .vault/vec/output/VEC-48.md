@@ -36,8 +36,7 @@ On clean `origin/main`, both `npm ci` and `npm install` fail in `web/`:
 - `eslint@^10.8.0` is declared
 - `eslint-plugin-react-hooks@^5.1.0` peer-requires eslint **9 or older**
 
-Nobody can install `web/` without `--legacy-peer-deps`, which is what the VEC-34 lane had
-to use in order to do its work.
+Nobody can install `web/` without `--legacy-peer-deps`, which is what the VEC-34 work had to use in order to get done.
 
 ## Why it matters
 
@@ -47,9 +46,7 @@ peer conflicts, so the workaround hides the next instance of this problem as wel
 
 ## Scope note
 
-The fix is a plugin major bump, which will change lint results. That triage is the actual
-work, and it is why this is not a one-line change — the VEC-34 lane deliberately left it
-rather than bundling unrelated lint churn into a localization PR. That was the right call.
+The fix is a plugin major bump, which will change lint results. That triage is the actual work, and it is why this is not a one-line change — the VEC-34 change deliberately left it rather than bundling unrelated lint churn into a localization PR. That was the right call.
 
 ## Acceptance criteria
 

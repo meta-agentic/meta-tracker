@@ -6,9 +6,21 @@ import {
   type AsyncCache,
 } from "./cache";
 import { createPreferencesSlice, type PreferencesState } from "./preferences";
-import type { Board, Epic, ID, Issue, WorkspaceSnapshot } from "./types";
+import { dict } from "./dict";
+import type {
+  Board,
+  Epic,
+  ID,
+  Issue,
+  WorkspaceInfo,
+  WorkspaceSnapshot,
+} from "./types";
 
-const CACHE_KEY = "workspace:v1";
+// v2: issues gained type, labels, priority, description and links, and the
+// workspace itself is cached. A v1 entry would hydrate issues without those
+// arrays, so it is ignored rather than read.
+const CACHE_KEY = "workspace:v2";
+const LEGACY_CACHE_KEYS = ["workspace:v1"];
 const ACTIVE_BOARD_KEY = "ui:activeBoardId";
 
 /**
@@ -19,6 +31,7 @@ const ACTIVE_BOARD_KEY = "ui:activeBoardId";
  * assembled without scanning every issue.
  */
 export interface WorkspaceState extends PreferencesState {
+  workspace: WorkspaceInfo | null;
   issuesById: Record<ID, Issue>;
   epicsById: Record<ID, Epic>;
   boardsById: Record<ID, Board>;
@@ -35,6 +48,7 @@ export interface WorkspaceState extends PreferencesState {
 }
 
 interface NormalizedData {
+  workspace: WorkspaceInfo | null;
   issuesById: Record<ID, Issue>;
   epicsById: Record<ID, Epic>;
   boardsById: Record<ID, Board>;
@@ -42,22 +56,23 @@ interface NormalizedData {
 }
 
 function indexById<T extends { id: ID }>(items: T[]): Record<ID, T> {
-  const out: Record<ID, T> = {};
+  const out = dict<T>();
   for (const item of items) out[item.id] = item;
   return out;
 }
 
 function buildBoardIssueIndex(issues: Issue[]): Record<ID, ID[]> {
-  const index: Record<ID, ID[]> = {};
+  const index = dict<ID[]>();
   for (const issue of issues) (index[issue.boardId] ??= []).push(issue.id);
   return index;
 }
 
 const empty: NormalizedData = {
-  issuesById: {},
-  epicsById: {},
-  boardsById: {},
-  boardIssueIds: {},
+  workspace: null,
+  issuesById: dict(),
+  epicsById: dict(),
+  boardsById: dict(),
+  boardIssueIds: dict(),
 };
 
 export function createWorkspaceStore(
@@ -69,8 +84,9 @@ export function createWorkspaceStore(
     const schedulePersist = () => {
       if (persistTimer) clearTimeout(persistTimer);
       persistTimer = setTimeout(() => {
-        const { issuesById, epicsById, boardsById, boardIssueIds } = get();
+        const { workspace, issuesById, epicsById, boardsById, boardIssueIds } = get();
         void cache.set<NormalizedData>(CACHE_KEY, {
+          workspace,
           issuesById,
           epicsById,
           boardsById,
@@ -89,6 +105,7 @@ export function createWorkspaceStore(
 
       ingestSnapshot: (snapshot) => {
         set({
+          workspace: snapshot.workspace ?? null,
           issuesById: indexById(snapshot.issues),
           epicsById: indexById(snapshot.epics),
           boardsById: indexById(snapshot.boards),
@@ -100,10 +117,11 @@ export function createWorkspaceStore(
       upsertIssue: (issue) => {
         const state = get();
         const existing = state.issuesById[issue.id];
-        const issuesById = { ...state.issuesById, [issue.id]: issue };
+        const issuesById = dict(state.issuesById);
+        issuesById[issue.id] = issue;
         let boardIssueIds = state.boardIssueIds;
         if (!existing || existing.boardId !== issue.boardId) {
-          boardIssueIds = { ...boardIssueIds };
+          boardIssueIds = dict(boardIssueIds);
           if (existing) {
             boardIssueIds[existing.boardId] = (
               boardIssueIds[existing.boardId] ?? []
@@ -121,12 +139,11 @@ export function createWorkspaceStore(
       moveIssue: (issueId, columnId, order) => {
         const existing = get().issuesById[issueId];
         if (!existing) return;
-        set((state) => ({
-          issuesById: {
-            ...state.issuesById,
-            [issueId]: { ...existing, columnId, order },
-          },
-        }));
+        set((state) => {
+          const issuesById = dict(state.issuesById);
+          issuesById[issueId] = { ...existing, columnId, order };
+          return { issuesById };
+        });
         schedulePersist();
       },
 
@@ -137,12 +154,22 @@ export function createWorkspaceStore(
 
       hydrate: async () => {
         const cached = await cache.get<NormalizedData>(CACHE_KEY);
+        for (const legacy of LEGACY_CACHE_KEYS) void cache.delete(legacy);
         const activeBoardId = uiTracking.read<ID | null>(
           ACTIVE_BOARD_KEY,
           null,
         );
         set({
-          ...(cached ?? empty),
+          // Structured clone brings the maps back with a prototype again.
+          ...(cached
+            ? {
+                workspace: cached.workspace,
+                issuesById: dict(cached.issuesById),
+                epicsById: dict(cached.epicsById),
+                boardsById: dict(cached.boardsById),
+                boardIssueIds: dict(cached.boardIssueIds),
+              }
+            : empty),
           activeBoardId,
           hydrated: true,
         });

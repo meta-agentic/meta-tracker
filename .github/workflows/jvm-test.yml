@@ -2,12 +2,13 @@ name: JVM Tests
 
 # The PR test gate for application source.
 #
-# `native-deploy.yml` is path-filtered to `**/pom.xml`, `deploy/**` and itself,
-# because a ~60-minute GraalVM native compile is a *packaging* gate and has no
-# business sitting between a developer and feedback on a `.java` change. The
-# consequence, until this workflow existed, was that a pull request touching only
-# `.java` or `.sql` matched no path filter anywhere and ran no tests at all: the
-# persistence suite's only verification was whatever the author ran locally.
+# On pull requests `native-deploy.yml` is path-filtered to the Maven manifests,
+# `deploy/**` and itself, because a ~60-minute GraalVM native compile is a
+# *packaging* gate and has no business sitting between a developer and feedback
+# on a `.java` change. The consequence, until this workflow existed, was that a
+# pull request touching only `.java` or `.sql` matched no path filter anywhere
+# and ran no tests at all: the persistence suite's only verification was
+# whatever the author ran locally.
 #
 # This workflow closes that hole. It is the same test phase the native build
 # runs — `mvn verify`, same PostgreSQL service, same `VECTIS_DB_*` contract — with
@@ -17,27 +18,46 @@ name: JVM Tests
 #
 # Gated on a Maven build existing, matching the other workflows in this repo: a
 # green no-op until application modules land, active automatically once they do.
+#
+# Making `mvn verify (JVM)` (or the web-ci job) a required status check needs a
+# job-level skip instead of the workflow-level `paths` filter below: a filtered-
+# out workflow never creates the check, so a PR that doesn't match would wait
+# for it forever.
 
 on:
   push:
     branches: [main]
+    # Everything the Maven build reads: the `vectis-*` modules in full (source,
+    # resources, migrations, module manifests and build config such as
+    # `lombok.config`), the root `pom.xml`, and the root `.mvn/` build config.
+    # Every entry is anchored to a root file or directory on purpose: an
+    # unanchored `**/*.java`, `**/*.sql` or `**/src/**` also matches under
+    # `web/`, so the first `.sql` fixture added to the SPA would spend a Maven
+    # build and a PostgreSQL service on an SPA-only change. Disjointness from
+    # `web-ci.yml` has to hold by construction, not because today's tree happens
+    # not to contain such a file.
+    #
+    # A new Maven module outside the `vectis-*` naming convention is not covered
+    # here and must be added. The PR that introduces it still runs, because it
+    # has to touch the root `pom.xml` to register the module.
+    #
+    # The root `pom.xml` is outside every module and has to be listed. The
+    # module-level `pom.xml` is also covered by `vectis-*/**`, and is listed
+    # literally anyway so the manifests that decide the build stay visible here.
+    #
+    # The same list filters `push` and `pull_request` (YAML anchor), and
+    # `native-deploy.yml` keeps a copy of it for its push trigger. Path filters
+    # apply per event, so without it every merge to main ran a full `mvn verify`
+    # whatever it touched.
+    paths: &jvm-paths
+      - 'vectis-*/**'
+      - 'pom.xml'
+      - 'vectis-*/pom.xml'
+      - '.mvn/**'
+      - '.github/workflows/jvm-test.yml'
   pull_request:
     branches: [main]
-    # Application source and the build manifests that decide what it compiles
-    # against. Scoped to the `vectis-*` Maven modules on purpose — `**/src/**`
-    # would also match `web/src/**` and spend a Maven build on an SPA-only PR.
-    #
-    # The root `pom.xml` is listed on its own as well as under `**/pom.xml`:
-    # GitHub documents `**` as matching zero or more of any character, but the
-    # zero case at the start of a path is not something to stake the repo's only
-    # test gate on. The bare entry costs nothing and settles it.
-    paths:
-      - '**/*.java'
-      - '**/*.sql'
-      - 'vectis-*/src/**'
-      - 'pom.xml'
-      - '**/pom.xml'
-      - '.github/workflows/jvm-test.yml'
+    paths: *jvm-paths
   workflow_dispatch:
 
 permissions:
