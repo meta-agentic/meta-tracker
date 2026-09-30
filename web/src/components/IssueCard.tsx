@@ -129,12 +129,12 @@ export const IssueCard = memo(function IssueCard({ issue, epic, onOpen }: IssueC
         <span className="vec-card__meta">
           {epic && <EpicChip epic={epic} />}
           {shownLabels.map((label) => (
-            <span key={label} className="vec-chip">
-              {label}
+            <span key={label} className="vec-chip" title={label}>
+              <span className="vec-chip__text">{label}</span>
             </span>
           ))}
           {hiddenLabels > 0 && (
-            <span className="vec-chip">
+            <span className="vec-chip vec-chip--more">
               {t("card.moreLabels", { count: number(hiddenLabels) })}
             </span>
           )}
