@@ -1,7 +1,7 @@
 ---
 kind: story
-id: DEMO-14
-title: Aborted but misfiled as delivered
+id: DEMO-15
+title: Declined before the NO GO tier moved
 status: NO GO
 space: demo
 ---
