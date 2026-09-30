@@ -20,13 +20,15 @@ import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
 import org.yaml.snakeyaml.error.MarkedYAMLException;
 import org.yaml.snakeyaml.error.YAMLException;
+import org.yaml.snakeyaml.nodes.Tag;
 import org.yaml.snakeyaml.representer.Representer;
 
 /**
  * Reading vault files as untrusted input. A vault is contributed through public pull
  * requests, so every limit here bounds what a hostile file can cost: no symbolic
  * link is followed, a file is read up to a fixed size, and YAML is parsed into plain
- * maps with alias, nesting and size limits and duplicate keys refused.
+ * maps with alias, nesting and size limits and duplicate keys refused. An unquoted
+ * timestamp stays the text it was written as, never a moment shifted to UTC.
  */
 final class VaultFiles {
 
@@ -112,13 +114,20 @@ final class VaultFiles {
         return new Entry(fields, body);
     }
 
-    /** Parses a YAML document that must be a mapping, e.g. front-matter or a space's meta file. */
+    /**
+     * Parses a YAML document that must be a mapping, e.g. front-matter or a space's meta file.
+     * Whatever the parser throws becomes {@link Unreadable}: some construction failures, such as
+     * {@code !!binary "a"} or {@code !!int "abc"}, escape it unwrapped.
+     */
     static Map<String, Object> mapping(String yaml, String what) throws Unreadable {
         Object document;
         try {
             document = parser().load(yaml);
         } catch (YAMLException e) {
             throw new Unreadable(what + " is not valid YAML: " + describe(e));
+        } catch (RuntimeException | StackOverflowError e) {
+            throw new Unreadable(what + " has a value the YAML parser cannot build ("
+                    + e.getClass().getSimpleName() + ")");
         }
         if (document == null) {
             throw new Unreadable(what + " is empty");
@@ -144,7 +153,15 @@ final class VaultFiles {
         options.setCodePointLimit(MAX_FILE_BYTES);
         options.setAllowRecursiveKeys(false);
         var dumper = new DumperOptions();
-        return new Yaml(new SafeConstructor(options), new Representer(dumper), dumper, options);
+        return new Yaml(new TextTimestamps(options), new Representer(dumper), dumper, options);
+    }
+
+    /** The safe constructor, except that a timestamp is built as the string it was written as. */
+    private static final class TextTimestamps extends SafeConstructor {
+        TextTimestamps(LoaderOptions options) {
+            super(options);
+            yamlConstructors.put(Tag.TIMESTAMP, new ConstructYamlStr());
+        }
     }
 
     /** The parser's own diagnosis, e.g. "found duplicate key title", without its multi-line context. */

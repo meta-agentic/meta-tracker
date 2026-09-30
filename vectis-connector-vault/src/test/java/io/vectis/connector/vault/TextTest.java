@@ -14,6 +14,17 @@ class TextTest {
     }
 
     @Test
+    void escapesLineAndParagraphSeparatorsFormatCharactersAndLoneSurrogates() {
+        assertEquals("a\\u2028b\\u2029c\\u202Ed\\u2066e\\u200Bf\\uFEFFg\\uDB40\\uDC41h\\uD800i",
+                Text.escape("a\u2028b\u2029c\u202Ed\u2066e\u200Bf\uFEFFg\uDB40\uDC41h\uD800i"));
+    }
+
+    @Test
+    void doublesABackslashSoALiteralEscapeCannotPassForAMadeOne() {
+        assertEquals("a\\\\nb\\nc", Text.escape("a\\nb\nc"));
+    }
+
+    @Test
     void quotesAndCutsLongValues() {
         assertEquals("'short'", Text.quote("short"));
         assertEquals("'" + "x".repeat(Text.MAX_ECHO) + "…'", Text.quote("x".repeat(Text.MAX_ECHO + 1)));
