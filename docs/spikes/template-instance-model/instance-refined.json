@@ -1,5 +1,5 @@
 {
   "states": {
-    "refined": {"name": "Refined", "category": "NOT_STARTED", "after": "backlog"}
+    "refined": {"name": "Refined", "category": "START_STATE", "after": "backlog"}
   }
 }
