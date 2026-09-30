@@ -14,10 +14,12 @@
 // statements it implies, are in Diff.java.
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -245,6 +247,9 @@ final class Resolver {
         if (!categories.contains("NOT_STARTED") || !categories.contains("DONE")) {
             v.add("states: needs at least one NOT_STARTED and one DONE state");
         }
+        if (states.values().stream().allMatch(x -> Boolean.FALSE.equals(Json.obj(x).get("onBoard")))) {
+            v.add("states: needs at least one state on the board");
+        }
         Map<String, Object> types = Json.obj(doc.get("itemTypes"));
         if (types.isEmpty()) {
             v.add("itemTypes: needs at least one item type");
@@ -323,17 +328,22 @@ final class Resolver {
      *     and kept in place (see keepInPlace);
      *   - a tombstone for an element the new version also removed is dropped as redundant;
      *   - an instance-added key the new version now also defines is adopted: kept as an
-     *     override, so the instance's values win and the template fills the rest;
+     *     override, so the instance's values win and the template fills the rest; the note
+     *     names both. A state whose category disagrees is refused instead: the category is
+     *     what reaching the state means, and adopting it would silently change that;
      *   - a state anchored to a state the new version removed is re-anchored in place;
      *   - removed states are dropped from an overridden stateOrder.
-     * Anything else (additions, renames, reorders) is inherited by re-resolving.
+     * Anything else (additions, renames, reorders) is inherited by re-resolving. States are
+     * rewritten in key order, each seeing the anchors rewritten before it, so the result
+     * never depends on member order.
      */
     static Upgrade upgrade(Map<String, Object> from, Map<String, Object> to, Map<String, Object> delta,
                            Map<String, Integer> occupancy) {
         Map<String, Object> d = Json.obj(Json.deepCopy(delta));
         List<String> notes = new ArrayList<>();
+        List<String> refused = new ArrayList<>();
         Map<String, Object> was = resolve(from, delta).effective();
-        List<String> promotedStates = new ArrayList<>();
+        Set<String> promotedStates = new TreeSet<>();
         for (String s : KEYED) {
             Map<String, Object> before = Json.obj(from.get(s));
             Map<String, Object> after = Json.obj(to.get(s));
@@ -350,10 +360,25 @@ final class Resolver {
                         promotedStates.add(k);
                     }
                 } else if (x != null && !before.containsKey(k) && after.containsKey(k)) {
-                    List<String> filled = new ArrayList<>(Json.obj(after.get(k)).keySet());
-                    filled.removeAll(Json.obj(x).keySet());
+                    Map<String, Object> mine = Json.obj(x);
+                    Map<String, Object> theirs = Json.obj(after.get(k));
+                    List<String> differ = new ArrayList<>();
+                    List<String> filled = new ArrayList<>();
+                    for (String f : new TreeSet<>(theirs.keySet())) {
+                        if (!mine.containsKey(f)) {
+                            filled.add(f);
+                        } else if (!Objects.equals(mine.get(f), theirs.get(f))) {
+                            differ.add(f);
+                        }
+                    }
                     notes.add(s + "." + k + ": template now defines it too; instance values win"
+                            + (differ.isEmpty() ? "" : " over " + differ)
                             + (filled.isEmpty() ? "" : ", template fills " + filled));
+                    if (s.equals("states") && differ.contains("category")) {
+                        refused.add(s + "." + k + ".category: the instance added it as " + mine.get("category")
+                                + ", the template now defines it as " + theirs.get("category")
+                                + "; align the category, or empty and remove the state, before upgrading");
+                    }
                 }
             }
             if (d.containsKey(s) && section.isEmpty()) {
@@ -367,7 +392,9 @@ final class Resolver {
                 keepInPlace(k, was, survives, d, notes);
             }
         }
-        Json.obj(d.get("states")).forEach((k, x) -> {
+        Map<String, Object> ds = Json.obj(d.get("states"));
+        for (String k : new TreeSet<>(ds.keySet())) {
+            Object x = ds.get(k);
             String a = x == null ? null : anchorOf(Json.obj(x));
             if (a != null && !survives.contains(a)) {
                 Json.obj(x).remove("after");
@@ -375,7 +402,7 @@ final class Resolver {
                 notes.add("states." + k + ": template removed its anchor '" + a + "'");
                 keepInPlace(k, was, survives, d, notes);
             }
-        });
+        }
         if (d.containsKey("stateOrder")) {
             List<String> kept = Json.strings(d.get("stateOrder"));
             kept.retainAll(survives);
@@ -389,7 +416,8 @@ final class Resolver {
             }
         }
         Resolution r = resolve(to, d);
-        List<String> conflicts = new ArrayList<>(r.violations());
+        List<String> conflicts = new ArrayList<>(refused);
+        conflicts.addAll(r.violations());
         if (conflicts.isEmpty()) {
             conflicts.addAll(checkRemovals(was, r.effective(), occupancy));
         }
@@ -405,21 +433,24 @@ final class Resolver {
      * Keep an instance-owned state where it was on the board: anchor it after its nearest
      * predecessor (in the pre-upgrade order) that survives the upgrade or, when nothing
      * before it survives (it was, or is about to become, the first column), before its
-     * nearest surviving successor. Either way the delta stays sparse. Only a board with no
-     * other surviving state would fall back to pinning stateOrder.
+     * nearest surviving successor. A neighbour that is itself placed, through the delta's
+     * anchors, relative to this state is skipped: anchoring to it would close a cycle, and
+     * it moves with this state anyway. Either way the delta stays sparse. Only when every
+     * other surviving state is placed relative to this one does it fall back to pinning
+     * stateOrder.
      */
     private static void keepInPlace(String k, Map<String, Object> was, Set<String> survives,
                                     Map<String, Object> d, List<String> notes) {
         List<String> old = Json.strings(was.get("stateOrder"));
         for (int i = old.indexOf(k) - 1; i >= 0; i--) {
-            if (survives.contains(old.get(i))) {
+            if (canAnchor(old.get(i), k, survives, d)) {
                 Json.obj(Json.obj(d.get("states")).get(k)).put("after", old.get(i));
                 notes.add("states." + k + ": placed after '" + old.get(i) + "' so it stays where it was");
                 return;
             }
         }
         for (int i = old.indexOf(k) + 1; i < old.size(); i++) {
-            if (survives.contains(old.get(i))) {
+            if (canAnchor(old.get(i), k, survives, d)) {
                 Json.obj(Json.obj(d.get("states")).get(k)).put("before", old.get(i));
                 notes.add("states." + k + ": placed before '" + old.get(i) + "' so it stays where it was");
                 return;
@@ -434,5 +465,20 @@ final class Resolver {
         }
         d.put("stateOrder", pinned);
         notes.add("stateOrder: pinned so states." + k + " stays where it was");
+    }
+
+    /** Whether k may be anchored to c: c survives and its chain of anchors in the delta, as rewritten so far, does not reach k. */
+    private static boolean canAnchor(String c, String k, Set<String> survives, Map<String, Object> d) {
+        if (!survives.contains(c)) {
+            return false;
+        }
+        Map<String, Object> states = Json.obj(d.get("states"));
+        Set<String> seen = new HashSet<>();
+        for (String s = c; s != null && seen.add(s); s = states.get(s) == null ? null : anchorOf(Json.obj(states.get(s)))) {
+            if (s.equals(k)) {
+                return false;
+            }
+        }
+        return true;
     }
 }

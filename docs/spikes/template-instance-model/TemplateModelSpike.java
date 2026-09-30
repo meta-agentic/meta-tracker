@@ -235,6 +235,15 @@ public class TemplateModelSpike {
                         && is(state(worked.effective(), vault.get("DONE")).get("category"), "DONE")
                         && !states(eff(scrum, none)).containsKey("refined"),
                 vault);
+        String tail = "\"todo\", \"in-progress\", \"in-review\", \"done\", \"no-go\"";
+        Resolver.Upgrade r9a = inPlace(scrum, noBacklog, "\"backlog\": {\"name\": \"Icebox\"}, \"refined\": {\"name\": \"R\", " + x + ", \"after\": \"backlog\"}", "[\"backlog\", \"refined\", " + tail + "]");
+        Resolver.Upgrade r9b = inPlace(scrum, noBacklog, "\"inbox\": {\"name\": \"I\", " + x + ", \"before\": \"backlog\"}, \"refined\": {\"name\": \"R\", " + x + ", \"after\": \"backlog\"}, \"b\": {\"name\": \"B\", " + x + ", \"after\": \"refined\"}", "[\"inbox\", \"refined\", \"b\", " + tail + "]");
+        Resolver.Upgrade r9c = inPlace(scrum, next(scrum, "{\"states\": {\"backlog\": null, \"todo\": null}, \"stateOrder\": [\"in-progress\", \"in-review\", \"done\", \"no-go\"]}"), "\"backlog\": {\"name\": \"Icebox\"}, \"todo\": {\"name\": \"Next\"}", "[\"backlog\", " + tail + "]");
+        Resolver.Upgrade r9d = inPlace(scrum, dropReview, "\"in-review\": {\"name\": \"CR\"}, \"pre\": {\"name\": \"P\", " + x + ", \"before\": \"in-review\"}", "[\"backlog\", \"todo\", \"in-progress\", \"pre\", \"in-review\", \"done\", \"no-go\"]");
+        check("R9", "re-anchoring never anchors to a state placed relative to the moved one: no false cycle, same delta with members reversed",
+                r9a != null && r9b != null && r9c != null && r9d != null && is(name(r9a.effective(), "backlog"), "Icebox")
+                        && is(state(r9a.effective(), "backlog").get("before"), "todo") && is(state(r9a.effective(), "refined").get("after"), "backlog")
+                        && is(state(r9d.effective(), "in-review").get("after"), "in-progress") && is(state(r9d.effective(), "pre").get("before"), "in-review"), r9a + " " + r9d);
 
         // ---- the DISCONTINUED end state (no-go) -----------------------
         section("the DISCONTINUED end state");
@@ -246,11 +255,12 @@ public class TemplateModelSpike {
                         && Diff.projection(none, eff(scrum, none))
                         .contains("INSERT no-go name=\"No Go\" ordinal=5 on_board=false"),
                 Diff.projection(none, eff(scrum, none)));
-        check("D2", "DISCONTINUED is not DONE: dropping the only DONE state is rejected; onBoard must be a boolean",
+        String off = "{\"states\": {\"todo\": {\"onBoard\": false}, \"in-progress\": {\"onBoard\": false}";
+        check("D2", "DISCONTINUED is not DONE: dropping the only DONE state is rejected; onBoard must be a boolean, and some state on the board",
                 has(Resolver.resolve(scrum, patch("{\"states\": {\"done\": null}}")).violations(), "one NOT_STARTED and one DONE")
-                        && has(Resolver.resolve(scrum, patch("{\"states\": {\"no-go\": {\"onBoard\": \"no\"}}}")).violations(),
-                        "no-go.onBoard: must be true or false"),
-                "");
+                        && has(Resolver.resolve(scrum, patch("{\"states\": {\"no-go\": {\"onBoard\": \"no\"}}}")).violations(), "no-go.onBoard: must be true or false")
+                        && has(Resolver.resolve(kanban, patch(off + ", \"done\": {\"onBoard\": false}}}")).violations(), "states: needs at least one state on the board")
+                        && Resolver.resolve(kanban, patch(off + "}}")).ok(), "");
         Map<String, Object> wontDo = patch("{\"states\": {\"no-go\": {\"name\": \"Won't Do\"}}}");
         Resolver.Upgrade d3 = Resolver.upgrade(scrum, next(scrum, "{\"states\": {\"no-go\": {\"name\": \"Abandoned\"}}}"), wontDo, empty);
         check("D3", "instance renames it: UPDATE of the same row, still off the board; a later template rename does not override it",
@@ -288,9 +298,13 @@ public class TemplateModelSpike {
         Resolver.Upgrade d7 = Resolver.upgrade(scrumWithout, gainsNoGo, ownNoGo, empty);
         check("D7", "instance had added its own no-go, then the template adds one: adopted, instance name wins; the template's onBoard=false is filled in and previewed",
                 d7.conflicts().isEmpty() && is(name(d7.effective(), "no-go"), "Abandoned")
-                        && has(d7.notes(), "states.no-go: template now defines it too; instance values win, template fills [onBoard]")
+                        && has(d7.notes(), "states.no-go: template now defines it too; instance values win over [name], template fills [onBoard]")
                         && Diff.projection(eff(scrumWithout, ownNoGo), d7.effective()).equals(List.of("UPDATE no-go on_board true -> false")),
                 d7);
+        Resolver.Upgrade d8 = Resolver.upgrade(scrumWithout, gainsNoGo, patch("{\"states\": {\"no-go\": {\"name\": \"Abandoned\", \"category\": \"DONE\", \"after\": \"done\"}}}"), empty);
+        check("D8", "instance had added its own no-go as DONE, then the template adds it as DISCONTINUED: upgrade refused, the categories disagree",
+                has(d8.conflicts(), "states.no-go.category: the instance added it as DONE, the template now defines it as DISCONTINUED")
+                        && has(d8.notes(), "instance values win over [category, name], template fills [onBoard]"), d8);
 
         // ---- template evolution: states (columns) --------------------
         section("template evolution: states");
@@ -426,6 +440,14 @@ public class TemplateModelSpike {
         List.copyOf(doc.keySet()).reversed().forEach(k -> out.put(k,
                 doc.get(k) instanceof Map<?, ?> m ? reversed(Json.obj(m)) : doc.get(k)));
         return out;
+    }
+
+    /** Upgrades {@code states} and its member-reversed copy; the result if both keep the board as {@code order} with no conflict and no pinned stateOrder, else null. */
+    static Resolver.Upgrade inPlace(Map<String, Object> from, Map<String, Object> to, String states, String order) {
+        Resolver.Upgrade u = Resolver.upgrade(from, to, patch("{\"states\": {" + states + "}}"), Map.of());
+        Resolver.Upgrade w = Resolver.upgrade(from, to, reversed(patch("{\"states\": {" + states + "}}")), Map.of());
+        boolean ok = u.conflicts().isEmpty() && w.conflicts().isEmpty() && u.delta().equals(w.delta()) && !u.delta().containsKey("stateOrder");
+        return ok && order(u.effective()).equals(patch("{\"o\": " + order + "}").get("o")) && order(w.effective()).equals(order(u.effective())) ? u : null;
     }
 
     static Map<String, Object> eff(Map<String, Object> template, Map<String, Object> delta) {
