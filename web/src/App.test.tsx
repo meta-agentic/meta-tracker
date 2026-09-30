@@ -484,4 +484,71 @@ describe("backlog tab", () => {
     expect(roots).toHaveLength(2);
     expect(parseFloat(canvas.style.height)).toBe(roots.length * 40);
   });
+
+  describe("after a single collapse near the end has held the viewport", () => {
+    // Two epics: a small one first, then one with thirty stories that runs to
+    // the end of the list, so collapsing it from near the end needs the spacer.
+    const bigEpic = { ...epicItemFixture, id: "epic-2", key: "VEC-5", rank: "b", title: "Big epic" };
+    const stories = Array.from({ length: 30 }, (_, n) =>
+      itemFixture({
+        id: `story-${n}`,
+        key: `VEC-${100 + n}`,
+        rank: `z${String(n).padStart(3, "0")}`,
+        title: `Story ${n}`,
+        fields: { parentId: "epic-2" },
+      }),
+    );
+
+    async function collapseBigEpicNearTheEnd() {
+      mount(
+        snapshotRecording([
+          epicItemFixture,
+          itemFixture({ fields: { parentId: "epic-1" } }),
+          bigEpic,
+          ...stories,
+        ]),
+      );
+      await screen.findByText("Wire the client");
+      fireEvent.click(screen.getByRole("button", { name: "Backlog" }));
+      fireEvent.click(screen.getByRole("button", { name: "Expand all" }));
+
+      const tree = screen.getByRole("tree");
+      // Make the big epic the active row, then scroll near the end and
+      // collapse it from the keyboard.
+      fireEvent.keyDown(tree, { key: "Home" });
+      fireEvent.keyDown(tree, { key: "ArrowDown" });
+      fireEvent.keyDown(tree, { key: "ArrowDown" });
+      expect(tree).toHaveAttribute("aria-activedescendant", "backlog-row-epic-2");
+      act(() => {
+        tree.scrollTop = 700;
+        fireEvent.scroll(tree);
+      });
+      fireEvent.keyDown(tree, { key: "ArrowLeft" });
+      const canvas = tree.firstElementChild as HTMLElement;
+      // The spacer holds the viewport's bottom for that one collapse.
+      expect(parseFloat(canvas.style.height)).toBe(700 + 600);
+      return { tree, canvas };
+    }
+
+    // Every root on screen: no spacer, and the rows fit the 600px viewport,
+    // so the browser's clamp brings the tree back to the top.
+    function expectRootsInView(tree: HTMLElement, canvas: HTMLElement) {
+      const roots = within(tree).getAllByRole("treeitem");
+      expect(roots).toHaveLength(2);
+      expect(parseFloat(canvas.style.height)).toBe(roots.length * 40);
+    }
+
+    it("does not carry the spacer into Collapse all", async () => {
+      const { tree, canvas } = await collapseBigEpicNearTheEnd();
+      fireEvent.click(screen.getByRole("button", { name: "Collapse all" }));
+      expectRootsInView(tree, canvas);
+    });
+
+    it("does not carry the spacer through Expand all into Collapse all", async () => {
+      const { tree, canvas } = await collapseBigEpicNearTheEnd();
+      fireEvent.click(screen.getByRole("button", { name: "Expand all" }));
+      fireEvent.click(screen.getByRole("button", { name: "Collapse all" }));
+      expectRootsInView(tree, canvas);
+    });
+  });
 });
