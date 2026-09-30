@@ -34,9 +34,9 @@ class StatusMappingTest {
             DEMO-1  | TO DO       | raw    | START_STATE |
             DEMO-2  | REFINED     | raw    | START_STATE |
             DEMO-3  | PLANNED     | raw    | START_STATE |
-            DEMO-4  | NO GO       | raw    | END_STATE   | DISCONTINUED
             DEMO-8  | IN PROGRESS | wiki   | IN_PROGRESS |
             DEMO-9  | IN REVIEW   | wiki   | IN_PROGRESS |
+            DEMO-4  | NO GO       | wiki   | END_STATE   | DISCONTINUED
             DEMO-11 | DONE        | output | END_STATE   | DELIVERED
             DEMO-13 | done        | output | END_STATE   | DELIVERED
             """)
@@ -57,7 +57,6 @@ class StatusMappingTest {
             DEMO-7  | ""      | raw    | START_STATE |           | 'status' is missing             | START_STATE
             DEMO-10 | REFINED | wiki   | IN_PROGRESS |           | status 'REFINED' belongs in raw/ | IN_PROGRESS
             DEMO-12 | TO DO   | output | END_STATE   | DELIVERED | status 'TO DO' belongs in raw/   | END_STATE/DELIVERED
-            DEMO-14 | NO GO   | output | END_STATE   | DELIVERED | status 'NO GO' belongs in raw/   | END_STATE/DELIVERED
             """)
     void unknownMissingOrContradictoryStatusIsPlacedByDirectoryAndReported(
             String key, String status, String tier, StatusCategory category, Outcome outcome, String reason,
@@ -72,6 +71,38 @@ class StatusMappingTest {
         assertTrue(problems.get(0).contains(reason), problems::toString);
         assertTrue(problems.get(0).endsWith("placed by its directory " + tier + "/ as " + placement),
                 problems::toString);
+    }
+
+    @ParameterizedTest(name = "NO GO misfiled in {1}/ -> END_STATE DISCONTINUED, reported")
+    @CsvSource(delimiter = '|', textBlock = """
+            DEMO-15 | raw
+            DEMO-14 | output
+            """)
+    void aMisfiledNoGoIsStillDiscontinuedAndReported(String key, String tier) {
+        SourceItem item = Fixtures.item(snapshot, key);
+
+        assertEquals("NO GO", item.status());
+        assertEquals(StatusCategory.END_STATE, item.category(), "an aborted item is never not started");
+        assertEquals(Outcome.DISCONTINUED, item.outcome(), "an aborted item is never delivered");
+        List<String> problems = Fixtures.problemsAbout(snapshot, tier + "/" + key + ".md");
+        assertEquals(List.of("vault/demo/" + tier + "/" + key + ".md: status 'NO GO' belongs in wiki/, so the item is "
+                + "misfiled; placed by its status as END_STATE/DISCONTINUED"), problems);
+    }
+
+    @Test
+    void noNoGoItemIsDeliveredOrNotStartedWhereverItIsFiled() {
+        List<SourceItem> noGo = snapshot.items().stream().filter(item -> item.status().equals("NO GO")).toList();
+
+        assertEquals(List.of("DEMO-4", "DEMO-14", "DEMO-15"), noGo.stream().map(SourceItem::key).toList());
+        noGo.forEach(item -> assertEquals(Outcome.DISCONTINUED, item.outcome(), item.origin()));
+    }
+
+    @Test
+    void onlyNoGoPlacesAnItemOutsideItsTier() {
+        for (VaultStatus status : VaultStatus.values()) {
+            assertEquals(status == VaultStatus.NO_GO, status.placesAnywhere(), status.label());
+        }
+        assertEquals(Tier.WIKI, VaultStatus.NO_GO.tier());
     }
 
     @Test
