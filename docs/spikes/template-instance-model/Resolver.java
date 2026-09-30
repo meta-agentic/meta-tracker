@@ -6,10 +6,12 @@
 //
 //     effective = normalise(mergePatch(template, delta))   then validated
 //
-// Everything the prototype decides is in this file:
+// Everything the prototype decides is in this file, except the validation of the effective
+// document, which is in Validation.java:
 //   - resolve():     read-time merge, order normalisation, validation
 //   - writeDelta():  what an instance edit must pass (resolution + occupancy)
 //   - upgrade():     re-pinning to a newer template version (the "evolution" operation)
+//   - fallback():    the state an unrecognised imported status lands in
 // The two views of a change, the reviewable override list and the board_column
 // statements it implies, are in Diff.java.
 
@@ -36,10 +38,6 @@ final class Resolver {
     /** Sections whose members are keyed elements, merged by key. */
     static final List<String> KEYED = List.of("states", "itemTypes", "fields");
 
-    /** DISCONTINUED: terminal, reached when work stopped without completion and has no viable path forward. */
-    static final Set<String> CATEGORIES = Set.of("NOT_STARTED", "IN_PROGRESS", "DONE", "DISCONTINUED");
-    static final Set<String> FIELD_TYPES = Set.of("number", "text", "date");
-    static final Set<String> SCALES = Set.of("fibonacci", "linear");
     static final Pattern KEY = Pattern.compile("[a-z][a-zA-Z0-9-]{0,31}");
 
     record Resolution(Map<String, Object> effective, List<String> violations) {
@@ -100,7 +98,7 @@ final class Resolver {
         doc.put("states", ordered);
         doc.put("stateOrder", order);
 
-        validate(doc, v);
+        Validation.validate(doc, v);
         return new Resolution(doc, v);
     }
 
@@ -215,73 +213,6 @@ final class Resolver {
         });
     }
 
-    static void validate(Map<String, Object> doc, List<String> v) {
-        Map<String, Object> states = Json.obj(doc.get("states"));
-        Set<String> categories = new LinkedHashSet<>();
-        states.forEach((k, x) -> {
-            Map<String, Object> st = Json.obj(x);
-            requireName("states." + k, st, v);
-            Object cat = st.get("category");
-            if (!in(CATEGORIES, cat)) {
-                v.add("states." + k + ".category: must be one of " + CATEGORIES + ", was " + Json.compact(cat));
-            }
-            categories.add(String.valueOf(cat));
-            for (String anchor : List.of("after", "before")) {
-                if (st.containsKey(anchor) && !(st.get(anchor) instanceof String)) {
-                    v.add("states." + k + "." + anchor + ": must be a state key");
-                }
-            }
-            if (st.containsKey("onBoard") && !(st.get("onBoard") instanceof Boolean)) {
-                v.add("states." + k + ".onBoard: must be true or false");
-            }
-            Object wip = st.get("wipLimit");
-            if (wip != null && !(wip instanceof Long n && n > 0)) {
-                v.add("states." + k + ".wipLimit: must be a positive integer");
-            }
-            for (String from : Json.strings(st.get("enterFrom"))) {
-                if (!states.containsKey(from)) {
-                    v.add("states." + k + ".enterFrom: references unknown state '" + from + "'");
-                }
-            }
-        });
-        if (!categories.contains("NOT_STARTED") || !categories.contains("DONE")) {
-            v.add("states: needs at least one NOT_STARTED and one DONE state");
-        }
-        if (states.values().stream().allMatch(x -> Boolean.FALSE.equals(Json.obj(x).get("onBoard")))) {
-            v.add("states: needs at least one state on the board");
-        }
-        Map<String, Object> types = Json.obj(doc.get("itemTypes"));
-        if (types.isEmpty()) {
-            v.add("itemTypes: needs at least one item type");
-        }
-        types.forEach((k, x) -> requireName("itemTypes." + k, Json.obj(x), v));
-        Json.obj(doc.get("fields")).forEach((k, x) -> {
-            Map<String, Object> f = Json.obj(x);
-            requireName("fields." + k, f, v);
-            if (!in(FIELD_TYPES, f.get("type"))) {
-                v.add("fields." + k + ".type: must be one of " + FIELD_TYPES);
-            }
-            if (f.containsKey("scale") && !("number".equals(f.get("type")) && in(SCALES, f.get("scale")))) {
-                v.add("fields." + k + ".scale: must be one of " + SCALES + " on a number field");
-            }
-        });
-        Object def = Json.obj(doc.get("settings")).get("defaultItemType");
-        if (!types.containsKey(def)) {
-            v.add("settings.defaultItemType: references unknown item type " + Json.compact(def));
-        }
-    }
-
-    /** Set.of rejects a null probe; a missing value is simply not a member. */
-    private static boolean in(Set<String> allowed, Object value) {
-        return value != null && allowed.contains(value);
-    }
-
-    private static void requireName(String path, Map<String, Object> el, List<String> v) {
-        if (!(el.get("name") instanceof String n) || n.isBlank()) {
-            v.add(path + ".name: required");
-        }
-    }
-
     // ---- writes -------------------------------------------------------
 
     /**
@@ -329,8 +260,8 @@ final class Resolver {
      *   - a tombstone for an element the new version also removed is dropped as redundant;
      *   - an instance-added key the new version now also defines is adopted: kept as an
      *     override, so the instance's values win and the template fills the rest; the note
-     *     names both. A state whose category disagrees is refused instead: the category is
-     *     what reaching the state means, and adopting it would silently change that;
+     *     names both. A state whose category or outcome disagrees is refused instead: they
+     *     are what reaching the state means, and adopting it would silently change that;
      *   - a state anchored to a state the new version removed is re-anchored in place;
      *   - removed states are dropped from an overridden stateOrder.
      * Anything else (additions, renames, reorders) is inherited by re-resolving. States are
@@ -374,10 +305,9 @@ final class Resolver {
                     notes.add(s + "." + k + ": template now defines it too; instance values win"
                             + (differ.isEmpty() ? "" : " over " + differ)
                             + (filled.isEmpty() ? "" : ", template fills " + filled));
-                    if (s.equals("states") && differ.contains("category")) {
-                        refused.add(s + "." + k + ".category: the instance added it as " + mine.get("category")
-                                + ", the template now defines it as " + theirs.get("category")
-                                + "; align the category, or empty and remove the state, before upgrading");
+                    if (s.equals("states") && (differ.contains("category") || differ.contains("outcome"))) {
+                        refused.add(s + "." + k + ": the instance added it as " + kind(mine) + ", the template now defines it as "
+                                + kind(theirs) + "; align its category and outcome, or empty and remove the state, before upgrading");
                     }
                 }
             }
@@ -422,6 +352,27 @@ final class Resolver {
             conflicts.addAll(checkRemovals(was, r.effective(), occupancy));
         }
         return new Upgrade(d, r.effective(), notes, conflicts);
+    }
+
+    /** A state's category, with its outcome when it has one: "END_STATE (DELIVERED)". */
+    private static String kind(Map<String, Object> state) {
+        return state.get("category") + (state.get("outcome") == null ? "" : " (" + state.get("outcome") + ")");
+    }
+
+    /**
+     * Where an imported item whose status the import does not recognise lands: the first
+     * state, in effective order, with the item's category and, for an END_STATE, its outcome.
+     * Null when the workspace has no such state; the import then refuses the item.
+     */
+    static String fallback(Map<String, Object> effective, String category, String outcome) {
+        Map<String, Object> states = Json.obj(effective.get("states"));
+        for (String k : Json.strings(effective.get("stateOrder"))) {
+            Map<String, Object> st = Json.obj(states.get(k));
+            if (category.equals(st.get("category")) && (!"END_STATE".equals(category) || Objects.equals(outcome, st.get("outcome")))) {
+                return k;
+            }
+        }
+        return null;
     }
 
     /** The state a state is anchored to, by "after" or "before", or null. */

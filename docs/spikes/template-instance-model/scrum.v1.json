@@ -3,12 +3,17 @@
   "version": 1,
   "name": "Scrum",
   "states": {
-    "backlog": {"name": "Backlog", "category": "NOT_STARTED"},
-    "todo": {"name": "To Do", "category": "NOT_STARTED"},
+    "backlog": {"name": "Backlog", "category": "START_STATE"},
+    "todo": {"name": "To Do", "category": "START_STATE"},
     "in-progress": {"name": "In Progress", "category": "IN_PROGRESS"},
     "in-review": {"name": "In Review", "category": "IN_PROGRESS"},
-    "done": {"name": "Done", "category": "DONE"},
-    "no-go": {"name": "No Go", "category": "DISCONTINUED", "onBoard": false}
+    "done": {"name": "Done", "category": "END_STATE", "outcome": "DELIVERED"},
+    "no-go": {
+      "name": "No Go",
+      "category": "END_STATE",
+      "outcome": "DISCONTINUED",
+      "onBoard": false
+    }
   },
   "stateOrder": ["backlog", "todo", "in-progress", "in-review", "done", "no-go"],
   "itemTypes": {

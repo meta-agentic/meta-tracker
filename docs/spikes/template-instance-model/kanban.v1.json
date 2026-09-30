@@ -3,10 +3,15 @@
   "version": 1,
   "name": "Kanban",
   "states": {
-    "todo": {"name": "To Do", "category": "NOT_STARTED"},
+    "todo": {"name": "To Do", "category": "START_STATE"},
     "in-progress": {"name": "In Progress", "category": "IN_PROGRESS", "wipLimit": 5},
-    "done": {"name": "Done", "category": "DONE"},
-    "no-go": {"name": "No Go", "category": "DISCONTINUED", "onBoard": false}
+    "done": {"name": "Done", "category": "END_STATE", "outcome": "DELIVERED"},
+    "no-go": {
+      "name": "No Go",
+      "category": "END_STATE",
+      "outcome": "DISCONTINUED",
+      "onBoard": false
+    }
   },
   "stateOrder": ["todo", "in-progress", "done", "no-go"],
   "itemTypes": {
