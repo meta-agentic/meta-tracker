@@ -118,8 +118,8 @@ final class EntryMapper {
      * Otherwise the directory wins, category and outcome alike, and the reason is reported:
      * an item in {@code output/} without a status of its own is taken as delivered. The
      * exception is {@code NO GO}, which places the item wherever it is filed, as ended and
-     * discontinued, because an aborted item is never delivered or not started; a misfiled
-     * one is still reported.
+     * discontinued, because an aborted item is never delivered or not started. It belongs in
+     * {@code raw/} or {@code wiki/}; one filed in {@code output/} is still reported as misfiled.
      */
     private static Optional<VaultStatus> placed(String status, Tier tier, String origin, Consumer<String> problems) {
         String byDirectory = "; placed by its directory " + tier.directory() + "/ as " + tier.placement();
@@ -132,14 +132,14 @@ final class EntryMapper {
             problems.accept(origin + ": unknown status " + Text.quote(status) + byDirectory);
             return Optional.empty();
         }
-        if (known.get().tier() != tier && known.get().placesAnywhere()) {
-            problems.accept(origin + ": status " + Text.quote(status) + " belongs in " + known.get().tier().directory()
-                    + "/, so the item is misfiled; placed by its status as " + known.get().placement());
+        if (!known.get().belongsIn(tier) && known.get().placesAnywhere()) {
+            problems.accept(origin + ": status " + Text.quote(status) + " belongs in " + known.get().homes()
+                    + ", so the item is misfiled; placed by its status as " + known.get().placement());
             return known;
         }
-        if (known.get().tier() != tier) {
-            problems.accept(origin + ": status " + Text.quote(status) + " belongs in " + known.get().tier().directory()
-                    + "/, contradicting its directory" + byDirectory);
+        if (!known.get().belongsIn(tier)) {
+            problems.accept(origin + ": status " + Text.quote(status) + " belongs in " + known.get().homes()
+                    + ", contradicting its directory" + byDirectory);
             return Optional.empty();
         }
         return known;
