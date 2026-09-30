@@ -17,6 +17,7 @@ import {
   workspaceFixture,
   type Recording,
 } from "./test/recordedTransport";
+import { giveElementSize } from "./test/layout";
 
 /**
  * The application's side of VEC-42: the four states the synthetic path never
@@ -67,6 +68,10 @@ async function warmCache() {
 beforeEach(async () => {
   localStorage.clear();
   workspaceStore.getState().reset();
+  // The open tab and the expanded rows persist across reloads, so they would
+  // also leak across tests.
+  workspaceStore.getState().setActiveTab("boards");
+  workspaceStore.getState().setTreeExpanded([]);
   await clearPersistedWorkspace();
 });
 
@@ -388,5 +393,68 @@ describe("board cards and the item detail panel", () => {
     });
 
     expect(await screen.findByText("No boards yet")).toBeInTheDocument();
+  });
+});
+
+describe("backlog tab", () => {
+  giveElementSize("backlog-scroll", { width: 800, height: 600 });
+
+  it("shows the backlog as a tree of epics over their stories", async () => {
+    mount({
+      ...snapshotRecording([
+        epicItemFixture,
+        itemFixture({ fields: { parentId: "epic-1" } }),
+        itemFixture({ id: "item-2", key: "VEC-3", rank: "n", title: "No epic yet" }),
+      ]),
+    });
+    await screen.findByText("Wire the client");
+
+    fireEvent.click(screen.getByRole("button", { name: "Backlog" }));
+
+    const tree = screen.getByRole("tree", { name: "Backlog of Delivery" });
+    const epicRow = within(tree).getByRole("treeitem", { name: /Client shell/ });
+    expect(epicRow).toHaveAttribute("aria-expanded", "false");
+    expect(within(tree).getByRole("treeitem", { name: /No epic yet/ })).toBeInTheDocument();
+    expect(within(tree).queryByText("Wire the client")).not.toBeInTheDocument();
+
+    fireEvent.click(epicRow);
+    expect(epicRow).toHaveAttribute("aria-expanded", "true");
+    expect(within(tree).getByText("Wire the client")).toBeInTheDocument();
+    expect(workspaceStore.getState().activeTab).toBe("backlog");
+  });
+
+  it("opens an item in the detail sheet and returns focus to its row", async () => {
+    mount(
+      snapshotRecording([
+        epicItemFixture,
+        itemFixture({ fields: { parentId: "epic-1", description: "Render the board from the store." } }),
+      ]),
+    );
+    await screen.findByText("Wire the client");
+    fireEvent.click(screen.getByRole("button", { name: "Backlog" }));
+
+    const tree = screen.getByRole("tree");
+    fireEvent.click(within(tree).getByRole("treeitem", { name: /Client shell/ }));
+    const storyRow = within(tree).getByRole("treeitem", { name: /Wire the client/ });
+    expect(storyRow).toHaveAttribute("aria-haspopup", "dialog");
+
+    // From the keyboard: the story is the active row, Enter opens it.
+    fireEvent.keyDown(tree, { key: "ArrowDown" });
+    expect(tree).toHaveAttribute("aria-activedescendant", storyRow.id);
+    fireEvent.keyDown(tree, { key: "Enter" });
+
+    const dialog = screen.getByRole("dialog", { name: "Wire the client" });
+    expect(dialog).toHaveTextContent("Render the board from the store.");
+    expect(within(dialog).getByRole("button", { name: "Close" })).toHaveFocus();
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    // Back on the tree, with the row that opened the sheet still the active one.
+    expect(tree).toHaveFocus();
+    expect(tree).toHaveAttribute("aria-activedescendant", storyRow.id);
+
+    // A click opens it too.
+    fireEvent.click(storyRow);
+    expect(screen.getByRole("dialog", { name: "Wire the client" })).toBeInTheDocument();
   });
 });
