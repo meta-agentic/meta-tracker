@@ -6,25 +6,19 @@ package io.vectis.extension.spi;
  * vocabulary — the fallback an importer uses to place an item whose verbatim status
  * it does not recognise.
  *
- * <p>It mirrors the status categories most trackers expose, with two additions.
- * {@link #REFINED} is a not-started item that has been refined and is ready to be
- * pulled, normally in the next sprint; keeping it apart from {@link #NOT_STARTED}
- * lets a board show refined work in its own column instead of mixing it into the
- * raw backlog. {@link #DISCONTINUED} is a second end state beside {@link #DONE}:
- * work that stopped without being completed. A source without such notions simply
- * never reports them.</p>
+ * <p>It mirrors the status categories most trackers expose, with one addition:
+ * {@link #DISCONTINUED}, a second end state beside {@link #DONE} for work that stopped
+ * without being completed. A source without that notion simply never reports it.</p>
  */
 public enum StatusCategory {
 
-    /** Not started and not yet ready to pull. */
-    NOT_STARTED,
-
     /**
-     * Not started, but refined and ready to pull. A consumer whose model has no refined
-     * category folds this to {@link #NOT_STARTED}, and should prefer the verbatim source
-     * status when it can map that more precisely.
+     * Not started. This spans raw, planned and refined items, where refined means curated
+     * well enough to be ready to work. Sources tell these apart by their verbatim status,
+     * not by category, and an importer maps a verbatim status such as {@code REFINED} to a
+     * specific state of its own.
      */
-    REFINED,
+    NOT_STARTED,
 
     /** Being worked on or reviewed. */
     IN_PROGRESS,
