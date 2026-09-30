@@ -169,3 +169,30 @@ export function LinkIcon(props: IconProps) {
     </Icon>
   );
 }
+
+/** Nested rows: the backlog tab. */
+export function TreeIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M2.5 3.5h9" />
+      <path d="M4.5 6v6.5H7M4.5 8.5H7" />
+      <path d="M9.5 8.5h4M9.5 12.5h4" />
+    </Icon>
+  );
+}
+
+export function ChevronIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m6 3.5 4.5 4.5L6 12.5" />
+    </Icon>
+  );
+}
+
+export function ListIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M3 4.5h10M3 8h10M3 11.5h6" />
+    </Icon>
+  );
+}

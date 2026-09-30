@@ -13,6 +13,7 @@
   "app.errorHint": "Verifica che l'API sia raggiungibile e che la chiave dello spazio di lavoro sia corretta.",
 
   "nav.boards": "Bacheche",
+  "nav.backlog": "Backlog",
   "nav.timeline": "Profilatore cronologia",
   "nav.label": "Principale",
 
@@ -94,5 +95,17 @@
   "profiler.axis.horizontal": "orizzontale",
   "profiler.axis.diagonal": "diagonale",
 
-  "timeline.axisLabel": "Asse dei giorni della cronologia"
+  "timeline.axisLabel": "Asse dei giorni della cronologia",
+
+  "backlog.treeLabel": "Backlog di {{board}}",
+  "backlog.expandAll": "Espandi tutto",
+  "backlog.collapseAll": "Comprimi tutto",
+  "backlog.childCount_one": "{{items}} elemento in questa epica",
+  "backlog.childCount_many": "{{items}} elementi in questa epica",
+  "backlog.childCount_other": "{{items}} elementi in questa epica",
+  "backlog.points_one": "{{points}} story point",
+  "backlog.points_many": "{{points}} story point",
+  "backlog.points_other": "{{points}} story point",
+  "backlog.empty.title": "Ancora niente su questa bacheca",
+  "backlog.empty.body": "Gli elementi collocati su questa bacheca compaiono qui, raggruppati sotto le loro epiche."
 }

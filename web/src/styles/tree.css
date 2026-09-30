@@ -1,0 +1,154 @@
+/*
+ * The backlog tab: its toolbar and the tree. Colour from `tokens.css` only.
+ */
+
+.vec-backlog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 20px 24px;
+}
+
+.vec-backlog__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ---------- Tree ---------- */
+
+.vec-tree {
+  position: relative;
+  /* The viewport the virtualizer windows over: the window, less the shell above. */
+  height: max(320px, calc(100dvh - 232px));
+  overflow: auto;
+  border: 1px solid var(--vec-border);
+  border-radius: 12px;
+  background: var(--vec-surface);
+  box-shadow: var(--vec-shadow-sm);
+  contain: strict;
+}
+
+.vec-tree__canvas {
+  position: relative;
+}
+
+.vec-tree__row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 0 calc(8px + var(--vec-tree-depth, 0) * 24px);
+  border-bottom: 1px solid var(--vec-border);
+  font-size: 13px;
+  color: var(--vec-text);
+}
+
+.vec-tree__row[data-actionable="true"] {
+  cursor: pointer;
+}
+
+.vec-tree__row[data-actionable="true"]:hover {
+  background: var(--vec-surface-hover);
+}
+
+/* The active row is only marked while the tree has focus: unfocused, the first
+   row would otherwise always look chosen. accent-text for the bar, as in the
+   nav, so it holds contrast on both surfaces. */
+.vec-tree:focus .vec-tree__row[aria-selected="true"] {
+  background: var(--vec-accent-soft);
+  box-shadow: inset 2px 0 0 var(--vec-accent-text);
+}
+
+.vec-tree__row > * {
+  flex: none;
+}
+
+.vec-tree__chevron {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: var(--vec-text-muted);
+  transition: transform 120ms ease;
+}
+
+.vec-tree__chevron[data-open="true"] {
+  transform: rotate(90deg);
+}
+
+.vec-tree__swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.vec-tree__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vec-tree__row--epic .vec-tree__title {
+  font-weight: 600;
+}
+
+.vec-tree__count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--vec-text-muted);
+}
+
+.vec-tree__row > .vec-tree__status {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- Loading ---------- */
+
+.vec-tree--skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: auto;
+  margin: 12px 20px 24px;
+  padding: 14px 12px;
+  contain: none;
+}
+
+.vec-skeleton--row {
+  width: min(60%, 420px);
+  height: 14px;
+}
+
+/* ---------- Narrow widths ---------- */
+
+@media (max-width: 720px) {
+  .vec-backlog {
+    padding: 12px 16px 24px;
+  }
+
+  /* The top bar wraps to two rows here, and the board bar to two lines. */
+  .vec-tree {
+    height: max(320px, calc(100dvh - 300px));
+  }
+
+  /* The title needs the width more. The status is one tap away, in the sheet. */
+  .vec-tree__row > .vec-tree__status {
+    display: none;
+  }
+
+  .vec-tree--skeleton {
+    margin: 12px 16px 24px;
+  }
+}

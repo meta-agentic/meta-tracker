@@ -55,6 +55,30 @@ export function LoadingBoard() {
   );
 }
 
+const SKELETON_TREE_ROWS = [0, 1, 1, 0, 1, 0];
+
+/** The backlog tab's cold load: the same reasoning as `LoadingBoard`, in the tree's shape. */
+export function LoadingTree() {
+  const { t } = useTranslation();
+  return (
+    <div className="vec-loading" role="status" aria-live="polite">
+      <p className="vec-loading__caption">
+        <span className="vec-spinner" aria-hidden="true" />
+        {t("app.loading")}
+      </p>
+      <div className="vec-tree vec-tree--skeleton" aria-hidden="true">
+        {SKELETON_TREE_ROWS.map((depth, row) => (
+          <div
+            key={row}
+            className="vec-skeleton vec-skeleton--row"
+            style={{ marginLeft: 12 + depth * 24 }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** The no-cache failure: there is nothing to show, so this is the whole tab. */
 export function ErrorState({ sync }: { sync: WorkspaceSync }) {
   const { t } = useTranslation();

@@ -9,21 +9,21 @@ import {
 import type { ID } from "./store/types";
 import { BoardSwitcher } from "./components/BoardSwitcher";
 import { BoardView } from "./components/BoardView";
+import { BacklogTree, type BacklogTreeHandle } from "./components/BacklogTree";
 import { IssueDetail } from "./components/IssueDetail";
 import { PreferenceControls } from "./components/PreferenceControls";
-import { BoardIcon, InboxIcon, LogoMark, TimelineIcon } from "./components/icons";
+import { BoardIcon, InboxIcon, LogoMark, TimelineIcon, TreeIcon } from "./components/icons";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import {
   BoardCrash,
   EmptyState,
   ErrorState,
   LoadingBoard,
+  LoadingTree,
   StaleBanner,
   SyncIndicator,
 } from "./components/states";
 import { ProfilingHarness } from "./profiling/ProfilingHarness";
-
-type Tab = "boards" | "timeline";
 
 export interface AppProps {
   /**
@@ -116,11 +116,110 @@ function BoardsTab({ sync }: { sync: WorkspaceSync }) {
   );
 }
 
+function BacklogTab({ sync }: { sync: WorkspaceSync }) {
+  const { t } = useTranslation();
+  const activeBoardId = useWorkspaceStore((s) => s.activeBoardId);
+  const hasBoards = useWorkspaceStore((s) => Object.keys(s.boardsById).length > 0);
+  const boardIssueIds = useWorkspaceStore((s) => s.boardIssueIds);
+  const issuesById = useWorkspaceStore((s) => s.issuesById);
+  const epicsById = useWorkspaceStore((s) => s.epicsById);
+  const treeExpanded = useWorkspaceStore((s) => s.treeExpanded);
+  const setTreeExpanded = useWorkspaceStore((s) => s.setTreeExpanded);
+  const treeRef = useRef<BacklogTreeHandle>(null);
+  const [openIssueId, setOpenIssueId] = useState<ID | null>(null);
+  const openIssueIdRef = useRef<ID | null>(null);
+  const returnToRef = useRef<ID | null>(null);
+
+  const showIssue = useCallback((issueId: ID | null) => {
+    openIssueIdRef.current = issueId;
+    setOpenIssueId(issueId);
+  }, []);
+
+  const closeIssue = useCallback(() => {
+    // Back to the row of the item last shown — after following a link, that is
+    // a different row from the one that opened the sheet, if the tree shows it.
+    returnToRef.current = openIssueIdRef.current;
+    showIssue(null);
+  }, [showIssue]);
+
+  // After the commit that unmounts the sheet, or its focus handling would win.
+  useEffect(() => {
+    if (openIssueId !== null) return;
+    const target = returnToRef.current;
+    returnToRef.current = null;
+    if (target !== null) treeRef.current?.focusRow(target);
+  }, [openIssueId]);
+
+  // Same gating as the board, for the same reason: an empty tree while loading
+  // would read as a workspace with no backlog.
+  if (sync.status === "loading") return <LoadingTree />;
+  if (sync.status === "error") return <ErrorState sync={sync} />;
+
+  if (!hasBoards) {
+    return (
+      <EmptyState
+        icon={<InboxIcon size={22} />}
+        title={t("board.noBoards.title")}
+        body={t("board.noBoards.body")}
+      />
+    );
+  }
+
+  // The epics with a story on this board — every row here that can expand.
+  // Both buttons touch only these, so another board's tree keeps its state.
+  const boardEpics = () => {
+    const ids = new Set<string>();
+    for (const id of activeBoardId ? (boardIssueIds[activeBoardId] ?? []) : []) {
+      const epicId = issuesById[id]?.epicId;
+      if (epicId && epicsById[epicId]) ids.add(epicId);
+    }
+    return ids;
+  };
+  const expandAll = () => setTreeExpanded([...treeExpanded, ...boardEpics()]);
+  const collapseAll = () => {
+    const here = boardEpics();
+    setTreeExpanded(treeExpanded.filter((id) => !here.has(id)));
+  };
+
+  return (
+    <>
+      {sync.status === "stale" && <StaleBanner sync={sync} />}
+      <BoardSwitcher />
+      {activeBoardId ? (
+        <div className="vec-backlog">
+          <div className="vec-backlog__toolbar">
+            <button type="button" className="vec-button" onClick={expandAll}>
+              {t("backlog.expandAll")}
+            </button>
+            <button type="button" className="vec-button" onClick={collapseAll}>
+              {t("backlog.collapseAll")}
+            </button>
+          </div>
+          {/* Keyed on the board for the same reason as the board view: the
+              active row and the scroll position belong to one board. */}
+          <BacklogTree
+            key={activeBoardId}
+            ref={treeRef}
+            boardId={activeBoardId}
+            onOpenIssue={showIssue}
+          />
+        </div>
+      ) : (
+        <p className="vec-muted-note">{t("board.empty")}</p>
+      )}
+      {openIssueId && (
+        <IssueDetail issueId={openIssueId} onClose={closeIssue} onNavigate={showIssue} />
+      )}
+    </>
+  );
+}
+
 export function App({ sync: syncOptions }: AppProps = {}) {
   const { t } = useTranslation();
   const sync = useWorkspaceSync(syncOptions);
   const workspace = useWorkspaceStore((s) => s.workspace);
-  const [tab, setTab] = useState<Tab>("boards");
+  const tab = useWorkspaceStore((s) => s.activeTab);
+  const setTab = useWorkspaceStore((s) => s.setActiveTab);
 
   useEffect(() => {
     const product = t("app.title");
@@ -163,6 +262,15 @@ export function App({ sync: syncOptions }: AppProps = {}) {
           <button
             type="button"
             className="vec-nav__item"
+            aria-current={tab === "backlog" ? "page" : undefined}
+            onClick={() => setTab("backlog")}
+          >
+            <TreeIcon />
+            {t("nav.backlog")}
+          </button>
+          <button
+            type="button"
+            className="vec-nav__item"
             aria-current={tab === "timeline" ? "page" : undefined}
             onClick={() => setTab("timeline")}
           >
@@ -178,9 +286,11 @@ export function App({ sync: syncOptions }: AppProps = {}) {
       </header>
 
       <main id="vec-main" className="vec-main" tabIndex={-1}>
+        {tab === "boards" && <BoardsTab sync={sync} />}
+        {tab === "backlog" && <BacklogTab sync={sync} />}
         {/* The profiler generates its own data and is deliberately not gated on
             the sync state: it must run with no server listening. */}
-        {tab === "boards" ? <BoardsTab sync={sync} /> : <ProfilingHarness />}
+        {tab === "timeline" && <ProfilingHarness />}
       </main>
     </div>
   );

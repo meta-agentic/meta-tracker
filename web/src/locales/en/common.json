@@ -13,6 +13,7 @@
   "app.errorHint": "Check that the API is reachable and that the workspace key is correct.",
 
   "nav.boards": "Boards",
+  "nav.backlog": "Backlog",
   "nav.timeline": "Timeline profiler",
   "nav.label": "Main",
 
@@ -93,5 +94,15 @@
   "profiler.axis.horizontal": "horizontal",
   "profiler.axis.diagonal": "diagonal",
 
-  "timeline.axisLabel": "Timeline day axis"
+  "timeline.axisLabel": "Timeline day axis",
+
+  "backlog.treeLabel": "Backlog of {{board}}",
+  "backlog.expandAll": "Expand all",
+  "backlog.collapseAll": "Collapse all",
+  "backlog.childCount_one": "{{items}} item under this epic",
+  "backlog.childCount_other": "{{items}} items under this epic",
+  "backlog.points_one": "{{points}} story point",
+  "backlog.points_other": "{{points}} story points",
+  "backlog.empty.title": "Nothing on this board yet",
+  "backlog.empty.body": "Items placed on this board appear here, grouped under their epics."
 }

@@ -7,6 +7,7 @@ import {
 } from "./cache";
 import { createPreferencesSlice, type PreferencesState } from "./preferences";
 import { dict } from "./dict";
+import { createNavigationSlice, type NavigationState } from "./navigation";
 import type {
   Board,
   Epic,
@@ -30,7 +31,7 @@ const ACTIVE_BOARD_KEY = "ui:activeBoardId";
  * denormalized index (board -> ordered issue ids) so a board's column layout is
  * assembled without scanning every issue.
  */
-export interface WorkspaceState extends PreferencesState {
+export interface WorkspaceState extends PreferencesState, NavigationState {
   workspace: WorkspaceInfo | null;
   issuesById: Record<ID, Issue>;
   epicsById: Record<ID, Epic>;
@@ -100,6 +101,7 @@ export function createWorkspaceStore(
       // Read synchronously at construction, not in `hydrate()`: the theme has to
       // be right on the first render, and `hydrate()` is async.
       ...createPreferencesSlice(set),
+      ...createNavigationSlice(set, get),
       activeBoardId: null,
       hydrated: false,
 
