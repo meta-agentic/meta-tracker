@@ -117,7 +117,8 @@ export function createWorkspaceStore(
       upsertIssue: (issue) => {
         const state = get();
         const existing = state.issuesById[issue.id];
-        const issuesById = dict({ ...state.issuesById, [issue.id]: issue });
+        const issuesById = dict(state.issuesById);
+        issuesById[issue.id] = issue;
         let boardIssueIds = state.boardIssueIds;
         if (!existing || existing.boardId !== issue.boardId) {
           boardIssueIds = dict(boardIssueIds);
@@ -138,12 +139,11 @@ export function createWorkspaceStore(
       moveIssue: (issueId, columnId, order) => {
         const existing = get().issuesById[issueId];
         if (!existing) return;
-        set((state) => ({
-          issuesById: dict({
-            ...state.issuesById,
-            [issueId]: { ...existing, columnId, order },
-          }),
-        }));
+        set((state) => {
+          const issuesById = dict(state.issuesById);
+          issuesById[issueId] = { ...existing, columnId, order };
+          return { issuesById };
+        });
         schedulePersist();
       },
 
