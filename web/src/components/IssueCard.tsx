@@ -128,8 +128,8 @@ export const IssueCard = memo(function IssueCard({ issue, epic, onOpen }: IssueC
       {hasMeta && (
         <span className="vec-card__meta">
           {epic && <EpicChip epic={epic} />}
-          {shownLabels.map((label) => (
-            <span key={label} className="vec-chip" title={label}>
+          {shownLabels.map((label, index) => (
+            <span key={`${index}:${label}`} className="vec-chip" title={label}>
               <span className="vec-chip__text">{label}</span>
             </span>
           ))}

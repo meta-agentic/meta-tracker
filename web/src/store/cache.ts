@@ -64,16 +64,21 @@ export class IndexedDbCache implements AsyncCache {
   }
 }
 
-/** In-memory cache — used in tests and as a fallback when IndexedDB is absent. */
+/**
+ * In-memory cache — used in tests and as a fallback when IndexedDB is absent.
+ * Values are structured-cloned in and out, as IndexedDB does, so what comes
+ * back is a copy with the same shape a real reload would see.
+ */
 export class MemoryCache implements AsyncCache {
   private readonly map = new Map<string, unknown>();
 
   async get<T>(key: string): Promise<T | undefined> {
-    return this.map.get(key) as T | undefined;
+    const value = this.map.get(key);
+    return value === undefined ? undefined : (structuredClone(value) as T);
   }
 
   async set<T>(key: string, value: T): Promise<void> {
-    this.map.set(key, value);
+    this.map.set(key, structuredClone(value));
   }
 
   async delete(key: string): Promise<void> {

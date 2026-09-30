@@ -196,7 +196,8 @@
 .vec-card__meta {
   display: flex;
   align-items: center;
-  gap: 6px;
+  /* Tighter than the chips elsewhere, so the default data fits a column whole. */
+  gap: 4px;
   min-width: 0;
   overflow: hidden;
 }
@@ -205,6 +206,7 @@
   flex: 1 1 0;
   min-width: 0;
   max-width: max-content;
+  padding: 1px 6px;
 }
 
 /* Capped on the text, so the chip's own max-content is the capped width. */
