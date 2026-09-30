@@ -106,13 +106,16 @@ export function createWorkspaceStore(
       hydrated: false,
 
       ingestSnapshot: (snapshot) => {
+        const epicsById = indexById(snapshot.epics);
         set({
           workspace: snapshot.workspace ?? null,
           issuesById: indexById(snapshot.issues),
-          epicsById: indexById(snapshot.epics),
+          epicsById,
           boardsById: indexById(snapshot.boards),
           boardIssueIds: buildBoardIssueIndex(snapshot.issues),
         });
+        // Only epics expand today; an id that names no epic expands nothing.
+        get().retainTreeRows((id) => Object.hasOwn(epicsById, id));
         schedulePersist();
       },
 

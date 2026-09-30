@@ -178,6 +178,7 @@ function BacklogTab({ sync }: { sync: WorkspaceSync }) {
   const expandAll = () => setTreeExpanded([...treeExpanded, ...boardEpics()]);
   const collapseAll = () => {
     const here = boardEpics();
+    treeRef.current?.holdViewport();
     setTreeExpanded(treeExpanded.filter((id) => !here.has(id)));
   };
 
@@ -221,13 +222,24 @@ export function App({ sync: syncOptions }: AppProps = {}) {
   const tab = useWorkspaceStore((s) => s.activeTab);
   const setTab = useWorkspaceStore((s) => s.setActiveTab);
 
+  const navRef = useRef<HTMLElement>(null);
+  // On a narrow window the nav scrolls sideways; keep the open tab in view,
+  // including after a reload restores one at the far end.
+  useEffect(() => {
+    navRef.current
+      ?.querySelector<HTMLElement>('[aria-current="page"]')
+      ?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [tab]);
+
   useEffect(() => {
     const product = t("app.title");
     document.title = workspace ? `${workspace.name} · ${product}` : product;
   }, [workspace, t]);
 
   return (
-    <div className="vec-app">
+    // The backlog fills the window and scrolls inside its tree; the other tabs
+    // scroll the page.
+    <div className={tab === "backlog" ? "vec-app vec-app--fill" : "vec-app"}>
       <a className="vec-skip" href="#vec-main">
         {t("app.skipToContent")}
       </a>
@@ -249,7 +261,7 @@ export function App({ sync: syncOptions }: AppProps = {}) {
           )}
         </div>
 
-        <nav className="vec-nav" aria-label={t("nav.label")}>
+        <nav ref={navRef} className="vec-nav" aria-label={t("nav.label")}>
           <button
             type="button"
             className="vec-nav__item"
