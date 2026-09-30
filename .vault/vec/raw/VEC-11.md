@@ -19,7 +19,7 @@ dependencies:
 
 ## Description
 
-As a Product Owner, I want to modify our project display tag (e.g., IOS to SPACE) from the administration page, So that our task identifiers stay aligned with changing brand guidelines without breaking cross-card dependencies.
+As a Product Owner, I want to modify our project display tag (e.g., PROJ to SPACE) from the administration page, So that our task identifiers stay aligned with changing brand guidelines without breaking cross-card dependencies.
 
 **Acceptance Criteria**
 

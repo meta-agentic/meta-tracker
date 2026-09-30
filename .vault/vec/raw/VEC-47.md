@@ -18,24 +18,13 @@ labels:
 
 ## Description
 
-Give Vectis one adapter contract that any backlog can be read and written through, and
-implement the estate's own three-layer memory system (the vault) as the reference adapter,
-so that pointing Vectis at a meta-os instance wires up every backlog that instance knows
-about — without a per-source integration each time.
+Give Vectis one adapter contract that any backlog can be read and written through, and implement the vault — the three-layer, file-based backlog format this repository itself ships in `.vault/` — as the reference adapter, so that pointing Vectis at a meta-os instance wires up every backlog that instance knows about, without a per-source integration each time.
 
 ## Why this exists
 
-Since the estate left Jira (ADR-MOS-06 made the vault the sole tracker), **there is no way
-to see the work.** The backlog is ~46 items in `vec/`, several hundred in `ios/`, spread over
-`raw/` · `wiki/` · `output/` tiers across many spaces, readable only by grepping markdown or
-running `backlog.py query`. The product owner's own words, 2026-09-04:
+Since the project's planning moved off Jira (the vault became the sole tracker), **there is no way to see the work.** The backlog is ~46 items in `vec/` and several hundred more in other spaces, spread over `raw/` · `wiki/` · `output/` tiers, readable only by grepping Markdown or querying the backlog from the command line. The product owner's assessment on 2026-09-04: without a tracker view there is neither sight of the detail nor an overview.
 
-> "substantially since we left JIRA I am blind like driving a submarine: I have sensors but
-> my sight is very limited in perception of every detail and also as overview"
-
-That is a P0 operational problem, not a nice-to-have. Decisions are being made without an
-overview, and overnight agent work is invisible except through a meta-dashboard that shows
-process, not backlog state.
+That is a P0 operational problem, not a nice-to-have. Decisions are being made without an overview, and overnight agent work is invisible except through a dashboard that shows process, not backlog state.
 
 Vectis is the intended cure, and it is closer than the README suggests — but see
 **Current reality** below: the SPA renders synthetic data and the server exposes no
@@ -67,16 +56,8 @@ So the pieces exist and none of them are joined.
    means across systems; what happens on conflict; whether sync is snapshot or incremental.
    Ports-and-adapters — the contract lives in `vectis-extension-spi`, adapters live outside
    the core, discovered at runtime the way `AuditLogger` implementations already are.
-2. **The vault as the reference adapter.** The three-layer memory system is the first real
-   implementation, and the one that proves the contract is honest. Non-negotiable: the vault
-   keeps its own invariants — **the folder IS the lifecycle state**, `status:` is never
-   hand-edited, ids are never hand-numbered, transitions go through `backlog.py transition`.
-   A Vectis adapter that writes back MUST go through that CLI or reimplement it exactly,
-   including the tier move and the sprint stamp as one atomic step. Getting a subset right is
-   the documented way agents corrupt the vault.
-3. **Meta-os instance binding.** Point Vectis at a meta-os instance (e.g. `mova-os`) and it
-   discovers every backlog that instance governs — every vault space, and in principle any
-   other source that instance has an adapter for. One binding, not one integration per space.
+2. **The vault as the reference adapter.** The three-layer backlog format is the first real implementation, and the one that proves the contract is honest. Non-negotiable: the vault keeps its own invariants — **the folder IS the lifecycle state**, `status:` is never hand-edited, ids are never hand-numbered, transitions go through the backlog's command-line tool. A Vectis adapter that writes back MUST go through that CLI or reimplement it exactly, including the tier move and the sprint stamp as one atomic step. Getting a subset right is the documented way agents corrupt the vault.
+3. **Meta-os instance binding.** Point Vectis at a meta-os instance and it discovers every backlog that instance governs — every vault space, and in principle any other source that instance has an adapter for. One binding, not one integration per space.
 4. **Read-only first.** A correct read-only view of the real backlog already solves the
    stated problem. Write-back is a second increment and carries all the risk.
 
@@ -102,12 +83,8 @@ Both spines must land for the product owner to see real work; neither alone is s
 
 ## Open questions for refinement
 
-* Does the adapter read the vault's **markdown files** directly, or shell out to `backlog.py`,
-  or does `backlog.py` grow a machine-readable export? (`backlog.py export` already exists —
-  check what it emits before designing anything.)
-* Is Vectis the system of record, or a projection? ADR-MOS-06 says the vault is the tracker.
-  If Vectis is a **projection**, write-back is a much smaller problem and this epic gets
-  cheaper. **Decide this first — it changes everything downstream.**
+* Does the adapter read the vault's **markdown files** directly, or shell out to the backlog CLI, or does the CLI grow a machine-readable export? (It already has an export command — check what it emits before designing anything.)
+* Is Vectis the system of record, or a projection? The decision record that moved the project's planning off Jira says the vault is the tracker. If Vectis is a **projection**, write-back is a much smaller problem and this epic gets cheaper. **Decide this first — it changes everything downstream.**
 * How are ids reconciled when two sources both use `VEC-17`?
 * Does a meta-os binding imply live watching (filesystem/SSE) or periodic reconciliation?
 

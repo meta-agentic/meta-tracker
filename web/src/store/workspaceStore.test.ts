@@ -21,6 +21,12 @@ function issue(over: Partial<Issue>): Issue {
     startDate: null,
     dueDate: null,
     storyPoints: null,
+    type: null,
+    labels: [],
+    priority: null,
+    description: null,
+    dependsOn: [],
+    relates: [],
     ...over,
   };
 }
@@ -82,6 +88,63 @@ describe("upsertIssue", () => {
     const state = store.getState();
     expect(state.boardIssueIds["board-0"]).not.toContain("a");
     expect(state.boardIssueIds["board-1"]).toContain("a");
+  });
+});
+
+describe("ids named after Object.prototype members", () => {
+  const protoBoard = {
+    id: "constructor",
+    key: "P",
+    name: "Proto",
+    columns: [
+      { id: "constructor", name: "A", order: 0 },
+      { id: "__proto__", name: "B", order: 1 },
+      { id: "toString", name: "C", order: 2 },
+    ],
+  };
+  const protoSnapshot = () => ({
+    boards: [protoBoard],
+    epics: [{ id: "__proto__", key: "E-1", title: "Epic", color: "red" }],
+    issues: [issue({ id: "__proto__", boardId: "constructor", columnId: "__proto__", epicId: "__proto__" })],
+  });
+
+  it("indexes and groups them as plain keys", () => {
+    const store = createWorkspaceStore(new MemoryCache());
+    store.getState().ingestSnapshot(protoSnapshot());
+    const state = store.getState();
+
+    expect(Object.keys(state.issuesById)).toEqual(["__proto__"]);
+    expect(state.issuesById["__proto__"].columnId).toBe("__proto__");
+    expect(state.epicsById["__proto__"].key).toBe("E-1");
+    expect(state.boardsById["constructor"].name).toBe("Proto");
+    // A missing id finds nothing, not an Object.prototype member.
+    expect(state.issuesById["constructor"]).toBeUndefined();
+    expect(state.boardsById["toString"]).toBeUndefined();
+    expect(state.boardIssueIds["valueOf"]).toBeUndefined();
+
+    const columns = selectBoardColumns(state, "constructor");
+    expect(columns["__proto__"].map((i) => i.id)).toEqual(["__proto__"]);
+    expect(columns["constructor"]).toBeUndefined();
+    expect(columns["toString"]).toBeUndefined();
+  });
+
+  it("keeps them plain keys through an upsert, a move and a reload", async () => {
+    const cache = new MemoryCache();
+    const first = createWorkspaceStore(cache);
+    first.getState().ingestSnapshot(protoSnapshot());
+    first.getState().upsertIssue(issue({ id: "constructor", boardId: "toString" }));
+    first.getState().moveIssue("__proto__", "toString", 3);
+    await new Promise((r) => setTimeout(r, 300)); // let debounced persist flush
+
+    const second = createWorkspaceStore(cache);
+    await second.getState().hydrate();
+    for (const state of [first.getState(), second.getState()]) {
+      expect(state.issuesById["__proto__"].columnId).toBe("toString");
+      expect(state.issuesById["constructor"].boardId).toBe("toString");
+      expect(state.boardIssueIds["toString"]).toEqual(["constructor"]);
+      expect(state.issuesById["valueOf"]).toBeUndefined();
+      expect(state.boardIssueIds["hasOwnProperty"]).toBeUndefined();
+    }
   });
 });
 

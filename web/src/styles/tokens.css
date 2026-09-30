@@ -19,21 +19,52 @@
 :root {
   color-scheme: light;
 
-  --vec-bg: #ffffff;
+  --vec-bg: #f7f7f8;
   --vec-surface: #ffffff;
-  --vec-surface-sunken: #f4f4f5;
+  --vec-surface-sunken: #e9e9ec;
+  --vec-surface-hover: #f4f4f5;
   --vec-text: #18181b;
-  --vec-text-muted: #71717a;
+  --vec-text-muted: #63636b;
+  --vec-text-subtle: #71717a;
   --vec-border: #e4e4e7;
   --vec-border-strong: #d4d4d8;
   --vec-accent: #4f46e5;
+  --vec-accent-hover: #4338ca;
+  --vec-accent-soft: #eef2ff;
+  --vec-accent-text: #4338ca;
   --vec-on-accent: #ffffff;
+  --vec-focus-ring: #6366f1;
+
+  --vec-danger: #b91c1c;
+  --vec-danger-soft: #fef2f2;
+  --vec-warning: #92400e;
+  --vec-warning-soft: #fffbeb;
+  --vec-warning-border: #fcd34d;
+  --vec-success: #15803d;
+
+  /* Work-item types. Icons only — text beside them stays --vec-text. */
+  --vec-type-story: #16a34a;
+  --vec-type-bug: #dc2626;
+  --vec-type-task: #2563eb;
+  --vec-type-spike: #9333ea;
+  --vec-type-enabler: #0891b2;
+  --vec-type-epic: #7c3aed;
+  --vec-type-other: #71717a;
+
+  --vec-skeleton: #dcdce0;
+  --vec-skeleton-sheen: #ececef;
+  --vec-scrim: rgba(24, 24, 27, 0.32);
+
+  --vec-shadow-sm: 0 1px 2px rgba(24, 24, 27, 0.06);
+  --vec-shadow-md: 0 2px 8px rgba(24, 24, 27, 0.08), 0 1px 2px rgba(24, 24, 27, 0.06);
+  --vec-shadow-lg: 0 16px 48px rgba(24, 24, 27, 0.18), 0 2px 6px rgba(24, 24, 27, 0.08);
 
   /* Timeline day columns: every 7th line is the week boundary, hence "major". */
   --vec-grid-line: #f4f4f5;
   --vec-grid-line-major: #e4e4e7;
 
   --vec-font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --vec-font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 }
 
 /*
@@ -46,13 +77,42 @@
 
     --vec-bg: #09090b;
     --vec-surface: #18181b;
-    --vec-surface-sunken: #131316;
-    --vec-text: #e4e4e7;
+    --vec-surface-sunken: #111113;
+    --vec-surface-hover: #202024;
+    --vec-text: #ececef;
     --vec-text-muted: #a1a1aa;
+    --vec-text-subtle: #8b8b94;
     --vec-border: #27272a;
     --vec-border-strong: #3f3f46;
-    --vec-accent: #6366f1;
+    --vec-accent: #4f46e5;
+    --vec-accent-hover: #5b53f0;
+    --vec-accent-soft: #1e1b4b;
+    --vec-accent-text: #a5b4fc;
     --vec-on-accent: #ffffff;
+    --vec-focus-ring: #818cf8;
+
+    --vec-danger: #fca5a5;
+    --vec-danger-soft: #2a1215;
+    --vec-warning: #fcd34d;
+    --vec-warning-soft: #261d0b;
+    --vec-warning-border: #78520f;
+    --vec-success: #4ade80;
+
+    --vec-type-story: #4ade80;
+    --vec-type-bug: #f87171;
+    --vec-type-task: #60a5fa;
+    --vec-type-spike: #c084fc;
+    --vec-type-enabler: #22d3ee;
+    --vec-type-epic: #a78bfa;
+    --vec-type-other: #a1a1aa;
+
+    --vec-skeleton: #232327;
+    --vec-skeleton-sheen: #2e2e33;
+    --vec-scrim: rgba(0, 0, 0, 0.56);
+
+    --vec-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --vec-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.4);
+    --vec-shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4);
 
     --vec-grid-line: #1c1c1f;
     --vec-grid-line-major: #2e2e33;
@@ -67,13 +127,42 @@
 
   --vec-bg: #09090b;
   --vec-surface: #18181b;
-  --vec-surface-sunken: #131316;
-  --vec-text: #e4e4e7;
+  --vec-surface-sunken: #111113;
+  --vec-surface-hover: #202024;
+  --vec-text: #ececef;
   --vec-text-muted: #a1a1aa;
+  --vec-text-subtle: #8b8b94;
   --vec-border: #27272a;
   --vec-border-strong: #3f3f46;
-  --vec-accent: #6366f1;
+  --vec-accent: #4f46e5;
+  --vec-accent-hover: #5b53f0;
+  --vec-accent-soft: #1e1b4b;
+  --vec-accent-text: #a5b4fc;
   --vec-on-accent: #ffffff;
+  --vec-focus-ring: #818cf8;
+
+  --vec-danger: #fca5a5;
+  --vec-danger-soft: #2a1215;
+  --vec-warning: #fcd34d;
+  --vec-warning-soft: #261d0b;
+  --vec-warning-border: #78520f;
+  --vec-success: #4ade80;
+
+  --vec-type-story: #4ade80;
+  --vec-type-bug: #f87171;
+  --vec-type-task: #60a5fa;
+  --vec-type-spike: #c084fc;
+  --vec-type-enabler: #22d3ee;
+  --vec-type-epic: #a78bfa;
+  --vec-type-other: #a1a1aa;
+
+  --vec-skeleton: #232327;
+  --vec-skeleton-sheen: #2e2e33;
+  --vec-scrim: rgba(0, 0, 0, 0.56);
+
+  --vec-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --vec-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --vec-shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4);
 
   --vec-grid-line: #1c1c1f;
   --vec-grid-line-major: #2e2e33;
@@ -95,4 +184,10 @@ button,
 select {
   font: inherit;
   color: inherit;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }

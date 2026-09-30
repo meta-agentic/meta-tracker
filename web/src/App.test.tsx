@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { App } from "./App";
 import { AppProviders } from "./providers/AppProviders";
 import { IndexedDbCache } from "./store/cache";
@@ -10,6 +10,7 @@ import { toWorkspaceSnapshot } from "./api/adapter";
 import {
   boardFixture,
   createGate,
+  epicItemFixture,
   createRecordedTransport,
   itemFixture,
   snapshotRecording,
@@ -88,6 +89,28 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "Delivery" })).toBeInTheDocument();
   });
 
+  it("draws the loading skeleton with as many columns as the board last shown", async () => {
+    const skeletonColumns = (container: HTMLElement) =>
+      container.querySelectorAll(".vec-column--skeleton").length;
+
+    // Nothing shown yet: the default template's five.
+    const first = createGate();
+    const { view } = mount({ ...snapshotRecording(), gate: first.promise });
+    expect(skeletonColumns(view.container)).toBe(5);
+    first.release();
+    await screen.findByText("Wire the client");
+    view.unmount();
+
+    // The fixture board has two columns; the next cold load draws two.
+    await clearPersistedWorkspace();
+    workspaceStore.getState().reset();
+    const second = createGate();
+    const again = mount({ ...snapshotRecording(), gate: second.promise });
+    expect(skeletonColumns(again.view.container)).toBe(2);
+    second.release();
+    await screen.findByText("Wire the client");
+  });
+
   // AC5
   it("revalidates a cached board in place, without remounting it", async () => {
     await warmCache();
@@ -121,9 +144,12 @@ describe("App", () => {
 
     mount({ routes: {}, networkError: new TypeError("Failed to fetch") });
 
-    await waitFor(() => expect(screen.getByRole("status")).toBeInTheDocument());
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Showing cached data — the last refresh failed.",
+    // The loading placeholder is a status region too, so wait for this one's text
+    // rather than for any status to exist.
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Showing cached data — the last refresh failed.",
+      ),
     );
     // The board is still rendered. The notice sits beside it, not over it.
     expect(screen.getByText("To Do")).toBeInTheDocument();
@@ -167,5 +193,200 @@ describe("App", () => {
 
     expect(screen.getByRole("button", { name: "Run dual-axis profile" })).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
+describe("board cards and the item detail panel", () => {
+  const richItems = [
+    epicItemFixture,
+    itemFixture({
+      fields: {
+        type: "story",
+        parentId: "epic-1",
+        storyPoints: 3,
+        labels: ["web", "design"],
+        description: "Render the board from the store.",
+        dependencies: ["VEC-3", "VEC-404"],
+      },
+    }),
+    itemFixture({
+      id: "item-2",
+      key: "VEC-3",
+      rank: "n",
+      title: "Second card",
+      fields: { type: "bug" },
+    }),
+  ];
+
+  it("names the workspace in the shell", async () => {
+    mount(snapshotRecording(richItems));
+
+    await screen.findByText("Wire the client");
+    const banner = screen.getByRole("banner");
+    expect(within(banner).getByText("Vectis", { selector: ".vec-workspace__name" })).toBeInTheDocument();
+    expect(within(banner).getByText("VEC")).toBeInTheDocument();
+  });
+
+  it("shows key, title, type, points, epic and labels on a card", async () => {
+    mount(snapshotRecording(richItems));
+
+    const card = (await screen.findByText("Wire the client")).closest("button")!;
+    expect(card).toHaveTextContent("VEC-2");
+    expect(card).toHaveTextContent("Story");
+    expect(card).toHaveTextContent("Client shell");
+    expect(card).toHaveTextContent("web");
+    expect(card).toHaveTextContent("design");
+    expect(within(card).getByText("3 story points")).toBeInTheDocument();
+  });
+
+  it("marks an empty column instead of leaving a blank gap", async () => {
+    mount(snapshotRecording(richItems));
+
+    const doing = (await screen.findByRole("heading", { name: "In Progress" })).closest("section")!;
+    expect(within(doing).getByText("No items")).toBeInTheDocument();
+  });
+
+  it("opens the detail panel from a card, closes it on Escape and returns focus", async () => {
+    mount(snapshotRecording(richItems));
+
+    const card = (await screen.findByText("Wire the client")).closest("button")!;
+    card.focus();
+    fireEvent.click(card);
+
+    const dialog = screen.getByRole("dialog", { name: "Wire the client" });
+    expect(dialog).toHaveTextContent("Render the board from the store.");
+    expect(dialog).toHaveTextContent("To Do");
+    // Focus moves into the panel, onto its close button.
+    expect(within(dialog).getByRole("button", { name: "Close" })).toHaveFocus();
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(card).toHaveFocus();
+  });
+
+  it("follows a link to a loaded item and shows an unloaded one as text", async () => {
+    mount(snapshotRecording(richItems));
+
+    fireEvent.click((await screen.findByText("Wire the client")).closest("button")!);
+    const dialog = screen.getByRole("dialog");
+
+    expect(within(dialog).getByText("VEC-404")).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /VEC-404/ })).not.toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /VEC-3/ }));
+    expect(screen.getByRole("dialog", { name: "Second card" })).toHaveTextContent("Bug");
+  });
+
+  it("keeps the sheet modal when focus lands outside it", async () => {
+    const { view } = mount(snapshotRecording(richItems));
+
+    fireEvent.click((await screen.findByText("Wire the client")).closest("button")!);
+    const dialog = screen.getByRole("dialog");
+
+    // The rest of the page is inert while the sheet is open…
+    expect(view.container).toHaveAttribute("inert");
+    // …and if focus ends up outside anyway, Tab brings it back in and Escape
+    // still closes, because both are handled at the document.
+    act(() => document.body.focus());
+    fireEvent.keyDown(document.body, { key: "Tab" });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+
+    act(() => document.body.focus());
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(view.container).not.toHaveAttribute("inert");
+  });
+
+  it("keeps Shift+Tab inside the sheet when the panel itself has focus", async () => {
+    mount(snapshotRecording(richItems));
+
+    fireEvent.click((await screen.findByText("Wire the client")).closest("button")!);
+    const dialog = screen.getByRole("dialog");
+    // A click on the sheet's text focuses the panel, which sits before its
+    // first control: Shift+Tab from there must wrap to the last one.
+    act(() => dialog.focus());
+    fireEvent.keyDown(dialog, { key: "Tab", shiftKey: true });
+
+    const controls = within(dialog).getAllByRole("button");
+    expect(controls[controls.length - 1]).toHaveFocus();
+  });
+
+  it("renders a board whose column ids are object prototype members", async () => {
+    const protoBoard = {
+      ...boardFixture,
+      columns: [
+        { id: "constructor", name: "Constructor", position: 0 },
+        { id: "__proto__", name: "Proto", position: 1 },
+        { id: "toString", name: "Empty", position: 2 },
+      ],
+    };
+    mount({
+      routes: {
+        "/boards": { body: [protoBoard] },
+        "/items": { body: [itemFixture({ columnId: "__proto__" })] },
+        "/workspaces/VEC": { body: workspaceFixture },
+      },
+    });
+
+    const proto = (await screen.findByRole("heading", { name: "Proto" })).closest("section")!;
+    expect(within(proto).getByText("Wire the client")).toBeInTheDocument();
+    for (const name of ["Constructor", "Empty"]) {
+      const column = screen.getByRole("heading", { name }).closest("section")!;
+      expect(within(column).getByText("No items")).toBeInTheDocument();
+    }
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("keeps the shell and the board switcher when the board fails to render", async () => {
+    // React logs the caught error; expected here, so keep the output clean.
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const swallow = (event: ErrorEvent) => event.preventDefault();
+    window.addEventListener("error", swallow);
+    mount(snapshotRecording(richItems));
+    await screen.findByText("Wire the client");
+
+    // A value no decoder anticipated, reaching the board through the store.
+    act(() => {
+      const { issuesById } = workspaceStore.getState();
+      const broken = { ...issuesById["item-1"], labels: undefined as unknown as string[] };
+      workspaceStore.setState({ issuesById: { ...issuesById, "item-1": broken } });
+    });
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("This board could not be shown");
+    expect(alert).not.toHaveTextContent(/reload/i);
+    expect(screen.getByRole("banner")).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Boards in this workspace" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delivery" })).toBeInTheDocument();
+    window.removeEventListener("error", swallow);
+    spy.mockRestore();
+  });
+
+  it("renders a type named after an object prototype member", async () => {
+    mount(
+      snapshotRecording([
+        itemFixture({ fields: { type: "constructor", storyPoints: 1 } }),
+        itemFixture({ id: "item-2", key: "VEC-3", rank: "n", title: "Second card", fields: { type: "__proto__" } }),
+      ]),
+    );
+
+    const card = (await screen.findByText("Wire the client")).closest("button")!;
+    expect(card).toHaveTextContent("constructor");
+    // Singular, not "1 story points".
+    expect(within(card).getByText("1 story point")).toBeInTheDocument();
+    expect(screen.getByText("Second card")).toBeInTheDocument();
+  });
+
+  it("says so when the workspace has no boards", async () => {
+    mount({
+      routes: {
+        "/boards": { body: [] },
+        "/items": { body: [] },
+        "/workspaces/VEC": { body: workspaceFixture },
+      },
+    });
+
+    expect(await screen.findByText("No boards yet")).toBeInTheDocument();
   });
 });
