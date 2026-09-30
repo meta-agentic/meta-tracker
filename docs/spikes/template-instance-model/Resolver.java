@@ -264,6 +264,9 @@ final class Resolver {
      *     are what reaching the state means, and adopting it would silently change that;
      *   - a state anchored to a state the new version removed is re-anchored in place;
      *   - removed states are dropped from an overridden stateOrder.
+     * A state the new version recategorises (another category or outcome) is always noted,
+     * and refused while it holds items whose meaning would change: items in it would start
+     * or stop counting as delivered without anyone moving them.
      * Anything else (additions, renames, reorders) is inherited by re-resolving. States are
      * rewritten in key order, each seeing the anchors rewritten before it, so the result
      * never depends on member order.
@@ -346,12 +349,45 @@ final class Resolver {
             }
         }
         Resolution r = resolve(to, d);
+        recategorised(from, to, was, r.effective(), occupancy, notes, refused);
         List<String> conflicts = new ArrayList<>(refused);
         conflicts.addAll(r.violations());
         if (conflicts.isEmpty()) {
             conflicts.addAll(checkRemovals(was, r.effective(), occupancy));
         }
         return new Upgrade(d, r.effective(), notes, conflicts);
+    }
+
+    /**
+     * A template change of a state's category or outcome is always noted. Where it changes
+     * what the state means in this workspace (the instance did not set its own category and
+     * outcome) and items are in it, the upgrade is refused: move them first, or keep the old
+     * meaning by setting it in the delta.
+     */
+    private static void recategorised(Map<String, Object> from, Map<String, Object> to, Map<String, Object> was,
+                                      Map<String, Object> now, Map<String, Integer> occupancy,
+                                      List<String> notes, List<String> refused) {
+        Map<String, Object> oldStates = Json.obj(from.get("states"));
+        Map<String, Object> newStates = Json.obj(to.get("states"));
+        for (String k : new TreeSet<>(oldStates.keySet())) {
+            if (!newStates.containsKey(k) || !Json.obj(was.get("states")).containsKey(k)
+                    || kind(Json.obj(oldStates.get(k))).equals(kind(Json.obj(newStates.get(k))))) {
+                continue;
+            }
+            String before = kind(Json.obj(Json.obj(was.get("states")).get(k)));
+            String after = kind(Json.obj(Json.obj(now.get("states")).get(k)));
+            String change = "states." + k + ": template changes it from " + kind(Json.obj(oldStates.get(k)))
+                    + " to " + kind(Json.obj(newStates.get(k)));
+            int n = occupancy.getOrDefault("states." + k, 0);
+            if (before.equals(after)) {
+                notes.add(change + "; the instance's own category and outcome are kept");
+            } else if (n > 0) {
+                refused.add(change + " while " + n + " item(s) are in it; move them first, or keep " + before
+                        + " by setting it in the delta");
+            } else {
+                notes.add(change + "; it holds no items");
+            }
+        }
     }
 
     /** A state's category, with its outcome when it has one: "END_STATE (DELIVERED)". */

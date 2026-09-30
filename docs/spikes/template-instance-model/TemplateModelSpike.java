@@ -395,6 +395,20 @@ public class TemplateModelSpike extends Cases {
                 patch("{\"states\": {\"done\": {\"enterFrom\": [\"in-review\"]}}}"), empty);
         check("C13", "template removes a state an instance policy still references: upgrade refused",
                 has(c13.conflicts(), "states.done.enterFrom: references unknown state 'in-review'"), c13.conflicts());
+        Map<String, Object> noGoDelivers = next(scrum, "{\"states\": {\"no-go\": {\"outcome\": \"DELIVERED\"}}}");
+        Map<String, Object> reviewEnds = next(scrum, "{\"states\": {\"in-review\": {\"category\": \"END_STATE\", \"outcome\": \"DELIVERED\"}}}");
+        Resolver.Upgrade c14a = Resolver.upgrade(scrum, noGoDelivers, none, Map.of("states.no-go", 9));
+        Resolver.Upgrade c14b = Resolver.upgrade(scrum, noGoDelivers, none, empty);
+        Resolver.Upgrade c14c = Resolver.upgrade(scrum, noGoDelivers, patch("{\"states\": {\"no-go\": {\"outcome\": \"DISCONTINUED\"}}}"), Map.of("states.no-go", 9));
+        Resolver.Upgrade c14d = Resolver.upgrade(scrum, reviewEnds, none, Map.of("states.in-review", 4));
+        check("C14", "template recategorises a state: refused while items are in it, noted when empty, kept when the instance sets its own",
+                has(c14a.conflicts(), "states.no-go: template changes it from END_STATE (DISCONTINUED) to END_STATE (DELIVERED) while 9 item(s) are in it")
+                        && c14b.conflicts().isEmpty() && has(c14b.notes(), "states.no-go: template changes it from END_STATE (DISCONTINUED) to END_STATE (DELIVERED); it holds no items")
+                        && c14c.conflicts().isEmpty() && has(c14c.notes(), "the instance's own category and outcome are kept")
+                        && is(state(c14c.effective(), "no-go").get("outcome"), "DISCONTINUED")
+                        && has(c14d.conflicts(), "states.in-review: template changes it from IN_PROGRESS to END_STATE (DELIVERED) while 4 item(s)")
+                        && !has(Resolver.upgrade(scrum, reviewEnds, tombReview, empty).notes(), "in-review"),
+                c14a.conflicts() + " " + c14b.notes() + " " + c14c + " " + c14d.conflicts());
 
         // ---- template evolution: item types -------------------------
         section("template evolution: item types");
