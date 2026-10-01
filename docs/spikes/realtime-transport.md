@@ -223,7 +223,7 @@ data:{"type":"configuration.changed","workspaceId":"01a0f568-ff3d-7b3b-80bd-f224
 
 ```
 
-**Resync** (here a cursor ahead of the stream, `Last-Event-ID: 999`; `reason` is `retention` when the log no longer holds the gap, `bulk` after a bulk write):
+**Resync** (here a cursor ahead of the stream, `Last-Event-ID: 999`, which `demo.sh` section 2 sends to B; `reason` is `retention` when the log no longer holds the gap, `bulk` after a bulk write):
 
 ```
 id:1
@@ -276,7 +276,7 @@ A write that changes many items at once (the import path, `ItemRepository.insert
 | 1000 writes to A at 20/s, 200 clients split over A and B | 200,000/200,000 | 6.51 / 12.30 / 17.49 / 35.82 | 8.38 / 14.52 / 20.02 / 35.82 | 4.15 / 8.22 |
 | 2000 writes to A and B at 100/s from 4 writers, 200 clients split over A and B | 400,000/400,000 | 3.54 / 6.79 / 17.02 / 93.70 | 4.88 / 8.47 / 24.77 / 93.70 | 1.75 / 4.18 |
 
-The full sequence was run five times; the latest run, on the final code, agreed: per write, slowest client p95 10.61, 11.65 and 7.79 ms for the three runs, worst single delivery 97 ms.
+The full sequence was run six times; the latest run, on the final code, agreed: per write, slowest client p95 7.84, 11.94 and 9.23 ms for the three runs, worst single delivery 109 ms.
 
 **Verdict: the 500 ms target in R-CORE-4 holds**, with a margin of more than thirty times at p95 for the slowest of 200 boards. The carrier's own share is the difference between delivery and the write's own round trip, about 0.7 to 1.8 ms at the median. The lower write rate shows *higher* latency than the higher one, because between paced requests the Docker Desktop VM's threads go idle and every wake-up costs; that inflates the numbers, it does not flatter them.
 
@@ -336,7 +336,8 @@ The 20 ms stall stands in for a GC pause or a slow read on the instance holding 
 | The doorbell carrier delivers every event to both instances, byte-identical, and fans an ancestor publish out per workspace | **Measured**: §1, §2; 100 % delivery in every latency run |
 | p50/p95 latency and the 500 ms verdict | **Measured** in the environment of §4; browser network, ingress, cross-node pods and the native image are **not** measured |
 | Resume with `Last-Event-ID` after the client's instance dies | **Demonstrated** once (§1); the retention and `resync` rules are prototyped but nothing prunes, so retention behaviour is **argued** |
-| A dropped `LISTEN` session loses no events | **Demonstrated** once (§1), by closing the session: the easy case |
+| A `LISTEN` session closed cleanly loses no events | **Demonstrated** once (§1), by `pg_terminate_backend`: the subscriber sees the close and reconnects |
+| A silently lost or half-open `LISTEN` session loses no events | Not demonstrated by a real half-open socket; covered by the catch-up poll in the next row |
 | A deaf `LISTEN` session is bounded by the 2 s catch-up poll | **Demonstrated** once (§1), with the deafness **simulated** by ignoring doorbells on B, not by a real half-open socket |
 | The heartbeat that forces a reconnect, and the TCP keep-alive and user-timeout settings | **Argued**; keep-alive is set in the prototype but its idle, interval and user-timeout values need a native transport, unverified |
 | Stream epoch across a database restore | **Argued**; not prototyped (the prototype's ids are bare `seq`) |
@@ -344,7 +345,12 @@ The 20 ms stall stands in for a GC pause or a slow read on the instance holding 
 | Snapshot-replaces, `seq` floor and tombstone client rules | **Argued**; the client reducer is VEC-17's, the probe applies only the version rule |
 | Per-workspace write ceiling and the `NOTIFY` commit cap | **Argued**, computed from round trips and commit latency; not measured on managed PostgreSQL |
 | Publishing after commit can leave a client wrong, and loses events over 8000 bytes | **Demonstrated** with an injected 300 ms stall (§5) |
-| Cross-channel reordering in the chosen design, absorbed by the version rule | **Measured**: 0–1 of 300 trials naturally, 520 with an injected 20 ms stall (§5) |
+| Cross-channel reordering in the chosen design, absorbed by the version rule | **Measured**: 0–1 of 900 representations (300 trials) went back naturally, 504–537 of 900 with an injected 20 ms stall (§5) |
+| A workspace's stream is gap-free and in commit order | **Argued** from lock ordering (§1); consistent with every run (no gap, no reorder seen on the stream), but not a proof by test |
+| Headroom of the per-workspace lock | **Measured** only at 100 writes/s against a 0.06 ms database round trip; the ceiling at managed-database latency is **computed** (Consequences) |
+| "The carrier adds about 1 ms" | **Derived** from two measured numbers: delivery latency minus the write's own HTTP round trip (§4) |
+| `item.deleted` and bulk `resync` | **Specified**, not built |
+| `PgSubscriber` in the native image staging runs | **Unverified**; every run here is JVM mode |
 | Kafka and Redis costs, dependencies, limits and reconnect behaviour | **Argued** from their documented properties; no broker was run |
 | Pin-to-one-replica rollout costs | **Argued** from the manifests; not deployed |
 | Constraints on VEC-35 and the ingress (HTTP/2, no buffering) | **Argued**; not verified |
