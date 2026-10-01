@@ -45,6 +45,7 @@ public class Carrier {
     private final String carrier;
     private final String instance;
     private final long publishDelayMs;
+    private final long pollMs;
     private final String url;
     private final String user;
     private final String password;
@@ -55,6 +56,7 @@ public class Carrier {
             @ConfigProperty(name = "spike.carrier") String carrier,
             @ConfigProperty(name = "spike.instance") String instance,
             @ConfigProperty(name = "spike.publish-delay-ms") long publishDelayMs,
+            @ConfigProperty(name = "spike.poll-ms", defaultValue = "2000") long pollMs,
             @ConfigProperty(name = "quarkus.datasource.reactive.url") String url,
             @ConfigProperty(name = "quarkus.datasource.username") String user,
             @ConfigProperty(name = "quarkus.datasource.password") String password) {
@@ -67,6 +69,7 @@ public class Carrier {
         this.carrier = carrier;
         this.instance = instance;
         this.publishDelayMs = publishDelayMs;
+        this.pollMs = pollMs;
         this.url = url;
         this.user = user;
         this.password = password;
@@ -86,7 +89,16 @@ public class Carrier {
             Log.infof("instance %s: carrier none (in-JVM broadcast only)", instance);
             return;
         }
+        if (carrier.equals("pg")) {
+            // The poll belongs to the log-backed carrier only; pg-postcommit demonstrates a
+            // carrier without one, so it must not be rescued by it.
+            vertx.setPeriodic(pollMs, id -> hub.poll());
+        }
         PgConnectOptions options = PgConnectOptions.fromUri(url).setUser(user).setPassword(password);
+        // Detect a dead peer from the socket as well. The idle, interval and user-timeout
+        // settings take effect only on a native transport; plain keep-alive always does.
+        options.setTcpKeepAlive(true).setTcpKeepAliveIdleSeconds(30).setTcpKeepAliveIntervalSeconds(10)
+                .setTcpKeepAliveCount(3).setTcpUserTimeout(30_000);
         subscriber = PgSubscriber.subscriber(vertx, options)
                 // Reconnect forever, every 250 ms. The catch-up on re-subscribe makes the
                 // outage cost latency only.

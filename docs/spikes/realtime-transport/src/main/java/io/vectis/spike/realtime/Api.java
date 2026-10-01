@@ -228,6 +228,14 @@ public class Api {
                 .map(all -> new JsonObject().put("affected", new JsonArray(all.stream().map(w -> w.built().body()).toList())).encode());
     }
 
+    /** Demonstration only: make this instance ignore doorbells, as a half-open LISTEN connection would. */
+    @POST
+    @Path("spike/deaf")
+    public String deaf(@QueryParam("on") boolean on) {
+        hub.deaf(on);
+        return new JsonObject().put("instance", carrier.instance()).put("deaf", on).encode();
+    }
+
     @POST
     @Path("spike/reset")
     public Uni<String> reset() {

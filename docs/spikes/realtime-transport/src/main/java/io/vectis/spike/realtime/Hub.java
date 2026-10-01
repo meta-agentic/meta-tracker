@@ -74,6 +74,8 @@ public class Hub {
     private final Vertx vertx;
     private final long feedDelayMs;
     private final Map<UUID, Feed> feeds = new HashMap<>();
+    /** Demonstration only: ignore doorbells, as an instance whose LISTEN connection went half-open would. */
+    private volatile boolean deaf;
 
     /**
      * {@code spike.feed-delay-ms} stalls this instance's feed before it delivers what it
@@ -173,6 +175,9 @@ public class Hub {
 
     /** A NOTIFY arrived: workspace {@code workspaceId} has committed {@code seq}. */
     public synchronized void onDoorbell(UUID workspaceId, long seq) {
+        if (deaf) {
+            return;
+        }
         Feed feed = feeds.get(workspaceId);
         if (feed == null) {
             return; // nobody on this instance watches that workspace
@@ -199,6 +204,44 @@ public class Hub {
                 startFetch(feed);
             }
         }
+    }
+
+    public void deaf(boolean on) {
+        deaf = on;
+    }
+
+    /**
+     * The safety net under the doorbell. A LISTEN connection can go half-open (a NAT or
+     * load-balancer idle timeout, a failover without a reset) and then receives nothing
+     * while looking healthy. Every {@code spike.poll-ms} one query reads the head of every
+     * watched workspace and fetches any feed that is behind, so a deaf listener costs at
+     * most one poll interval, never an unbounded wait.
+     */
+    public void poll() {
+        List<UUID> watched;
+        synchronized (this) {
+            watched = feeds.values().stream().filter(f -> f.head != null).map(f -> f.workspaceId).toList();
+        }
+        if (watched.isEmpty()) {
+            return;
+        }
+        pool.preparedQuery("select id, event_seq from workspace where id = any($1)")
+                .execute(Tuple.of(watched.toArray(new UUID[0])))
+                .subscribe().with(rows -> {
+                    synchronized (this) {
+                        for (Row row : rows) {
+                            Feed feed = feeds.get(row.getUUID("id"));
+                            if (feed == null || feed.head == null || row.getLong("event_seq") <= feed.head) {
+                                continue;
+                            }
+                            if (feed.fetching) {
+                                feed.pending = true;
+                            } else {
+                                startFetch(feed);
+                            }
+                        }
+                    }
+                }, failure -> Log.errorf(failure, "poll failed"));
     }
 
     private void startFetch(Feed feed) {

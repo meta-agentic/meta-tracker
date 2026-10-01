@@ -7,6 +7,7 @@
 | **Sprint** | VEC-S4 |
 | **Requirement** | [ADR-01](../adr/ADR-01-product-requirements-and-features.md) **R-CORE-4** (state changes propagate over SSE, visible on every open board within 500 ms) |
 | **Deliverable** | This decision + a throwaway two-instance prototype in [`realtime-transport/`](./realtime-transport/), a standalone Maven project outside the reactor. No production code, no migration on `main`. |
+| **Reading** | The ADR is Context, Decision, Rules and Consequences. Findings §1 to §5 are the evidence; the appendices map the acceptance criteria, mark each claim measured or argued, and say how to reproduce. |
 | **Unblocks** | VEC-17 (SSE workspace synchronization), and through it VEC-31 (estimation poker). Constrains VEC-35 (stream authentication). |
 
 ## Context
@@ -21,40 +22,66 @@ The question: **how does a state change on one server instance reach a browser c
 
 ## Decision
 
-1. **Carrier: PostgreSQL `LISTEN`/`NOTIFY` as a doorbell, over a short-retention event log written in the same transaction.** Every write takes the next per-workspace sequence number under the workspace row lock, appends the event to `workspace_event`, and calls `pg_notify('vectis_workspace', '<workspaceId>:<seq>')`, all in one transaction. Each instance holds one dedicated `LISTEN` connection and, when the doorbell rings for a workspace it has subscribers for, reads the new rows from the log and writes them to its streams. No broker. No new third-party dependency: `PgSubscriber` ships in `vertx-pg-client`, which the reactor already has through `quarkus-reactive-pg-client`.
-2. **Event contract: item events carry the item's full post-change state; configuration events are invalidations carrying the new revision.** One JSON envelope for all events (`type`, `workspaceId`, `seq`, `at`, `origin`). The SSE `id` is the `seq`, the SSE `event` is the `type`.
-3. **Scope and delivery: one stream per workspace.** The client loads a snapshot, which says which `seq` it is current to, then opens `GET /api/v1/workspaces/{key}/events?after=<seq>`. On reconnect the browser sends `Last-Event-ID` by itself and the server replays the gap from the log. A cursor the log can no longer serve gets a `resync` event, and the client reloads the snapshot.
-4. **Budget: the 500 ms target holds, measured.** From write on instance A to receipt by a client of instance B: p50 6.6 ms, p95 11.2 ms (one client); slowest of 200 clients per write p95 14.5 ms; under 100 writes/s, p95 6.8 ms per delivery and the worst single delivery of 400,000 was 94 ms. The carrier adds about 1 ms over the write's own HTTP round trip.
-5. **Ordering and loss: the store applies an item representation only if its `version` is higher than the one it holds.** On the stream, events of a workspace cannot arrive out of order or with a gap (proved below). Out-of-order arrival is still possible *across* channels (my own write's HTTP response against an earlier event, a snapshot against the stream), and it was demonstrated; the version rule absorbs it. Lost doorbells cost latency, never events: the log is read from the feed's position after every reconnect.
+1. **Carrier: PostgreSQL `LISTEN`/`NOTIFY` as a doorbell, over a short-retention event log written in the same transaction, with a catch-up poll underneath.** Every write takes the next per-workspace sequence number under the workspace row lock, appends the event to `workspace_event`, and calls `pg_notify('vectis_workspace', '<workspaceId>:<seq>')`, all in one transaction. Each instance holds one dedicated `LISTEN` connection and, when the doorbell rings for a workspace it has subscribers for, reads the new rows from the log and writes them to its streams. Every 2 s each instance also reads the head of every workspace it watches in one query and fetches any feed that is behind, so a `LISTEN` connection that has gone silently deaf costs at most one poll interval. No broker. No new third-party dependency: `PgSubscriber` ships in `vertx-pg-client`, which the reactor already has through `quarkus-reactive-pg-client`.
+2. **Event contract: item events carry the item's full post-change state; configuration events are invalidations carrying the new revision.** One JSON envelope for all events (`type`, `workspaceId`, `seq`, `at`, `origin`). The SSE `event` is the `type`; the SSE `id` is `<epoch>.<seq>`, where the epoch identifies the workspace's stream across a database restore.
+3. **Scope and delivery: one stream per workspace.** The client loads a snapshot, which says which `seq` it is current to, then opens `GET /api/v1/workspaces/{key}/events?after=<epoch>.<seq>`. On reconnect the browser sends `Last-Event-ID` by itself and the server replays the gap from the log. A cursor the log can no longer serve, or from another epoch, gets a `resync` event, and the client reloads the snapshot.
+4. **Budget: the 500 ms target holds, measured.** From write on instance A to receipt by a client of instance B: p50 6.6 ms, p95 11.2 ms (one client); slowest of 200 clients per write p95 14.5 ms; under 100 writes/s, p95 6.8 ms per delivery and the worst single delivery of 400,000 was 94 ms. A deaf `LISTEN` connection degrades this to at most the poll interval plus one read (demonstrated: max 1.9 s at a 2 s poll).
+5. **Convergence: a snapshot replaces the workspace's state; between snapshots, the highest `version` wins.** On the stream, events of a workspace cannot arrive out of order or with a gap (proved in §1). Out-of-order arrival is still possible *across* channels (my own write's HTTP response against an earlier event), and it was demonstrated; the version rule absorbs it. The precise client rules are below.
 
-## Evidence: measured or argued
+## Rules
 
-| Claim | Basis |
-|---|---|
-| Without a carrier, clients of the other instance receive nothing | **Measured**: two instances, 0/5 events and 0/50 probes on B (§1) |
-| The doorbell carrier delivers every event to both instances, byte-identical, and fans an ancestor publish out per workspace | **Measured**: §1, §2; 100 % delivery in every latency run |
-| p50/p95 latency and the 500 ms verdict | **Measured** in the environment of §4; browser network, ingress, cross-node pods and the native image are **not** measured |
-| Resume with `Last-Event-ID` after the client's instance dies | **Demonstrated** once (§1); the retention and `resync` rules are prototyped but nothing prunes, so retention behaviour is **argued** |
-| A dropped `LISTEN` session loses no events | **Demonstrated** once (§1) |
-| Publishing after commit can leave a client wrong, and loses events over 8000 bytes | **Demonstrated** with an injected 300 ms stall (§5) |
-| Cross-channel reordering in the chosen design, absorbed by the version rule | **Measured**: 0–1 of 300 trials naturally, 520 with an injected 20 ms stall (§5) |
-| Kafka and Redis costs, dependencies, limits and reconnect behaviour | **Argued** from their documented properties; no broker was run |
-| Pin-to-one-replica rollout costs | **Argued** from the manifests; not deployed |
-| `NOTIFY` commit-lock contention as the scaling ceiling | **Argued** from PostgreSQL's documented behaviour; 100 notifying writes/s showed none |
-| Constraints on VEC-35 and the ingress (HTTP/2, no buffering) | **Argued**; not verified |
+These are the normative part of the decision; VEC-17 implements them.
 
-## Acceptance criteria — how each is met
+**Write path.** One transaction per state change: take the next `seq` (`update workspace set event_seq = event_seq + 1 … returning`), apply the change with `item.version = item.version + 1`, insert the event row with the exact bytes that go on the wire, `pg_notify` the doorbell. Every writer locks the workspace row before any other row it writes, so writers cannot deadlock. Because the row lock is held until commit, a workspace's sequences are gap-free and commit in sequence order. Two refinements shorten the time the lock is held and are recommended to VEC-17 (not prototyped): take the `seq` as the last statement before the event insert, or do change, `seq`, event and `NOTIFY` in one statement (a data-modifying CTE), which leaves one or two round trips under the lock instead of four to six.
 
-| AC | Where it is met |
-|----|-----------------|
-| **1. Findings document answering the five sub-questions with a decision** | This document. The path is `docs/spikes/realtime-transport.md`, following the repository's neutral naming (`plugin-loading.md`, `template-instance-model.md`), not the `VEC-46-…` path the item predates the convention with. |
-| **2. Running two-instance demonstration, without and with the carrier** | [§1](#1--fan-out-the-two-instance-demonstration): two real Quarkus instances on one PostgreSQL. Without a carrier, B's client received 0 of 5 events and 0 of 50 probes. With the carrier, every event, byte-identical on both instances. Reproduce with `docs/spikes/realtime-transport/demo.sh all`. |
-| **3. Carrier named with its cost: dependencies, infrastructure, reconnect** | [§1 Carrier comparison](#carrier-comparison) against Kafka, Redis and pinning to one replica, including what pinning would require of the staging patch. Reconnect demonstrated twice (client instance killed; `LISTEN` session terminated). |
-| **4. Three payloads in full, bytes on the wire, with the decision and its reason** | [§2](#2--event-contract): `item.moved`, `item.updated`, `item.created`, plus `configuration.changed` (own delta, and an ancestor publish fanned out to two workspaces) and `resync`, copied from the stream of the prototype. |
-| **5. Measured p50/p95, method, environment, verdict on 500 ms** | [§4](#4--budget): three runs, method and environment recorded. 500 ms holds; the proposal is to keep the number and say what it means during a reconnect. |
-| **6. Convergence rule and a demonstrated out-of-order case** | [§5](#5--ordering-and-loss): two demonstrations, a broker-shaped publish after commit that leaves a client permanently wrong under last-arrival-wins, and the own-write race in the recommended design. |
-| **7. Liftable into ADR-04 as Proposed, with VEC-17's remaining scope** | The header and [Consequences](#consequences) are written as the ADR; [VEC-17's remaining scope](#vec-17s-remaining-scope) is listed. |
-| **8. Root `mvn -B -ntp verify` unaffected, nothing in `vectis-server/src/main`** | The prototype is its own Maven project under `docs/spikes/realtime-transport/`, not a reactor module and not a child of `vectis-parent`. |
+**Stream identity and cursor.** Each workspace has a `stream_epoch`, random, set when the workspace is created. The SSE `id` is `<epoch>.<seq>`, so `Last-Event-ID` carries both back. A database restore must regenerate every workspace's epoch in the same procedure (a runbook step: `update workspace set stream_epoch = <new random value>`); a restored database rewinds `seq`, and without a new epoch a client holding `seq` 95 against a restored head of 100 would be replayed 96 to 100 and silently miss the restored 91 to 95. The server answers `resync` when the cursor's epoch is not the workspace's current one, when the cursor is ahead of the head, when the log no longer holds the gap, or when the gap is over 10,000 events.
+
+**Retention.** Prune by `seq`, never by time: per workspace, delete `seq < (min seq whose created_at >= cutoff)`. Invariant: **the retained events of a workspace form a contiguous suffix of its stream, ending at the head.** Pruning by `created_at` alone can punch a hole inside the retained range, because `created_at` and `at` are the transaction's *start* time and a later `seq` can carry an earlier time. For the same reason no one, server or client, orders events by `at`; order is `seq`, and per item, `version`.
+
+**Liveness of the doorbell.** Three layers, so a silently dead `LISTEN` connection has a bound: (1) the catch-up poll above, every 2 s, one query per instance over all watched workspaces (prototyped and demonstrated); (2) a heartbeat, each instance notifying itself on a heartbeat channel every 10 s and forcing the subscriber to reconnect if none arrives within 30 s, which restores millisecond latency after the poll has taken over (argued, not prototyped); (3) TCP keep-alive and `TCP_USER_TIMEOUT` on the subscriber connection, so the socket itself dies within about a minute (set in the prototype; the idle, interval and user-timeout values take effect only on a native transport, unverified).
+
+**Client convergence.**
+
+1. A **snapshot** (first load, or after `resync`) **replaces** the workspace's item and configuration state wholesale: items the snapshot lacks are removed, and held versions are reset to the snapshot's even when lower (a restored database). It also sets the store's cursor to the snapshot's `<epoch>.<seq>` and clears the tombstones.
+2. After a snapshot at `seq` S, any representation produced at or before S is dropped: stream events carry `seq`, and write responses carry the `seq` they produced (the `Vectis-Seq` header in the prototype). A late response to a write the snapshot already reflects can therefore not bring back an item the snapshot no longer has.
+3. **Between snapshots**, an item representation (stream event or the client's own write response) is applied only if its `version` is above the version held for that item, or above its tombstone. `item.deleted` removes the item and records a tombstone `id → version`, so a late representation of a deleted item cannot resurrect it.
+4. `configuration.changed` triggers a re-read of the configuration when its `revision` is above the held one.
+5. On the stream, an event whose `seq` is not the last plus one is a protocol error: reconnect with the last cursor. `resync` means rule 1.
+
+## Consequences
+
+**Adopted, this means:**
+
+- Real-time delivery is a property of the write path: every state change goes through one transaction helper that bumps `seq`, writes the change with a bumped `version`, appends the event and rings the doorbell. A change made any other way does not reach any board.
+- No new infrastructure and no new third-party dependency. `vectis-server` gains a dependency on `vectis-persistence` (which it needs to serve any data anyway) and one `LISTEN` connection per replica.
+- The schema gains `item.version`, `workspace.event_seq`, `workspace.stream_epoch` and `workspace_event`.
+- The restore runbook gains a step: regenerate every workspace's `stream_epoch`.
+- Clients hold one stream per open workspace and converge by the client rules: a snapshot, which carries the cursor it is current to, replaces their state; between snapshots the highest `version` or `revision` wins.
+- Staging keeps `replicas: 2` and its rolling updates.
+
+**Costs accepted.**
+
+- **Per-workspace write ceiling.** The workspace row lock is held from the `seq` bump until commit. As prototyped that is four to six round trips: at the 0.06 ms of the demonstration network it is invisible, but at a managed PostgreSQL's 0.5 to 1 ms it is about 4 to 6 ms, a ceiling of roughly 150 to 250 writes per second **per workspace**. Human edit rates are far below it; the refinements under [Rules](#rules) (`seq` last, or one CTE) raise it several times.
+- **Ancestor publish.** As prototyped, a template publish locks every descendant workspace `FOR UPDATE` for the whole fan-out, so a publish reaching many workspaces stalls all of their writes until it commits. VEC-71 should batch it per workspace: each workspace's revision change and event in its own short transaction, if VEC-66 does not require the publish to be atomic across workspaces.
+- **Instance-wide `NOTIFY` serialisation.** A committing transaction that has notified holds a cluster-wide lock through its commit, including the WAL flush, so notifying commits across the whole PostgreSQL instance are capped at about one per commit latency: roughly 1,000 per second at a 1 ms flush, 200 to 500 at 2 to 5 ms on network storage. 100 notifying writes per second showed no contention here.
+- One extra connection per replica, which must be direct or session-pooled: `LISTEN` does not survive PgBouncer transaction pooling and does not run on a read replica. Staging connects directly.
+- An event table with an extra insert per write, a prune job, and one poll query per instance every 2 s.
+
+**What would reopen it:** notifying commits on one PostgreSQL instance sustained above about half of 1 / commit latency, or measured waits on the notify lock; a deployment that must put PgBouncer in transaction mode in front of every connection with no direct path for one session per replica; events that must reach consumers other than browsers (integrations, analytics), which is when a broker reading this log as its outbox pays for itself; more than one database behind one workspace.
+
+### VEC-17's remaining scope
+
+With the transport decided, VEC-17 is high extension and low intension. Split by extension into three, in order:
+
+1. **Enabler: the write path** (`vectis-persistence`): the migration for `item.version`, `workspace.event_seq`, `workspace.stream_epoch` and `workspace_event`; the one write-path helper, and every mutating repository method on it (item create, move, field edit, sprint assignment, delete; configuration delta, upgrade and ancestor publish as VEC-45, VEC-10 and VEC-71 land), with a test that each one appends an event; the snapshot read returning `<epoch>.<seq>`. It also gives VEC-16's item edits the `version` an `If-Match` needs. Nothing streams yet.
+2. **Emit: the stream** (`vectis-server`): `GET /api/v1/workspaces/{key}/events` with `?after`, `Last-Event-ID`, the epoch check, `retry` jitter, keep-alive and `resync`; the `PgSubscriber` feed with the catch-up poll, the heartbeat and TCP keep-alive; the prune job by `seq`; replay outside the hub's lock; backpressure; metrics; the restore runbook step.
+3. **Consume: the client** (`web`): one `EventSource` per open workspace opened at the snapshot's cursor; the reducer implementing the client convergence rules (snapshot replaces, `seq` floor, version rule, tombstones); re-reading configuration on a higher `revision`; the remote-change highlight driven by `origin` and `changed`.
+
+Out of VEC-17, as before: stream authentication (VEC-35), estimation poker (VEC-31).
+
+## Findings
+
+The sections below are the evidence the decision rests on. They are not part of the ADR text.
 
 ## 1 · Fan-out: the two-instance demonstration
 
@@ -84,7 +111,7 @@ Write path, one transaction, in this order on every writer, so writers cannot de
 
 PostgreSQL delivers a `NOTIFY` only if its transaction commits, and delivers notifications of different transactions in commit order. The event row and the change commit together or not at all, so there is no dual write.
 
-Each instance runs one `PgSubscriber` (a dedicated connection outside the pool) and, per workspace that has subscribers on that instance, a **feed** holding the highest `seq` it has read. A doorbell for a watched workspace makes the feed read `seq > head` from the log and hand the rows to its streams in order. A doorbell for an unwatched workspace costs nothing.
+Each instance runs one `PgSubscriber` (a dedicated connection outside the pool) and, per workspace that has subscribers on that instance, a **feed** holding the highest `seq` it has read. A doorbell for a watched workspace makes the feed read `seq > head` from the log and hand the rows to its streams in order. A doorbell for an unwatched workspace costs nothing. Every 2 s, one query (`select id, event_seq from workspace where id = any($1)`) reads the heads of all watched workspaces, and any feed that is behind reads the log as if its doorbell had rung.
 
 Why the feed never skips an event: `seq` is allocated under the workspace row lock, so the transaction that will commit `seq` n+1 cannot even allocate it before the one holding n has committed. Sequences are gap-free and commit in sequence order, so `seq > head` read at any instant returns a contiguous run. A new stream registers with the feed before it reads its replay, queues whatever the feed delivers meanwhile, and drops anything at or below the last `seq` it sent, so replay and live join without a gap or a duplicate.
 
@@ -92,7 +119,9 @@ Why the feed never skips an event: `seq` is allocated under the workspace row lo
 
 **The client's instance dies.** A client of B received ids 1 and 2; B was killed (`docker kill`); three more writes went to A; the client reconnected to A (as the Service would route it) with `Last-Event-ID: 2` and received ids 3, 4 and 5 in order. Nothing was lost, and the client did not reload.
 
-**The `LISTEN` session drops.** Both instances' `LISTEN` sessions were terminated with `pg_terminate_backend`, and five writes went to A at once. The events committed at 03:04:25.380 to .470; B's subscriber re-established at 03:04:25.620 (`LISTEN … established (#2)`) and its client received ids 1 to 5. The doorbells rung during the outage were lost, as `NOTIFY` is not durable; the feed read the log from its head on re-subscribe, so the outage cost 250 ms of latency and no events.
+**The `LISTEN` session drops.** Both instances' `LISTEN` sessions were terminated with `pg_terminate_backend`, and five writes went to A at once. The events committed at 03:04:25.380 to .470; B's subscriber re-established at 03:04:25.620 (`LISTEN … established (#2)`) and its client received ids 1 to 5. The doorbells rung during the outage were lost, as `NOTIFY` is not durable; the feed read the log from its head on re-subscribe, so the outage cost 250 ms of latency and no events. This is the easy case: the connection was closed, so the subscriber noticed and reconnected.
+
+**The `LISTEN` session goes deaf.** The hard case is a connection that stays open and receives nothing: a NAT or load-balancer idle timeout, or a failover that sends no reset. Without a safety net that instance hears no doorbell until the operating system gives up on the socket, which can take hours. B was made to ignore every doorbell (`POST /spike/deaf?on=true`, standing in for a half-open connection; nothing else changed), then 100 writes went to A at 10 per second: B's client received 100 of 100, p50 933 ms, p95 1,831 ms, max 1,930 ms. Every event arrived, carried by the 2 s catch-up poll; the bound is the poll interval plus one read.
 
 ### Carrier comparison
 
@@ -103,7 +132,7 @@ Why the feed never skips an event: `seq` is allocated under the workspace row lo
 | Payload limit | none (the event is a row; 9.5 KB delivered in the demo) | **8000 bytes**; a larger event fails *after* the write committed (demonstrated: `payload string too long`, event lost) | 1 MB default | no practical limit | n/a |
 | Tied to the database commit | yes, `NOTIFY` is transactional | yes if sent in the transaction | **no**: publish after commit is a dual write; making it safe needs a transactional outbox and a relay (CDC or a poller), i.e. this log *plus* a broker | **no**, same dual write | n/a |
 | Order | per workspace, commit order, gap-free | commit order | per partition, publish order | publish order | commit order within the one JVM only if delivery is synchronous |
-| Reconnect and resume | lost doorbells cost latency; client resume replays from the log | lost notifications are lost; no replay | consumer offsets; a per-pod consumer group for fan-out, mapped from `Last-Event-ID` | lost; no replay (Streams would add replay) | the restart *is* the outage |
+| Reconnect and resume | a lost doorbell costs at most one poll interval (2 s); client resume replays from the log | lost notifications are lost; no replay | consumer offsets; a per-pod consumer group for fan-out, mapped from `Last-Event-ID` | lost; no replay (Streams would add replay) | the restart *is* the outage |
 | Operational burden | a prune job; `LISTEN` needs a session-mode connection (no PgBouncer transaction pooling) | as left | a second stateful system to run, upgrade and back up | a second stateful system | Recreate rollouts with downtime |
 
 **Why the doorbell rather than the full event in `NOTIFY`.** The full-payload variant saves one indexed read per event per watching instance, and pays for it with a hard 8000-byte limit (an item with a long description cannot be announced) and no replay. The log is needed for `Last-Event-ID` resume anyway, so the doorbell makes live delivery and resume one read path.
@@ -112,13 +141,7 @@ Why the feed never skips an event: `seq` is allocated under the workspace row lo
 
 **Pin to one replica, costed.** The staging patch would change `replicas: 2` to `replicas: 1` and add `strategy: {type: Recreate}` to the Deployment spec. Recreate is required, not optional: with the default `RollingUpdate` (here `maxSurge` 1, `maxUnavailable` 0) the old and the new pod serve together during every rollout, and the in-JVM broadcast splits clients exactly as with two replicas. With Recreate, every deploy is an outage of pod termination plus image start plus readiness (the readiness probe runs every 10 s), every client stream drops at once, and a crash is an outage; the patch's own comment says the second replica exists "so rolling updates stay available". Pinning also leaves the replay problem unsolved: a client that reconnects after the restart still needs the log. It is rejected; the doorbell costs less than its downtime.
 
-**Costs accepted.**
-
-- Writes within one workspace serialise on the workspace row for the length of the transaction (measured write round trip p50 1.75 ms at 100 writes/s). VEC-45's configuration write already takes this lock. Human edit rates are orders of magnitude below the limit; bulk paths write one event, not one per row (see [§2](#2--event-contract)).
-- Commits that `NOTIFY` take a cluster-wide lock to append to the notification queue, so notifying commits serialise across the whole PostgreSQL instance. Fine at tracker write rates; it is the known scaling ceiling of this approach and the first reopen condition.
-- One extra connection per replica, which must be a direct (or session-pooled) connection: `LISTEN` does not survive PgBouncer transaction pooling, and does not work on a read replica. Staging connects directly.
-- An event table with an extra insert per write and a prune job.
-- The notification queue (8 GB in a standard installation) fills only if a listener never drains it; listeners here never open a transaction.
+The costs this design accepts are under [Consequences](#consequences).
 
 ## 2 · Event contract
 
@@ -126,7 +149,7 @@ Why the feed never skips an event: `seq` is allocated under the workspace row lo
 
 - **Item events carry the item's full post-change state.** A patch only applies to the exact base version it was computed from, so one missed or reordered patch corrupts the client silently; a full representation is idempotent and commutes under "highest `version` wins", so duplicates, replays and reordering are all harmless. It is also the shape the REST read and the write response already return, so the client has one item reducer. An item is small: the largest realistic one is its description. `changed` names the properties that changed, for VEC-17's highlight; it is a hint, never applied.
 - **Configuration events are invalidations carrying the new revision.** The effective configuration is a resolved document of several kilobytes (VEC-45), it changes rarely, a configuration change also re-projects the board's columns, and an ancestor publish fans out to every descendant workspace. The client re-reads `GET /api/v1/workspaces/{key}/configuration` (ETag = revision) when the event's `revision` is above the one it holds, and ignores it otherwise.
-- **An invalidation of the whole workspace is `resync`.** It tells the client to reload the snapshot and continue the stream from the snapshot's `seq`.
+- **An invalidation of the whole workspace is `resync`.** It tells the client to reload the snapshot, which replaces its state, and continue the stream from the snapshot's cursor.
 
 Envelope, the same for every event, keys in this order:
 
@@ -134,8 +157,8 @@ Envelope, the same for every event, keys in this order:
 |---|---|
 | `type` | `item.created`, `item.updated`, `item.moved`, `item.deleted`, `configuration.changed`, `resync`. Also the SSE `event` field. A new type is additive; clients ignore types they do not know. A breaking change goes to a new API version. |
 | `workspaceId` | The workspace's id, not its key: keys can be re-keyed live (R-CORE-6). |
-| `seq` | Position in the workspace's stream: gap-free, increasing, commit order. Also the SSE `id`, so it is what `Last-Event-ID` carries back. |
-| `at` | Transaction time of the change, UTC, microseconds. |
+| `seq` | Position in the workspace's stream: gap-free, increasing, commit order. The SSE `id` is `<epoch>.<seq>` (see [Rules](#rules)), so `Last-Event-ID` carries it back; the prototype's frames below show the bare `seq`. |
+| `at` | Transaction start time of the change, UTC, microseconds. Display only: it is not monotonic in `seq`, and nothing orders by it. |
 | `origin` | The writer's `Vectis-Origin` request header (an opaque per-tab tag, `[A-Za-z0-9._-]{1,64}`, else `null`), so a tab can tell its own writes from remote ones for the highlight. It is not an identity; the authenticated actor belongs to VEC-35. |
 
 Each stream opens with a comment naming the workspace and cursor, and a `retry` chosen per stream between 1000 and 3000 ms so the clients of a pod that dies do not all reconnect in the same instant. Then the events. These are the exact bytes the client of instance B received in the demonstration, each frame ending in a blank line:
@@ -227,7 +250,9 @@ A write that changes many items at once (the import path, `ItemRepository.insert
 
 **Reconnect.** The browser's `EventSource` reconnects by itself after `retry` and sends the last `id` it saw as `Last-Event-ID`; the header wins over `?after`. The server replays `seq > cursor` from the log, then continues live. The answer is `resync` when the cursor is ahead of the head (a restored database), older than the oldest retained event, or more than 10,000 events behind. The client never re-hydrates wholesale unless told to.
 
-**Retention.** Proposed: keep 24 hours of events per workspace, pruned by a periodic delete; a client away longer gets `resync`. The number only trades table size against how often a laptop waking up reloads, and can be tuned without a contract change.
+**Retention.** Proposed: keep 24 hours of events per workspace, pruned by `seq` as stated under [Rules](#rules), so the retained events stay a contiguous suffix; a client away longer gets `resync`. The number only trades table size against how often a laptop waking up reloads, and can be tuned without a contract change.
+
+**Database restore.** A restore rewinds every workspace's `seq`. The restore procedure regenerates each workspace's `stream_epoch`; every open cursor then carries a stale epoch, and every client gets `resync` and reloads.
 
 **Keep-alive.** A comment frame (`:keep-alive`) every 20 s keeps proxies and load balancers from closing an idle stream and finds dead connections.
 
@@ -251,7 +276,7 @@ A write that changes many items at once (the import path, `ItemRepository.insert
 | 1000 writes to A at 20/s, 200 clients split over A and B | 200,000/200,000 | 6.51 / 12.30 / 17.49 / 35.82 | 8.38 / 14.52 / 20.02 / 35.82 | 4.15 / 8.22 |
 | 2000 writes to A and B at 100/s from 4 writers, 200 clients split over A and B | 400,000/400,000 | 3.54 / 6.79 / 17.02 / 93.70 | 4.88 / 8.47 / 24.77 / 93.70 | 1.75 / 4.18 |
 
-A second full run on the final code agreed: per write, slowest client p95 10.20, 11.69 and 7.13 ms for the three runs, worst single delivery 82 ms.
+The full sequence was run five times; the latest run, on the final code, agreed: per write, slowest client p95 10.61, 11.65 and 7.79 ms for the three runs, worst single delivery 97 ms.
 
 **Verdict: the 500 ms target in R-CORE-4 holds**, with a margin of more than thirty times at p95 for the slowest of 200 boards. The carrier's own share is the difference between delivery and the write's own round trip, about 0.7 to 1.8 ms at the median. The lower write rate shows *higher* latency than the higher one, because between paced requests the Docker Desktop VM's threads go idle and every wake-up costs; that inflates the numbers, it does not flatter them.
 
@@ -261,7 +286,7 @@ A second full run on the final code agreed: per write, slowest client p95 10.20,
 
 ## 5 · Ordering and loss
 
-**Convergence rule.** The client's store holds each item with its `version` and applies any representation of it (stream event, its own write's HTTP response, a snapshot row) only if that `version` is higher than the one it holds; otherwise it drops it. Configuration applies the same rule to `revision`. On the stream, a `seq` that is not the last one plus 1 cannot happen in this design (see §1), so the client may treat it as a protocol error and reconnect with its last `seq`. `resync` reloads the snapshot. This needs **`item.version`, which does not exist**: today `ItemRepository.move` and `moveToSprint` write blind (`update item set … where id = $3`). It is also what an `If-Match` on item edits (VEC-16's CRUD) would need, as `config_revision` is for configuration.
+**Convergence rule.** Stated in full under [Rules](#rules): a snapshot replaces the state; afterwards representations at or below the snapshot's `seq` are dropped, and an item representation applies only if its `version` is above the held version or tombstone. Applying the version rule to snapshot rows as well would not converge: an item deleted while the client was away past retention would never be removed, and after a database restore the true, lower versions would be rejected. The rule needs **`item.version`, which does not exist**: today `ItemRepository.move` and `moveToSprint` write blind (`update item set … where id = $3`). It is also what an `If-Match` on item edits (VEC-16's CRUD) would need, as `config_revision` is for configuration.
 
 **Can two changes to one item arrive out of order?** Not on the stream: one workspace's events are gap-free, commit-ordered, read in `seq` order and sent in `seq` order. Across channels, yes. Two demonstrations:
 
@@ -288,13 +313,47 @@ version rule, both runs:      went back 0 times; final version 601 = database; d
 
 The 20 ms stall stands in for a GC pause or a slow read on the instance holding my stream. Under last-arrival-wins, the card I just edited flicks back to the colleague's older value and then forward again, a highlighted remote change that never happened. The version rule drops it, and it also drops the echo of my own write arriving on the stream after my response, so my own edits are not highlighted as remote.
 
-**Loss.** None in the chosen path: an event exists if and only if its change committed, the log holds it, and every reconnect (the client's stream or the instance's `LISTEN` session) resumes from a position in the log. Beyond retention the client is told to reload, never left with a silent gap.
+**Loss.** None in the chosen path, under two conditions: an event exists if and only if its change committed, the log holds it, every reconnect (the client's stream or the instance's `LISTEN` session) resumes from a position in the log, and a deaf `LISTEN` connection is covered by the poll. Beyond retention the client is told to reload. The two conditions: retention is pruned by `seq`, so the retained log has no hole, and a database restore regenerates the stream epochs; without that runbook step a client can be left with a silent gap.
 
-## How to run
+## Appendix A · Acceptance criteria — how each is met
+
+| AC | Where it is met |
+|----|-----------------|
+| **1. Findings document answering the five sub-questions with a decision** | This document. The path is `docs/spikes/realtime-transport.md`, following the repository's neutral naming (`plugin-loading.md`, `template-instance-model.md`), not the `VEC-46-…` path the item predates the convention with. |
+| **2. Running two-instance demonstration, without and with the carrier** | [§1](#1--fan-out-the-two-instance-demonstration): two real Quarkus instances on one PostgreSQL. Without a carrier, B's client received 0 of 5 events and 0 of 50 probes. With the carrier, every event, byte-identical on both instances. Reproduce with `docs/spikes/realtime-transport/demo.sh all`. |
+| **3. Carrier named with its cost: dependencies, infrastructure, reconnect** | [§1 Carrier comparison](#carrier-comparison) against Kafka, Redis and pinning to one replica, including what pinning would require of the staging patch. Reconnect demonstrated three times (client instance killed; `LISTEN` session terminated; `LISTEN` session deaf, caught by the poll). |
+| **4. Three payloads in full, bytes on the wire, with the decision and its reason** | [§2](#2--event-contract): `item.moved`, `item.updated`, `item.created`, plus `configuration.changed` (own delta, and an ancestor publish fanned out to two workspaces) and `resync`, copied from the stream of the prototype. |
+| **5. Measured p50/p95, method, environment, verdict on 500 ms** | [§4](#4--budget): three runs, method and environment recorded. 500 ms holds; the proposal is to keep the number and say what it means during a reconnect. |
+| **6. Convergence rule and a demonstrated out-of-order case** | [§5](#5--ordering-and-loss): two demonstrations, a broker-shaped publish after commit that leaves a client permanently wrong under last-arrival-wins, and the own-write race in the recommended design. |
+| **7. Liftable into ADR-04 as Proposed, with VEC-17's remaining scope** | The ADR is the top of this document: header, Context, [Decision](#decision), [Rules](#rules), [Consequences](#consequences) and [VEC-17's remaining scope](#vec-17s-remaining-scope). Findings and appendices are the evidence and stay behind. |
+| **8. Root `mvn -B -ntp verify` unaffected, nothing in `vectis-server/src/main`** | The prototype is its own Maven project under `docs/spikes/realtime-transport/`, not a reactor module and not a child of `vectis-parent`. |
+
+## Appendix B · Evidence: measured or argued
+
+| Claim | Basis |
+|---|---|
+| Without a carrier, clients of the other instance receive nothing | **Measured**: two instances, 0/5 events and 0/50 probes on B (§1) |
+| The doorbell carrier delivers every event to both instances, byte-identical, and fans an ancestor publish out per workspace | **Measured**: §1, §2; 100 % delivery in every latency run |
+| p50/p95 latency and the 500 ms verdict | **Measured** in the environment of §4; browser network, ingress, cross-node pods and the native image are **not** measured |
+| Resume with `Last-Event-ID` after the client's instance dies | **Demonstrated** once (§1); the retention and `resync` rules are prototyped but nothing prunes, so retention behaviour is **argued** |
+| A dropped `LISTEN` session loses no events | **Demonstrated** once (§1), by closing the session: the easy case |
+| A deaf `LISTEN` session is bounded by the 2 s catch-up poll | **Demonstrated** once (§1), with the deafness **simulated** by ignoring doorbells on B, not by a real half-open socket |
+| The heartbeat that forces a reconnect, and the TCP keep-alive and user-timeout settings | **Argued**; keep-alive is set in the prototype but its idle, interval and user-timeout values need a native transport, unverified |
+| Stream epoch across a database restore | **Argued**; not prototyped (the prototype's ids are bare `seq`) |
+| Retention pruned by `seq` keeps a contiguous suffix | **Argued**; the prototype has no prune job |
+| Snapshot-replaces, `seq` floor and tombstone client rules | **Argued**; the client reducer is VEC-17's, the probe applies only the version rule |
+| Per-workspace write ceiling and the `NOTIFY` commit cap | **Argued**, computed from round trips and commit latency; not measured on managed PostgreSQL |
+| Publishing after commit can leave a client wrong, and loses events over 8000 bytes | **Demonstrated** with an injected 300 ms stall (§5) |
+| Cross-channel reordering in the chosen design, absorbed by the version rule | **Measured**: 0–1 of 300 trials naturally, 520 with an injected 20 ms stall (§5) |
+| Kafka and Redis costs, dependencies, limits and reconnect behaviour | **Argued** from their documented properties; no broker was run |
+| Pin-to-one-replica rollout costs | **Argued** from the manifests; not deployed |
+| Constraints on VEC-35 and the ingress (HTTP/2, no buffering) | **Argued**; not verified |
+
+## Appendix C · How to run
 
 ```bash
 cd docs/spikes/realtime-transport
-./demo.sh all       # builds, runs sections 1-8 recorded above, removes its containers
+./demo.sh all       # builds, runs sections 1-9 recorded above, removes its containers
 ./demo.sh up pg pg  # or: keep two instances running on 127.0.0.1:5741 (A) and :5742 (B)
 curl -s -X POST 127.0.0.1:5741/spike/reset
 curl -sN '127.0.0.1:5742/api/v1/workspaces/VEC/events?after=0' &
@@ -304,34 +363,13 @@ curl -s -X PATCH 127.0.0.1:5741/api/v1/workspaces/VEC/items/VEC-1 -H 'Content-Ty
 
 Requires Docker and a Maven repository that can resolve the Quarkus 3.37.1 BOM (the root build already does). The containers are named `vec46-pg`, `vec46-a` and `vec46-b` on the network `vec46-net`.
 
-## Prototype quality vs. what needs hardening
+## Appendix D · Prototype quality vs. what needs hardening
 
-**Prototype quality (as shipped):** schema created at startup, not by Flyway; a cut-down `workspace` and `item`; columns are seeded ids rather than VEC-45's projected `board_column` rows; configuration writes and template publishes only bump revisions; no authentication; no retention job (the `resync`-on-retention logic is there, nothing prunes); the hub is one monitor per instance; `item.deleted` and bulk `resync` are specified, not built; no tests, because the demonstration is the test.
+**Prototype quality (as shipped):** schema created at startup, not by Flyway; a cut-down `workspace` and `item`; columns are seeded ids rather than VEC-45's projected `board_column` rows; configuration writes and template publishes only bump revisions; no authentication; no retention job (the `resync`-on-retention logic is there, nothing prunes); the hub is one monitor per instance, and a replay runs under it; stream ids are bare `seq`, without the epoch; no heartbeat; `item.deleted` and bulk `resync` are specified, not built; no tests, because the demonstration is the test.
 
-**Would need hardening in VEC-17:** Flyway migration for `item.version`, `workspace.event_seq` and `workspace_event` with its prune job; every write path through the one seq-bumping helper (a write that forgets it is invisible to every board, so a test should assert that each mutating repository method appends an event); backpressure for a slow client (bounded per-stream queue, then close it and let it resume); metrics for open streams, feed lag and `LISTEN` reconnects; native-image verification of `PgSubscriber` (expected to work, unverified); the ingress settings in §3.
+**Would need hardening in VEC-17:** Flyway migration for `item.version`, `workspace.event_seq`, `workspace.stream_epoch` and `workspace_event`, with its prune job by `seq`; the `<epoch>.<seq>` cursor and the restore runbook step; the heartbeat with a reconnect deadline, alongside the catch-up poll and TCP keep-alive; replays read and sent outside the hub's lock, so a reconnect storm (every client of a dead pod replaying up to 10,001 rows at once) cannot block the live delivery of every other stream; the shorter lock hold (`seq` last, or one CTE) and a per-workspace batched ancestor publish; every write path through the one seq-bumping helper (a write that forgets it is invisible to every board, so a test should assert that each mutating repository method appends an event); backpressure for a slow client (bounded per-stream queue, then close it and let it resume); metrics for open streams, feed lag and `LISTEN` reconnects; native-image verification of `PgSubscriber` (expected to work, unverified); the ingress settings in §3.
 
-## Consequences
-
-**Adopted, this means:**
-
-- Real-time delivery is a property of the write path: every state change goes through one transaction helper that bumps `seq`, writes the change with a bumped `version`, appends the event and rings the doorbell. A change made any other way does not reach any board.
-- No new infrastructure and no new third-party dependency. `vectis-server` gains a dependency on `vectis-persistence` (which it needs to serve any data anyway) and one `LISTEN` connection per replica.
-- The schema gains `item.version`, `workspace.event_seq` and `workspace_event`.
-- Clients hold one stream per open workspace and converge by `version`/`revision`; the snapshot carries the `seq` it is current to.
-- Staging keeps `replicas: 2` and its rolling updates.
-
-**What would reopen it:** sustained notifying commits in the high hundreds per second on one PostgreSQL instance, or measured `NOTIFY` commit contention; a deployment that must put PgBouncer in transaction mode in front of every connection with no direct path for one session per replica; events that must reach consumers other than browsers (integrations, analytics), which is when a broker reading this log as its outbox pays for itself; more than one database behind one workspace.
-
-### VEC-17's remaining scope
-
-With the transport decided, VEC-17 is high extension and low intension. Split by extension:
-
-- **Server emit path** (`vectis-persistence`, `vectis-server`): the migration above; the write-path helper and every mutating repository method on it (item create, move, field edit, sprint assignment, delete; configuration delta, upgrade and ancestor publish as VEC-45, VEC-10 and VEC-71 land); the snapshot read returning `seq`; `GET /api/v1/workspaces/{key}/events` with `?after`, `Last-Event-ID`, `retry` jitter, keep-alive and `resync`; the `PgSubscriber` feed; the prune job; the metrics.
-- **Client consume path** (`web`): one `EventSource` per open workspace opened at the snapshot's `seq`; the reducer applying the version rule to item events, re-reading configuration on a higher `revision`, reloading on `resync`; the remote-change highlight driven by `origin` and `changed`.
-
-Out of VEC-17, as before: stream authentication (VEC-35), estimation poker (VEC-31).
-
-## Premises re-checked on today's `main`
+## Appendix E · Premises re-checked on today's `main`
 
 - **Still true:** staging runs `replicas: 2`; no `pom.xml` in the reactor names messaging, Kafka, AMQP or Redis; `vectis-server` holds one resource, `ExtensionDiagnosticsResource`; `WorkspaceSnapshot` is the only payload shape; ADR-04 is unwritten (`docs/adr/` holds ADR-01 only, and VEC-45's draft is ADR-03).
 - **No longer true:** "there is no write path yet from which an event could be emitted". `vectis-persistence` now has reactive write methods (`ItemRepository.insert`, `insertAll`, `move`, `moveToSprint`; sprint, board and workspace repositories). No REST endpoint calls them yet, and `vectis-server` does not depend on `vectis-persistence`.
