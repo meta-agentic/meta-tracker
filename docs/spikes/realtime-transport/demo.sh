@@ -8,7 +8,7 @@
 #   ./demo.sh build                 package the prototype (needs the root Quarkus BOM in ~/.m2)
 #   ./demo.sh up <carrierA> <carrierB> [publishDelayMsOnA]
 #   ./demo.sh probe <mode> [args]   run probe/Probe.java on the network (A = http://vec46-a:8080)
-#   ./demo.sh all                   the whole sequence recorded in ../realtime-transport.md
+#   ./demo.sh all                   sections 1-9, as recorded in ../realtime-transport.md
 #   ./demo.sh down                  remove the containers and the network
 set -euo pipefail
 
@@ -147,7 +147,13 @@ all() {
   echo; echo "== 7. the LISTEN connection drops: doorbells are lost, events are not"
   listen_drop
 
-  echo; echo "== 8. publish after commit (broker-shaped dual write), A's publish stalled 300 ms"
+  echo; echo "== 8. a deaf LISTEN connection (doorbells ignored on B): the catch-up poll bounds the latency"
+  reset >/dev/null
+  curl -s -X POST "127.0.0.1:5742/spike/deaf?on=true"; echo
+  probe latency --write "$A" --watch "$B" --subscribers 1 --count 100 --rate 10
+  curl -s -X POST "127.0.0.1:5742/spike/deaf?on=false"; echo
+
+  echo; echo "== 9. publish after commit (broker-shaped dual write), A's publish stalled 300 ms"
   up pg-postcommit pg-postcommit 300; SEED="$(reset)"
   probe dualwrite --slow "$A" --fast "$B"
   probe payload --write "$B" --watch "$B" --size 9000
