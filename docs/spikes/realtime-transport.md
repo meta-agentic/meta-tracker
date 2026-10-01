@@ -27,6 +27,22 @@ The question: **how does a state change on one server instance reach a browser c
 4. **Budget: the 500 ms target holds, measured.** From write on instance A to receipt by a client of instance B: p50 6.6 ms, p95 11.2 ms (one client); slowest of 200 clients per write p95 14.5 ms; under 100 writes/s, p95 6.8 ms per delivery and the worst single delivery of 400,000 was 94 ms. The carrier adds about 1 ms over the write's own HTTP round trip.
 5. **Ordering and loss: the store applies an item representation only if its `version` is higher than the one it holds.** On the stream, events of a workspace cannot arrive out of order or with a gap (proved below). Out-of-order arrival is still possible *across* channels (my own write's HTTP response against an earlier event, a snapshot against the stream), and it was demonstrated; the version rule absorbs it. Lost doorbells cost latency, never events: the log is read from the feed's position after every reconnect.
 
+## Evidence: measured or argued
+
+| Claim | Basis |
+|---|---|
+| Without a carrier, clients of the other instance receive nothing | **Measured**: two instances, 0/5 events and 0/50 probes on B (§1) |
+| The doorbell carrier delivers every event to both instances, byte-identical, and fans an ancestor publish out per workspace | **Measured**: §1, §2; 100 % delivery in every latency run |
+| p50/p95 latency and the 500 ms verdict | **Measured** in the environment of §4; browser network, ingress, cross-node pods and the native image are **not** measured |
+| Resume with `Last-Event-ID` after the client's instance dies | **Demonstrated** once (§1); the retention and `resync` rules are prototyped but nothing prunes, so retention behaviour is **argued** |
+| A dropped `LISTEN` session loses no events | **Demonstrated** once (§1) |
+| Publishing after commit can leave a client wrong, and loses events over 8000 bytes | **Demonstrated** with an injected 300 ms stall (§5) |
+| Cross-channel reordering in the chosen design, absorbed by the version rule | **Measured**: 0–1 of 300 trials naturally, 520 with an injected 20 ms stall (§5) |
+| Kafka and Redis costs, dependencies, limits and reconnect behaviour | **Argued** from their documented properties; no broker was run |
+| Pin-to-one-replica rollout costs | **Argued** from the manifests; not deployed |
+| `NOTIFY` commit-lock contention as the scaling ceiling | **Argued** from PostgreSQL's documented behaviour; 100 notifying writes/s showed none |
+| Constraints on VEC-35 and the ingress (HTTP/2, no buffering) | **Argued**; not verified |
+
 ## Acceptance criteria — how each is met
 
 | AC | Where it is met |
