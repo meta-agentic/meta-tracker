@@ -123,6 +123,8 @@ all() {
   echo; echo "== 2. carrier pg: NOTIFY doorbell in the write transaction, event rows from workspace_event"
   up pg pg; SEED="$(reset)"
   watch_both writes
+  echo "-- a client of B whose cursor is ahead of the stream (Last-Event-ID: 999) is told to resync:"
+  resync_cursor
 
   echo; echo "== 3. latency, carrier pg"
   reset >/dev/null
@@ -160,6 +162,15 @@ all() {
   docker logs vec46-b 2>&1 | grep -m1 "post-commit publish" || true
 
   down
+}
+
+resync_cursor() {
+  local out; out="$(mktemp)"
+  curl -sN -H 'Last-Event-ID: 999' "127.0.0.1:5742/api/v1/workspaces/VEC/events" >"$out" & local p=$!
+  sleep 1
+  stop "$p"
+  cat "$out"
+  rm -f "$out"
 }
 
 resume() {
