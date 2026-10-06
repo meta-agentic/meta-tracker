@@ -1,13 +1,13 @@
-# Session model (spike) — draft ADR-08: identity & auth
+# ADR-VEC-08 — Identity & auth: the browser session model
 
 | | |
 |---|---|
 | **Status** | Proposed |
-| **Type** | Spike (Core IAM tier), VEC-77 — written to be renamed `docs/adr/ADR-08-identity-and-auth.md` |
+| **Type** | ADR from spike VEC-77 (Core IAM tier); the evidence is the prototype in [`docs/spikes/session-model/`](../spikes/session-model/) |
 | **Sprint** | VEC-S5 |
-| **Requirement** | [ADR-01](../adr/ADR-01-product-requirements-and-features.md) **R-SEC-1** (multi-tenant OIDC with federated IdPs; client-managed Authorization Code + PKCE; the backend is a pure resource server) and **R-SEC-2** (tenant isolation fails closed) |
+| **Requirement** | [ADR-01](./ADR-01-product-requirements-and-features.md) **R-SEC-1** (multi-tenant OIDC with federated IdPs; client-managed Authorization Code + PKCE; the backend is a pure resource server) and **R-SEC-2** (tenant isolation fails closed) |
 | **Supersedes** | The *mechanism* clause of R-SEC-1 — "client-managed … the backend is a pure resource server". The requirement's intent (OIDC, PKCE, federated IdPs, no credentials through Vectis's data path) stands. ADR-01's body is not edited. |
-| **Deliverable** | This decision + a throwaway prototype in [`session-model/`](./session-model/), a standalone Maven project outside the reactor, exercised by a browser probe against a real OIDC provider. No production code on `main`. |
+| **Deliverable** | This decision + a throwaway prototype in [`docs/spikes/session-model/`](../spikes/session-model/), a standalone Maven project outside the reactor, exercised by a browser probe against a real OIDC provider. No production code on `main`. |
 | **Reading** | The ADR is Context, Decision, Rules and Consequences. Findings F1–F12 are the evidence; the appendices map the acceptance criteria, mark each claim measured or argued, and say how to reproduce. |
 | **Unblocks** | VEC-35 (sign-in), VEC-81 (tenant binding). Constrains VEC-74 (stream auth), VEC-78 (one origin), VEC-80 (RLS input), VEC-32 (federation, now an amendment to this ADR). |
 
@@ -161,8 +161,8 @@ For VEC-35 and everything after it:
 
 ## Findings
 
-All measured findings come from one run of the probe ([`session-model/probe/session-probe.cjs`](./session-model/probe/session-probe.cjs),
-results in [`session-model/results/session-probe.json`](./session-model/results/session-probe.json)):
+All measured findings come from one run of the probe ([`session-model/probe/session-probe.cjs`](../spikes/session-model/probe/session-probe.cjs),
+results in [`session-model/results/session-probe.json`](../spikes/session-model/results/session-probe.json)):
 Chromium 141 (Playwright 1.56.1), one Linux container, the prototype on Quarkus **3.37.1** (the
 repo's pinned version), and Tessera built from source (Quarkus 3.39.3, profile
 `prod,singlenode`) over TLS, with PostgreSQL 17 in Docker. **19/19 checks passed.**
@@ -335,7 +335,7 @@ cd docs/spikes/session-model && mvn -B -ntp -DskipTests package
 cd probe && NODE_EXTRA_CA_CERTS=../fixture/tls/ca.pem node session-probe.cjs
 ```
 
-F2 and F6 reproduce with [`probe/token-exchange.cjs`](./session-model/probe/token-exchange.cjs),
+F2 and F6 reproduce with [`probe/token-exchange.cjs`](../spikes/session-model/probe/token-exchange.cjs),
 one code exchange for the BFF's client, printing the token endpoint's answer. For F2, start the
 provider with `TESSERA_REQUIRE_SENDER_CONSTRAINT=true`. For F6, pass the scope with and without
 `offline_access`.

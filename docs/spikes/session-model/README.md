@@ -1,6 +1,6 @@
 # Session-model spike prototype (VEC-77)
 
-Throwaway code for [`../session-model.md`](../session-model.md) (draft ADR-08). It is not a
+Throwaway code for [ADR-VEC-08](../../adr/ADR-VEC-08-identity-and-auth.md) (Proposed). It is not a
 module of the root reactor and never builds with `mvn verify` at the repository root.
 
 | Path | What it is |
