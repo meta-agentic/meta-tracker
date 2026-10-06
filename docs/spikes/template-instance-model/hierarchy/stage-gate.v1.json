@@ -1,0 +1,46 @@
+{
+  "template": "stage-gate",
+  "version": 1,
+  "name": "Stage-Gate",
+  "description": "Stages separated by gates; a gate decides go, recycle or kill with approvals.",
+  "extends": {"template": "base", "version": 1},
+  "states": {
+    "todo": null,
+    "in-progress": null,
+    "idea": {"name": "Idea", "category": "START_STATE", "enterFrom": []},
+    "scoping": {
+      "name": "Scoping",
+      "category": "IN_PROGRESS",
+      "enterFrom": ["idea", "gate-1"]
+    },
+    "gate-1": {
+      "name": "Gate 1: go to development",
+      "category": "IN_PROGRESS",
+      "enterFrom": ["scoping"],
+      "gate": {"approvals": 2}
+    },
+    "development": {
+      "name": "Development",
+      "category": "IN_PROGRESS",
+      "enterFrom": ["gate-1", "gate-2"]
+    },
+    "gate-2": {
+      "name": "Gate 2: go to launch",
+      "category": "IN_PROGRESS",
+      "enterFrom": ["development"],
+      "gate": {"approvals": 2}
+    },
+    "done": {"name": "Launched", "enterFrom": ["gate-2"]},
+    "no-go": {"name": "Killed", "enterFrom": ["idea", "gate-1", "gate-2"]}
+  },
+  "stateOrder": ["idea", "scoping", "gate-1", "development", "gate-2", "done", "no-go"],
+  "itemTypes": {
+    "project": {"name": "Project"},
+    "deliverable": {"name": "Deliverable", "parents": ["project"]},
+    "milestone": {"name": "Milestone", "parents": ["project"]},
+    "task": {"parents": ["deliverable"]}
+  },
+  "settings": {"defaultItemType": "project"},
+  "cadence": {"mode": "phase"},
+  "locks": ["states.gate-1.gate", "states.gate-2.gate", "states.development.enterFrom", "states.done.enterFrom"]
+}

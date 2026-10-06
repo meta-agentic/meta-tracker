@@ -33,7 +33,7 @@ final class Resolver {
     }
 
     /** The only top-level members a delta may carry. Template identity and name are not overridable. */
-    static final Set<String> SECTIONS = Set.of("states", "stateOrder", "itemTypes", "fields", "settings");
+    static final Set<String> SECTIONS = Set.of("states", "stateOrder", "itemTypes", "fields", "settings", "cadence");
 
     /** Sections whose members are keyed elements, merged by key. */
     static final List<String> KEYED = List.of("states", "itemTypes", "fields");
