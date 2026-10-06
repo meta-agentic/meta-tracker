@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in — Vectis</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/signin.js" defer></script>
+</head>
+<body>
+  <main class="card">
+    <h1>Sign in to Vectis</h1>
+    <form id="signin" novalidate>
+      <label>Username <input id="username" name="username" autocomplete="username" required></label>
+      <label>Password <input id="password" name="password" type="password" autocomplete="current-password" required></label>
+      <button type="submit">Sign in</button>
+      <p id="error" role="alert" hidden>Invalid username or password.</p>
+    </form>
+  </main>
+</body>
+</html>
