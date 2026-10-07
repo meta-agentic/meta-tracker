@@ -1,0 +1,21 @@
+{
+  "template": "scrum",
+  "version": 1,
+  "name": "Scrum",
+  "extends": {"template": "base", "version": 1},
+  "states": {
+    "backlog": {"name": "Backlog", "category": "START_STATE", "before": "todo"},
+    "in-review": {"name": "In Review", "category": "IN_PROGRESS", "after": "in-progress"}
+  },
+  "itemTypes": {
+    "story": {"name": "Story", "parents": ["epic"]},
+    "bug": {"name": "Bug", "parents": ["epic"]},
+    "epic": {"name": "Epic"},
+    "task": {"parents": ["story", "bug"]}
+  },
+  "fields": {
+    "storyPoints": {"name": "Story points", "type": "number", "scale": "fibonacci"}
+  },
+  "settings": {"defaultItemType": "story"},
+  "cadence": {"mode": "sprint", "sprintDays": 14}
+}

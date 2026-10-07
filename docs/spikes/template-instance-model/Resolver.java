@@ -33,7 +33,7 @@ final class Resolver {
     }
 
     /** The only top-level members a delta may carry. Template identity and name are not overridable. */
-    static final Set<String> SECTIONS = Set.of("states", "stateOrder", "itemTypes", "fields", "settings");
+    static final Set<String> SECTIONS = Set.of("states", "stateOrder", "itemTypes", "fields", "settings", "cadence");
 
     /** Sections whose members are keyed elements, merged by key. */
     static final List<String> KEYED = List.of("states", "itemTypes", "fields");
@@ -227,6 +227,19 @@ final class Resolver {
                 int n = occupancy.getOrDefault(s + "." + k, 0);
                 if (!Json.obj(after.get(s)).containsKey(k) && n > 0) {
                     v.add(s + "." + k + ": still used by " + n + " item(s); move or retype them first");
+                }
+            }
+        }
+        // Narrowing an item type's parents orphans existing links the way removing a state orphans
+        // items: occupancy counts them as "itemTypes.<type>.parents.<parent type>".
+        Map<String, Object> types = Json.obj(after.get("itemTypes"));
+        for (String k : new TreeSet<>(types.keySet())) {
+            Object was = Json.obj(Json.obj(before.get("itemTypes")).get(k)).get("parents");
+            List<String> now = Json.strings(Json.obj(types.get(k)).get("parents"));
+            for (String p : Json.strings(was)) {
+                int n = occupancy.getOrDefault("itemTypes." + k + ".parents." + p, 0);
+                if (!now.contains(p) && n > 0) {
+                    v.add("itemTypes." + k + ".parents: no longer allows '" + p + "' while " + n + " " + k + " item(s) sit under one; move them first");
                 }
             }
         }
