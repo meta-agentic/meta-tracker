@@ -145,9 +145,14 @@ public class SprintRepository {
             WorkspaceEventLog.Scope scope, UUID workspaceId, Sprint sprint, List<UUID> itemIdsToMove,
             UUID destinationSprintId) {
         var conn = scope.connection();
-        return conn.preparedQuery(
-                        "update sprint set status = $1, completed_at = $2 where id = $3 and status = 'ACTIVE'")
-                .execute(Tuple.of(sprint.status().name(), toOffset(sprint.completedAt()), sprint.id()))
+        // board_id too: the workspace locked is the one sprint.boardId() names, so a caller's
+        // copy naming the wrong board must not complete a sprint of another workspace.
+        return conn.preparedQuery("""
+                        update sprint set status = $1, completed_at = $2
+                         where id = $3 and board_id = $4 and status = 'ACTIVE'
+                        """)
+                .execute(Tuple.of(
+                        sprint.status().name(), toOffset(sprint.completedAt()), sprint.id(), sprint.boardId()))
                 .chain(rows -> {
                     if (rows.rowCount() == 0) {
                         return Uni.createFrom().failure(new IllegalSprintTransitionException(
