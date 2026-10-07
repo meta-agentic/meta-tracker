@@ -34,7 +34,7 @@ final class Validation {
                     "wipLimit", "enterFrom", "gate"),
             "itemTypes", List.of("name", "description", "parents"),
             "fields", List.of("name", "description", "type", "scale"),
-            "settings", List.of("defaultItemType"),
+            "settings", List.of("defaultItemType", "gatedDelivery"),
             "cadence", List.of("mode", "sprintDays"),
             "gate", List.of("approvals"));
 
@@ -114,6 +114,7 @@ final class Validation {
         members("settings.", Json.obj(doc.get("settings")), "settings", v);
         cadence(Json.obj(doc.get("cadence")), v);
         locks(doc, v);
+        gatedDelivery(doc, v);
     }
 
     /** Members outside the closed set are rejected, with the path of the first unknown one. */
@@ -189,9 +190,11 @@ final class Validation {
     }
 
     /**
-     * A lock is a path ("states.gate-1", "states.done.enterFrom", "stateOrder") that no descendant
-     * level may override, remove or add under. It must name a section and, in a keyed section, an
-     * element that exists. Hierarchy.java enforces locks; this checks they are well formed.
+     * A lock is a path no descendant level may change: "stateOrder", a section ("states"), an element
+     * ("states.gate-1"), or one member of an element or of an object section ("states.gate-1.gate",
+     * "settings.gatedDelivery"). Nothing deeper: "states.x.gate.approvals" is refused, lock
+     * "states.x.gate" instead. The member must be one the element kind allows, so a misspelt lock
+     * cannot silently lock nothing; the element must exist. Hierarchy.java enforces locks.
      */
     private static void locks(Map<String, Object> doc, List<String> v) {
         Object l = doc.get("locks");
@@ -203,11 +206,56 @@ final class Validation {
             return;
         }
         for (String path : Json.strings(l)) {
-            String[] seg = path.split("\\.", 3);
+            String[] seg = path.split("\\.", -1);
+            boolean keyed = seg.length > 0 && Resolver.KEYED.contains(seg[0]);
             if (!Resolver.SECTIONS.contains(seg[0])) {
                 v.add("locks: '" + path + "' does not start with a section");
-            } else if (seg.length > 1 && Resolver.KEYED.contains(seg[0]) && !Json.obj(doc.get(seg[0])).containsKey(seg[1])) {
+            } else if (seg.length > (keyed ? 3 : seg[0].equals("stateOrder") ? 1 : 2)) {
+                v.add("locks: '" + path + "' is deeper than a member; lock the member that holds it");
+            } else if (keyed && seg.length > 1 && !Json.obj(doc.get(seg[0])).containsKey(seg[1])) {
                 v.add("locks: '" + path + "' names an element that does not exist");
+            } else if (keyed && seg.length == 3 && !MEMBERS.get(seg[0]).contains(seg[2])
+                    || !keyed && seg.length == 2 && !MEMBERS.get(seg[0]).contains(seg[1])) {
+                v.add("locks: '" + path + "' names a member " + seg[0] + " elements do not have");
+            }
+        }
+    }
+
+    /**
+     * settings.gatedDelivery: every way from a START_STATE to an END_STATE with outcome DELIVERED
+     * passes through a gate. Checked on the resolved document, so it holds however a level below
+     * tries to open a path: a new delivered end state, an outcome changed to DELIVERED, a state
+     * recategorised, a wider enterFrom. Edges follow enterFrom (absent: from every other state).
+     */
+    private static void gatedDelivery(Map<String, Object> doc, List<String> v) {
+        Object on = Json.obj(doc.get("settings")).get("gatedDelivery");
+        if (on != null && !(on instanceof Boolean)) {
+            v.add("settings.gatedDelivery: must be true or false");
+        }
+        if (!Boolean.TRUE.equals(on)) {
+            return;
+        }
+        Map<String, Object> states = Json.obj(doc.get("states"));
+        for (String start : new java.util.TreeSet<>(states.keySet())) {
+            if (!"START_STATE".equals(Json.obj(states.get(start)).get("category"))) {
+                continue;
+            }
+            java.util.Deque<String> todo = new java.util.ArrayDeque<>(List.of(start));
+            java.util.Set<String> seen = new java.util.HashSet<>(todo);
+            while (!todo.isEmpty()) {
+                String from = todo.pop();
+                for (String to : new java.util.TreeSet<>(states.keySet())) {
+                    Object enter = Json.obj(states.get(to)).get("enterFrom");
+                    if (to.equals(from) || enter != null && !Json.strings(enter).contains(from) || !seen.add(to)) {
+                        continue;
+                    }
+                    Map<String, Object> st = Json.obj(states.get(to));
+                    if ("END_STATE".equals(st.get("category")) && "DELIVERED".equals(st.get("outcome"))) {
+                        v.add("settings.gatedDelivery: '" + start + "' reaches the DELIVERED end state '" + to + "' without passing a gate");
+                    } else if (!st.containsKey("gate")) {
+                        todo.push(to);
+                    }
+                }
             }
         }
     }

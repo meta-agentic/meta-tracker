@@ -18,7 +18,7 @@
 // level, so two levels anchoring next to the same state never collide (case H3).
 //
 // Also here: locks (paths no descendant may override), publishing (what a new version must
-// pass), and propagation (what a publish does to every descendant, via Resolver.upgrade).
+// pass) and provenance. What a publish does to descendants is in Propagation.java.
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -33,8 +33,11 @@ final class Hierarchy {
     private Hierarchy() {
     }
 
-    /** Root, then at most six template levels, then the workspace: base, methodology, organisation, unit, team, workspace fit with room to spare. */
-    static final int MAX_LEVELS = 8;
+    /**
+     * The most template versions a chain may hold, root included; the workspace is not counted.
+     * Base, methodology, organisation, unit, team fit with room to spare.
+     */
+    static final int MAX_TEMPLATE_LEVELS = 7;
     /** Document members that say what a version is, not what it configures; never part of a delta. */
     static final Set<String> IDENTITY = Set.of("template", "version", "name", "description", "extends");
     /** The owner of built-in templates, shipped by a Vectis release. Any other owner is a tenant. */
@@ -101,8 +104,8 @@ final class Hierarchy {
         List<Version> out = new ArrayList<>();
         for (Version x = leaf; x != null; ) {
             out.addFirst(x);
-            if (out.size() >= MAX_LEVELS) {
-                v.add("extends: more than " + (MAX_LEVELS - 1) + " template levels; a workspace needs the last one");
+            if (out.size() > MAX_TEMPLATE_LEVELS) {
+                v.add("extends: more than " + MAX_TEMPLATE_LEVELS + " template levels, root included");
                 break;
             }
             String p = x.parent();
@@ -126,6 +129,7 @@ final class Hierarchy {
         }
         Resolver.Resolution res = Resolver.resolve(parent, delta);
         v.addAll(res.violations());
+        v.addAll(lockedValues(Json.strings(parentResolved.get("locks")), parentResolved, res.effective()));
         Map<String, Object> eff = res.effective();
         for (String m : List.of("template", "version", "name", "description", "extends")) {
             eff.remove(m);
@@ -165,6 +169,7 @@ final class Hierarchy {
         List<String> v = new ArrayList<>(lockViolations(Json.strings(parent.get("locks")), w.delta));
         Resolver.Resolution res = Resolver.resolve(strip(parent), w.delta);
         v.addAll(res.violations());
+        v.addAll(lockedValues(Json.strings(parent.get("locks")), parent, res.effective()));
         return new Resolver.Resolution(res.effective(), v);
     }
 
@@ -174,6 +179,7 @@ final class Hierarchy {
         List<String> v = new ArrayList<>(lockViolations(Json.strings(parent.get("locks")), newDelta));
         Resolver.Resolution res = Resolver.writeDelta(strip(parent), w.delta, newDelta, w.occupancy);
         v.addAll(res.violations());
+        v.addAll(lockedValues(Json.strings(parent.get("locks")), parent, res.effective()));
         return new Resolver.Resolution(res.effective(), v);
     }
 
@@ -200,10 +206,10 @@ final class Hierarchy {
 
     // ---- locks ----------------------------------------------------------
 
-    /** A path a delta touches; a removal (a tombstone) also touches everything under it. */
+    /** A path a delta touches. It hits a lock on the same path, above it, or below it (setting or removing an element reaches its locked member). */
     record Touch(String path, boolean removal) {
         boolean hits(String lock) {
-            return path.equals(lock) || path.startsWith(lock + ".") || removal && lock.startsWith(path + ".");
+            return path.equals(lock) || path.startsWith(lock + ".") || lock.startsWith(path + ".");
         }
     }
 
@@ -227,9 +233,10 @@ final class Hierarchy {
     }
 
     /**
-     * A delta may not touch a locked path or anything under it, and may not remove an element
-     * that contains one: a tombstone of "states.gate-1" touches the lock "states.gate-1.gate".
-     * Overriding another field of the same element ("states.gate-1.name") is allowed.
+     * A delta may not touch a locked path, anything under it, or an element containing it: a
+     * tombstone of "states.gate-1" touches the lock "states.gate-1.gate". Overriding another field
+     * of the same element ("states.gate-1.name") is allowed. This is the first of two checks; see
+     * lockedValues for the second.
      */
     static List<String> lockViolations(List<String> locks, Map<String, Object> delta) {
         List<String> v = new ArrayList<>();
@@ -240,12 +247,42 @@ final class Hierarchy {
         return v;
     }
 
+    /**
+     * The second lock check, on the result rather than the delta: the resolved value at every
+     * inherited locked path is unchanged. It is what makes a stateOrder lock hold against anchors,
+     * additions and removals, none of which touch the path "stateOrder", and it is the backstop for
+     * any other way to change a locked value without naming it. Anchors are compared stripped,
+     * since they are level-local.
+     */
+    static List<String> lockedValues(List<String> locks, Map<String, Object> parentResolved, Map<String, Object> effective) {
+        List<String> v = new ArrayList<>();
+        Map<String, Object> before = strip(parentResolved);
+        Map<String, Object> after = strip(effective);
+        for (String l : locks) {
+            Object was = at(before, l);
+            Object now = at(after, l);
+            if (!java.util.Objects.equals(was, now)) {
+                v.add(l + ": locked by an ancestor template; its value would change from " + Json.compact(was) + " to " + Json.compact(now));
+            }
+        }
+        return v;
+    }
+
+    /** The value at a dotted path ("states.qa.wipLimit", "stateOrder"), or null. */
+    static Object at(Map<String, Object> doc, String path) {
+        Object x = doc;
+        for (String seg : path.split("\\.")) {
+            x = x instanceof Map<?, ?> m ? m.get(seg) : null;
+        }
+        return x;
+    }
+
     // ---- publishing -----------------------------------------------------
 
     /**
      * Publish a new version. It must be the key's next version, by the key's owner; extend a
      * published version owned by the system or by the same owner (a tenant never builds on another
-     * tenant's template); stay within MAX_LEVELS; respect every ancestor lock; and resolve cleanly
+     * tenant's template); stay within MAX_TEMPLATE_LEVELS; respect every ancestor lock; and resolve cleanly
      * on its own, so every level is itself a valid, provisionable workflow. Roots are built-in only.
      * Returns the violations; when there are none the version is in, with its resolution materialised.
      */
@@ -284,107 +321,6 @@ final class Hierarchy {
         r.versions.put(me.ref(), me);
         r.resolved.put(me.ref(), res.effective());
         return v;
-    }
-
-    // ---- propagation ----------------------------------------------------
-
-    /** One edge's upgrade: VEC-45's Resolver.upgrade between two resolved parent versions, plus the new parent's locks. */
-    static Resolver.Upgrade upgradeEdge(Registry r, Map<String, Object> delta, String from, String to, Map<String, Integer> occupancy) {
-        Map<String, Object> d = Json.obj(Json.deepCopy(delta));
-        Object ownLocks = d.remove("locks");
-        Map<String, Object> target = r.resolved.get(to);
-        Resolver.Upgrade u = Resolver.upgrade(strip(r.resolved.get(from)), strip(target), d, occupancy);
-        List<String> conflicts = new ArrayList<>(u.conflicts());
-        conflicts.addAll(lockViolations(Json.strings(target.get("locks")), u.delta()));
-        Map<String, Object> out = u.delta();
-        if (ownLocks != null) {
-            out.put("locks", ownLocks);
-        }
-        return new Resolver.Upgrade(out, u.effective(), u.notes(), conflicts);
-    }
-
-    /**
-     * What publishing {@code key@version} does to its descendants. Walks the tree top-down. Each
-     * direct child (template or workspace) pinned to an older version of {@code key} is dry-run
-     * upgraded. A child that follows automatically and upgrades without conflicts is upgraded: a
-     * template child publishes its own next version, rebased (and its children are then visited in
-     * turn); a workspace is re-pinned and its revision bumped, which emits configuration.changed
-     * with cause "ancestor" naming the version originally published. Anything else stays pinned
-     * where it is, and the plan says why: a manual follower gets the dry run as a preview, a
-     * conflicting one gets the conflicts. Nothing is ever partly upgraded.
-     */
-    static List<String> propagate(Registry r, List<Workspace> workspaces, String key, long version, String origin) {
-        List<String> plan = new ArrayList<>();
-        String to = ref(key, version);
-        Set<String> children = new TreeSet<>();
-        r.versions.values().forEach(x -> {
-            if (x.parent() != null && x.parent().startsWith(key + "@") && r.latest(x.key()) == x.version()) {
-                children.add(x.key());
-            }
-        });
-        for (String c : children) {
-            Version cv = r.get(c, r.latest(c));
-            if (cv.parent().equals(to)) {
-                continue;
-            }
-            Resolver.Upgrade u = upgradeEdge(r, withLocks(cv), cv.parent(), to, Map.of());
-            if (!"auto".equals(r.follow.get(c))) {
-                plan.add("template " + cv.ref() + ": stays on " + cv.parent() + ", manual" + summary(u));
-                continue;
-            }
-            if (!u.conflicts().isEmpty()) {
-                plan.add("template " + cv.ref() + ": blocked, stays on " + cv.parent() + ": " + u.conflicts());
-                continue;
-            }
-            Map<String, Object> next = new LinkedHashMap<>();
-            for (String m : List.of("template", "version", "name", "description")) {
-                if (cv.document().containsKey(m)) {
-                    next.put(m, cv.document().get(m));
-                }
-            }
-            next.put("version", cv.version() + 1);
-            next.put("extends", Json.parse("{\"template\": \"" + key + "\", \"version\": " + version + "}"));
-            next.putAll(u.delta());
-            List<String> v = publish(r, cv.owner(), next);
-            if (!v.isEmpty()) {
-                plan.add("template " + cv.ref() + ": blocked, stays on " + cv.parent() + ": " + v);
-                continue;
-            }
-            plan.add("template " + cv.ref() + " -> " + ref(c, cv.version() + 1) + ", rebased onto " + to + summary(u));
-            plan.addAll(propagate(r, workspaces, c, cv.version() + 1, origin));
-        }
-        for (Workspace w : workspaces.stream().sorted((a, b) -> a.key.compareTo(b.key)).toList()) {
-            if (!w.template.equals(key) || w.version >= version) {
-                continue;
-            }
-            String from = ref(w.template, w.version);
-            Resolver.Upgrade u = upgradeEdge(r, w.delta, from, to, w.occupancy);
-            if (!w.auto) {
-                plan.add("workspace " + w.key + ": stays on " + from + ", manual" + summary(u));
-            } else if (!u.conflicts().isEmpty()) {
-                plan.add("workspace " + w.key + ": blocked, stays on " + from + ": " + u.conflicts());
-            } else {
-                Map<String, Object> before = resolveWorkspace(r, w).effective();
-                w.version = version;
-                w.delta = u.delta();
-                w.revision++;
-                plan.add("workspace " + w.key + ": " + from + " -> " + to + ", revision " + w.revision
-                        + ", configuration.changed cause ancestor " + origin + " " + Diff.projection(before, resolveWorkspace(r, w).effective()));
-            }
-        }
-        return plan;
-    }
-
-    private static Map<String, Object> withLocks(Version v) {
-        Map<String, Object> d = sections(v.document());
-        if (v.document().containsKey("locks")) {
-            d.put("locks", Json.deepCopy(v.document().get("locks")));
-        }
-        return d;
-    }
-
-    private static String summary(Resolver.Upgrade u) {
-        return u.conflicts().isEmpty() ? (u.notes().isEmpty() ? "" : "; notes " + u.notes()) : "; would conflict: " + u.conflicts();
     }
 
     // ---- provenance -----------------------------------------------------

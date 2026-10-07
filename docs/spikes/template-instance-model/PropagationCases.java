@@ -27,14 +27,9 @@ final class PropagationCases extends Cases {
         return Hierarchy.resolveWorkspace(r, w).effective();
     }
 
+    /** A Vectis release of a new built-in version: the build rebases the built-ins below it, then the runtime edges run. */
     static List<String> publishAndPropagate(Hierarchy.Registry r, List<Hierarchy.Workspace> all, String key, String change) {
-        Map<String, Object> doc = nextOf(r, key, change);
-        List<String> v = Hierarchy.publish(r, Hierarchy.SYSTEM, doc);
-        if (!v.isEmpty()) {
-            return v;
-        }
-        String origin = Hierarchy.ref(key, (Long) doc.get("version"));
-        return Hierarchy.propagate(r, all, key, (Long) doc.get("version"), origin);
+        return Propagation.release(r, all, nextOf(r, key, change)).plan();
     }
 
     static void run() throws Exception {
@@ -47,7 +42,7 @@ final class PropagationCases extends Cases {
         Hierarchy.Workspace kan = ws("KAN", "kanban", "{}", true, Map.of());
         Hierarchy.Workspace gate = ws("GATE", "stage-gate", "{}", true, Map.of());
         List<String> p1 = publishAndPropagate(r1, List.of(plat, kan, gate), "base", rename);
-        check("P1", "a change at the root reaches a workspace four levels down through automatic edges; no delta on the way is rewritten",
+        check("P1", "a change at the root reaches a workspace four levels down, through the release build and then automatic edges; no delta on the way is rewritten",
                 plat.version == 2 && is(name(eff(r1, plat), "todo"), "Ready") && is(name(eff(r1, kan), "todo"), "Ready")
                         && plat.delta.equals(h("instance-platform.json"))
                         && Hierarchy.sections(r1.get("acme", 2).document()).equals(Hierarchy.sections(h("acme.v1.json")))
@@ -75,7 +70,7 @@ final class PropagationCases extends Cases {
         Hierarchy.Registry r4 = HierarchyCases.shipped();
         Hierarchy.Workspace plat4 = ws("PLAT", "acme-platform", "{}", true, Map.of());
         List<String> p4 = publishAndPropagate(r4, List.of(plat4), "base", rename);
-        Resolver.Upgrade later = Hierarchy.upgradeEdge(r4, Hierarchy.sections(h("acme.v1.json")), "scrum@1", "scrum@2", Map.of());
+        Resolver.Upgrade later = Propagation.upgradeEdge(r4, Hierarchy.sections(h("acme.v1.json")), "scrum@1", "scrum@2", Map.of());
         check("P4", "a manual edge stops propagation: Acme stays on scrum@1 and is shown the dry run; nothing below it moves; it upgrades later, explicitly",
                 r4.latest("scrum") == 2 && r4.latest("acme") == 1 && r4.latest("acme-platform") == 1
                         && has(p4, "template acme@1: stays on scrum@1, manual") && !has(p4, "workspace PLAT")
@@ -126,8 +121,8 @@ final class PropagationCases extends Cases {
         Hierarchy.Registry r8 = HierarchyCases.shipped();
         Hierarchy.Workspace onScrum = ws("SCR", "scrum", "{\"states\": {\"in-review\": {\"wipLimit\": 2}}}", true, Map.of());
         List<String> p8 = publishAndPropagate(r8, List.of(), "scrum", "{\"locks\": [\"states.in-review\"]}");
-        Resolver.Upgrade lockedOut = Hierarchy.upgradeEdge(r8, Hierarchy.sections(h("acme.v1.json")), "scrum@1", "scrum@2", Map.of());
-        Resolver.Upgrade wsLocked = Hierarchy.upgradeEdge(r8, onScrum.delta, "scrum@1", "scrum@2", Map.of());
+        Resolver.Upgrade lockedOut = Propagation.upgradeEdge(r8, Hierarchy.sections(h("acme.v1.json")), "scrum@1", "scrum@2", Map.of());
+        Resolver.Upgrade wsLocked = Propagation.upgradeEdge(r8, onScrum.delta, "scrum@1", "scrum@2", Map.of());
         check("P8", "a parent that adds a lock on a path a child overrides refuses the child's upgrade, at a template edge and at a workspace",
                 has(lockedOut.conflicts(), "states.in-review.name: locked by an ancestor template ('states.in-review')")
                         && has(wsLocked.conflicts(), "states.in-review.wipLimit: locked") && r8.latest("hybrid") == 2,
@@ -137,11 +132,53 @@ final class PropagationCases extends Cases {
         Hierarchy.Workspace manual = ws("W", "scrum", "{\"states\": {\"refined\": {\"name\": \"Refined\", \"category\": \"START_STATE\", \"after\": \"backlog\"}}}", false, Map.of());
         List<String> p9 = new ArrayList<>(publishAndPropagate(r9, List.of(manual), "scrum", "{\"states\": {\"todo\": {\"name\": \"Next\"}}}"));
         p9.addAll(publishAndPropagate(r9, List.of(manual), "scrum", "{\"states\": {\"blocked\": {\"name\": \"Blocked\", \"category\": \"IN_PROGRESS\", \"after\": \"in-review\"}}}"));
-        Resolver.Upgrade skip = Hierarchy.upgradeEdge(r9, manual.delta, "scrum@1", "scrum@3", Map.of());
-        check("P9", "a manual workspace sees each publish as a preview, stays pinned, and later upgrades across several versions in one step",
+        Resolver.Upgrade skip = Propagation.upgradeEdge(r9, manual.delta, "scrum@1", "scrum@3", Map.of());
+        Resolver.Upgrade step1 = Propagation.upgradeEdge(r9, manual.delta, "scrum@1", "scrum@2", Map.of());
+        Resolver.Upgrade step2 = Propagation.upgradeEdge(r9, step1.delta(), "scrum@2", "scrum@3", Map.of());
+        Hierarchy.Registry r9b = HierarchyCases.shipped();
+        Hierarchy.Workspace cr = ws("CR", "scrum", "{\"states\": {\"in-review\": {\"name\": \"CR\"}}}", false, Map.of());
+        publishAndPropagate(r9b, List.of(), "scrum", "{\"states\": {\"in-review\": null}}");
+        publishAndPropagate(r9b, List.of(), "scrum", "{\"states\": {\"in-review\": {\"name\": \"Peer Review\", \"category\": \"IN_PROGRESS\", \"after\": \"todo\"}}}");
+        Resolver.Upgrade crSkip = Propagation.upgradeEdge(r9b, cr.delta, "scrum@1", "scrum@3", Map.of());
+        Resolver.Upgrade crStep = Propagation.upgradeEdge(r9b, Propagation.upgradeEdge(r9b, cr.delta, "scrum@1", "scrum@2", Map.of()).delta(), "scrum@2", "scrum@3", Map.of());
+        check("P9", "a manual workspace sees each publish as a preview and may skip versions; a skip equals the stepwise path here, but can differ: promoted at v2 and re-added at v3, stepwise keeps the instance's place, the skip takes the template's",
                 p9.stream().filter(l -> l.startsWith("workspace W: stays on scrum@1, manual")).count() == 2 && manual.version == 1
                         && skip.conflicts().isEmpty() && is(name(skip.effective(), "todo"), "Next")
-                        && order(skip.effective()).equals(List.of("backlog", "refined", "todo", "in-progress", "in-review", "blocked", "done", "no-go")),
-                p9 + " " + skip);
+                        && order(skip.effective()).equals(List.of("backlog", "refined", "todo", "in-progress", "in-review", "blocked", "done", "no-go"))
+                        && step2.conflicts().isEmpty() && step2.effective().equals(skip.effective()) && step2.delta().equals(skip.delta())
+                        && crSkip.conflicts().isEmpty() && crStep.conflicts().isEmpty()
+                        && is(name(crSkip.effective(), "in-review"), "CR") && is(name(crStep.effective(), "in-review"), "CR")
+                        && order(crStep.effective()).indexOf("in-review") == order(crStep.effective()).indexOf("in-progress") + 1
+                        && order(crSkip.effective()).indexOf("in-review") == order(crSkip.effective()).indexOf("todo") + 1,
+                p9 + " " + skip + " | " + order(crSkip.effective()) + " " + order(crStep.effective()));
+
+        Hierarchy.Registry r10 = HierarchyCases.shipped();
+        Hierarchy.publish(r10, Hierarchy.SYSTEM, nextOf(r10, "scrum", rename));
+        Hierarchy.Workspace late = ws("LATE", "scrum", "{}", true, Map.of());
+        Hierarchy.Workspace raced = ws("RACED", "scrum", "{}", true, Map.of());
+        Propagation.Planned lp = Propagation.plan(r10, late, "scrum@2");
+        Propagation.Planned rp = Propagation.plan(r10, raced, "scrum@2");
+        late.delta = patch("{\"states\": {\"in-review\": {\"wipLimit\": 2}}}");
+        late.revision++;
+        raced.version = 2;
+        String lateLine = Propagation.apply(r10, lp, "scrum@2", "scrum@2");
+        String racedLine = Propagation.apply(r10, rp, "scrum@2", "scrum@2");
+        check("P10", "apply recomputes in the workspace's own transaction: a delta written after the plan is kept, not overwritten by the plan's preview; a workspace upgraded meanwhile is skipped",
+                late.version == 2 && is(state(eff(r10, late), "in-review").get("wipLimit"), 2L) && is(name(eff(r10, late), "todo"), "Ready")
+                        && lateLine.contains("re-planned from revision 1 (the plan saw 0)") && !lp.preview().delta().containsKey("states")
+                        && racedLine.equals("workspace RACED: skipped, now on scrum@2, not scrum@1") && raced.revision == 0,
+                lateLine + " " + racedLine);
+
+        Hierarchy.Registry r11 = HierarchyCases.shipped();
+        Hierarchy.publish(r11, "ops", HierarchyCases.derived("ops", 1, "base", 1, ""));
+        r11.follow.put("ops", "auto");
+        Hierarchy.publish(r11, Hierarchy.SYSTEM, nextOf(r11, "base", rename));
+        Hierarchy.publish(r11, Hierarchy.SYSTEM, nextOf(r11, "base", "{\"states\": {\"todo\": {\"name\": \"Queued\"}}}"));
+        List<String> late3 = new ArrayList<>(Propagation.propagate(r11, List.of(), "base", 3, "base@3"));
+        late3.addAll(Propagation.propagate(r11, List.of(), "base", 2, "base@2"));
+        check("P11", "two root versions in quick succession, propagated out of order: children are discovered as each level is processed and only an older pin is upgraded, so ops lands once on base@3 and is never moved back to base@2",
+                r11.latest("ops") == 2 && is(r11.get("ops", 2).parent(), "base@3") && late3.stream().filter(l -> l.contains("ops@")).toList().equals(List.of("template ops@1 -> ops@2, rebased onto base@3"))
+                        && is(name(r11.resolved.get("ops@2"), "todo"), "Queued"),
+                late3);
     }
 }

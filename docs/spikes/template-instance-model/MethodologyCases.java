@@ -90,6 +90,35 @@ final class MethodologyCases extends Cases {
                         && has(Resolver.resolve(base, patch("{\"states\": {\"in-review\": {\"gate\": true}}}")).violations(), "states.in-review.gate: must be an object"),
                 Resolver.resolve(base, patch("{\"cadence\": {\"mode\": \"flow\"}}")).violations());
 
+        Map<String, Object> narrowed = patch("{\"itemTypes\": {\"task\": {\"parents\": [\"story\"]}}}");
+        Map<String, Integer> tasksUnderBugs = Map.of("itemTypes.task.parents.bug", 12);
+        Map<String, Object> scrumNarrowed = Json.obj(Json.mergePatch(base, narrowed));
+        check("M8", "narrowing an item type's parents is refused while items sit under a parent it drops, at a delta write and at an upgrade; allowed when none do",
+                has(Resolver.writeDelta(base, Map.of(), narrowed, tasksUnderBugs).violations(), "itemTypes.task.parents: no longer allows 'bug' while 12 task item(s) sit under one")
+                        && Resolver.writeDelta(base, Map.of(), narrowed, Map.of()).ok()
+                        && has(Resolver.upgrade(base, scrumNarrowed, Map.of(), tasksUnderBugs).conflicts(), "no longer allows 'bug'")
+                        && Resolver.upgrade(base, scrumNarrowed, Map.of(), Map.of()).conflicts().isEmpty(),
+                Resolver.writeDelta(base, Map.of(), narrowed, tasksUnderBugs).violations());
+
+        String seq = "\"states\": {\"todo\": null, \"in-progress\": null,"
+                + " \"requirements\": {\"name\": \"Requirements\", \"category\": \"START_STATE\", \"enterFrom\": []},"
+                + " \"design\": {\"name\": \"Design\", \"category\": \"IN_PROGRESS\", \"enterFrom\": [\"requirements\"]},"
+                + " \"build\": {\"name\": \"Build\", \"category\": \"IN_PROGRESS\", \"enterFrom\": [\"design\"]},"
+                + " \"verify\": {\"name\": \"Verify\", \"category\": \"IN_PROGRESS\", \"enterFrom\": [\"build\"]GATE},"
+                + " \"done\": {\"name\": \"Released\", \"enterFrom\": [\"verify\"]}},"
+                + " \"stateOrder\": [\"requirements\", \"design\", \"build\", \"verify\", \"done\", \"no-go\"], \"cadence\": {\"mode\": \"phase\"}";
+        Map<String, Object> baseRes = r.resolved.get("base@1");
+        Resolver.Resolution waterfall = Hierarchy.derive(baseRes, HierarchyCases.derived("waterfall", 1, "base", 1, seq.replace("GATE", "")), "waterfall@1");
+        Resolver.Resolution signedOff = Hierarchy.derive(baseRes, HierarchyCases.derived("waterfall", 1, "base", 1,
+                seq.replace("GATE", ", \"gate\": {\"approvals\": 1}") + ", \"settings\": {\"gatedDelivery\": true}"), "waterfall@1");
+        List<String> wf = moves(Workflow.definition(waterfall.effective()));
+        check("M9", "waterfall maps without a new concept: phase cadence, stages entered strictly in sequence, gates optional (a sign-off gate before release, with gated delivery, also resolves)",
+                waterfall.ok() && signedOff.ok() && is(cadence(waterfall.effective()).get("mode"), "phase")
+                        && wf.containsAll(List.of("requirements>design", "design>build", "build>verify", "verify>done"))
+                        && wf.stream().filter(m -> !m.endsWith(">no-go")).count() == 4
+                        && moves(Workflow.definition(signedOff.effective())).contains("verify>done[gate:verify]"),
+                waterfall.violations() + " " + wf);
+
         PropagationCases.run();
     }
 }

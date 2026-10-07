@@ -16,7 +16,7 @@ final class HierarchyCases extends Cases {
         return load("hierarchy/" + file);
     }
 
-    /** The shipped hierarchy: five built-ins that follow each other automatically, and one tenant's organisation and team levels. */
+    /** The shipped hierarchy: five built-ins (rebased onto each other by the release build), and one tenant's organisation and team levels; the team follows the organisation automatically. */
     static Hierarchy.Registry shipped() throws Exception {
         Hierarchy.Registry r = new Hierarchy.Registry();
         for (String f : SYSTEM_FILES) {
@@ -31,7 +31,7 @@ final class HierarchyCases extends Cases {
                 throw new IllegalStateException(f + " " + v);
             }
         }
-        List.of("kanban", "scrum", "hybrid", "stage-gate", "acme-platform").forEach(k -> r.follow.put(k, "auto"));
+        r.follow.put("acme-platform", "auto");
         return r;
     }
 
@@ -152,15 +152,15 @@ final class HierarchyCases extends Cases {
 
         section("hierarchy: locks");
         Map<String, Object> sg = res(r, "stage-gate@1");
-        check("L1", "stage-gate locks its gates: a level below cannot drop or weaken a gate or open a path around it, may rename it; a workspace neither; locks accumulate",
+        check("L1", "stage-gate locks its gates and the entries they guard: a level below cannot drop or weaken a gate or rewire those entries, may rename it; a workspace neither; locks accumulate",
                 has(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"states\": {\"gate-1\": {\"gate\": {\"approvals\": 1}}}"), "t@1").violations(), "states.gate-1.gate: locked by an ancestor template ('states.gate-1.gate')")
                         && has(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"states\": {\"gate-1\": null}"), "t@1").violations(), "states.gate-1: locked by an ancestor template ('states.gate-1.gate')")
                         && has(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"states\": {\"development\": {\"enterFrom\": [\"scoping\"]}}"), "t@1").violations(), "states.development.enterFrom: locked")
                         && Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"states\": {\"gate-1\": {\"name\": \"Investment decision\"}}"), "t@1").ok()
                         && has(Hierarchy.lockViolations(Json.strings(sg.get("locks")), patch("{\"states\": {\"done\": {\"enterFrom\": [\"development\"]}}}")), "states.done.enterFrom: locked")
                         && Json.strings(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"locks\": [\"states.idea\"]"), "t@1").effective().get("locks"))
-                        .equals(List.of("states.development.enterFrom", "states.done.enterFrom", "states.gate-1.gate", "states.gate-2.gate", "states.idea"))
-                        && Json.strings(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"locks\": []"), "t@1").effective().get("locks")).size() == 4,
+                        .equals(List.of("settings.gatedDelivery", "states.development.enterFrom", "states.done.enterFrom", "states.gate-1.gate", "states.gate-2.gate", "states.idea"))
+                        && Json.strings(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"locks\": []"), "t@1").effective().get("locks")).size() == 5,
                 "");
         Hierarchy.Workspace plat = new Hierarchy.Workspace("PLAT", "acme-platform", 1, h("instance-platform.json"), true, Map.of());
         check("L2", "an organisation's lock binds every team and workspace below it: QA cannot be loosened, Done's entry cannot be widened",
@@ -170,7 +170,63 @@ final class HierarchyCases extends Cases {
                         && Hierarchy.writeWorkspaceDelta(r, plat, patch("{\"states\": {\"in-review\": {\"name\": \"Peer Review\"}}}")).ok(),
                 Hierarchy.writeWorkspaceDelta(r, plat, patch("{\"states\": {\"qa\": {\"wipLimit\": 9}}}")).violations());
 
+        lockBypasses(r);
         MethodologyCases.run(r);
+    }
+
+    /** The ways round a lock or a gate an independent review found, each now refused (L3, L4), and the release build (H8). */
+    static void lockBypasses(Hierarchy.Registry r) throws Exception {
+        Map<String, Object> scrum = r.resolved.get("scrum@1");
+        String gated = "\"states\": {\"in-review\": {\"gate\": {\"approvals\": 2}}}";
+        Map<String, Object> deepLock = derived("org", 1, "scrum", 1, gated + ", \"locks\": [\"states.in-review.gate.approvals\"]");
+        Map<String, Object> typoLock = derived("org", 1, "scrum", 1, "\"locks\": [\"states.in-progress.wipLimt\"]");
+        Map<String, Object> org = derived("org", 1, "scrum", 1, gated + ", \"locks\": [\"states.in-review.gate\", \"stateOrder\"]");
+        Resolver.Resolution orgRes = Hierarchy.derive(scrum, org, "org@1");
+        Map<String, Object> orgEff = orgRes.effective();
+        String xs = "\"category\": \"IN_PROGRESS\"";
+        check("L3", "no way round a lock: a lock below member level or on a misspelt member is refused; setting the gate object hits a lock on it; a stateOrder lock holds against anchors, additions and removals, not only stateOrder",
+                has(Hierarchy.derive(scrum, deepLock, "org@1").violations(), "locks: 'states.in-review.gate.approvals' is deeper than a member")
+                        && has(Hierarchy.derive(scrum, typoLock, "org@1").violations(), "locks: 'states.in-progress.wipLimt' names a member states elements do not have")
+                        && orgRes.ok()
+                        && has(Hierarchy.derive(orgEff, derived("t", 1, "org", 1, "\"states\": {\"in-review\": {\"gate\": {\"approvals\": 1}}}"), "t@1").violations(), "states.in-review.gate: locked")
+                        && has(Hierarchy.derive(orgEff, derived("t", 1, "org", 1, "\"states\": {\"done\": {\"before\": \"todo\"}}"), "t@1").violations(), "stateOrder: locked by an ancestor template; its value would change")
+                        && has(Hierarchy.derive(orgEff, derived("t", 1, "org", 1, "\"states\": {\"qa\": {\"name\": \"QA\", " + xs + ", \"after\": \"in-review\"}}"), "t@1").violations(), "stateOrder: locked")
+                        && has(Hierarchy.derive(orgEff, derived("t", 1, "org", 1, "\"states\": {\"backlog\": null}"), "t@1").violations(), "stateOrder: locked")
+                        && has(Hierarchy.derive(orgEff, derived("t", 1, "org", 1, "\"stateOrder\": [\"todo\", \"backlog\", \"in-progress\", \"in-review\", \"done\", \"no-go\"]"), "t@1").violations(), "stateOrder: locked")
+                        && Hierarchy.derive(orgEff, derived("t", 1, "org", 1, "\"states\": {\"todo\": {\"name\": \"Next\"}}"), "t@1").ok(),
+                Hierarchy.derive(orgEff, derived("t", 1, "org", 1, "\"states\": {\"done\": {\"before\": \"todo\"}}"), "t@1").violations());
+
+        Map<String, Object> sg = r.resolved.get("stage-gate@1");
+        String end = "\"category\": \"END_STATE\", \"outcome\": \"DELIVERED\"";
+        check("L4", "gated delivery: a level below stage-gate cannot open an ungated way to a DELIVERED end, whether by turning No Go into a delivery, recategorising a stage, or adding an end state; one behind Gate 2 is fine; the invariant itself is locked",
+                has(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"states\": {\"no-go\": {\"name\": \"Shipped\", \"outcome\": \"DELIVERED\"}}"), "t@1").violations(),
+                        "settings.gatedDelivery: 'idea' reaches the DELIVERED end state 'no-go' without passing a gate")
+                        && has(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"states\": {\"scoping\": {" + end + "}}"), "t@1").violations(), "reaches the DELIVERED end state 'scoping'")
+                        && has(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"states\": {\"shipped\": {\"name\": \"Shipped\", " + end + ", \"after\": \"done\"}}"), "t@1").violations(), "reaches the DELIVERED end state 'shipped'")
+                        && Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"states\": {\"shipped\": {\"name\": \"Shipped\", " + end + ", \"after\": \"done\", \"enterFrom\": [\"gate-2\"]}}"), "t@1").ok()
+                        && has(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"settings\": {\"gatedDelivery\": false}"), "t@1").violations(), "settings.gatedDelivery: locked")
+                        && Resolver.resolve(Hierarchy.strip(r.resolved.get("hybrid@1")), patch("{\"settings\": {\"gatedDelivery\": true}}")).ok()
+                        && has(Resolver.resolve(Hierarchy.strip(scrum), patch("{\"settings\": {\"gatedDelivery\": true}}")).violations(), "settings.gatedDelivery: 'backlog' reaches the DELIVERED end state 'done'"),
+                Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"states\": {\"no-go\": {\"outcome\": \"DELIVERED\"}}"), "t@1").violations());
+
+        Hierarchy.Registry rb = shipped();
+        Map<String, Object> base2 = Json.obj(Json.mergePatch(h("base.v1.json"), patch("{\"version\": 2, \"states\": {\"todo\": {\"name\": \"Ready\"}}}")));
+        Propagation.Release rel = Propagation.release(rb, List.of(), base2);
+        List<String> shipped = rel.files().stream().map(f -> f.get("template") + "@" + f.get("version")).toList();
+        boolean sameDelta = rel.files().stream().skip(1).allMatch(f -> Hierarchy.sections(f).equals(Hierarchy.sections(rb.get((String) f.get("template"), 1).document())));
+        check("H8", "built-in edges rebase at build time: a release of base@2 adds one reviewed file per rebased built-in (canonical, delta unchanged); runtime propagation never publishes a built-in",
+                shipped.equals(List.of("base@2", "kanban@2", "scrum@2", "stage-gate@2", "hybrid@2")) && sameDelta
+                        && rel.files().stream().allMatch(f -> Json.write(Json.parse(Json.write(f))).equals(Json.write(f)))
+                        && Propagation.propagate(rb, List.of(), "base", 2, "base@2").stream().noneMatch(l -> l.contains(" -> "))
+                        && has(Propagation.propagate(shippedWithout(), List.of(), "base", 2, "base@2"), "template kanban@1: built-in, rebased by the release build, not at runtime"),
+                rel);
+    }
+
+    /** The shipped hierarchy plus a base@2 published without a release build: built-ins left behind. */
+    static Hierarchy.Registry shippedWithout() throws Exception {
+        Hierarchy.Registry r = shipped();
+        Hierarchy.publish(r, Hierarchy.SYSTEM, Json.obj(Json.mergePatch(h("base.v1.json"), patch("{\"version\": 2}"))));
+        return r;
     }
 
     /** The hierarchy's worked example: one workspace four levels down, its provenance, and what a root publish does to it. */
@@ -195,9 +251,10 @@ final class HierarchyCases extends Cases {
         Hierarchy.Workspace p1 = new Hierarchy.Workspace("PLAT", "acme-platform", 1, h("instance-platform.json"), true, Map.of());
         Hierarchy.Workspace s1 = new Hierarchy.Workspace("S1", "scrum", 1, patch("{}"), false, Map.of());
         Map<String, Object> base2 = Json.obj(Json.mergePatch(h("base.v1.json"), patch("{\"version\": 2, \"states\": {\"todo\": {\"name\": \"Ready\"}}}")));
-        Hierarchy.publish(r1, Hierarchy.SYSTEM, base2);
-        System.out.println("== propagation plan: publish base@2 (To Do renamed Ready); acme set to follow automatically, workspace S1 manual");
-        Hierarchy.propagate(r1, List.of(p1, s1), "base", 2, "base@2").forEach(l -> System.out.println("  " + l));
+        Propagation.Release rel = Propagation.release(r1, List.of(p1, s1), base2);
+        System.out.println("== release of base@2 (To Do renamed Ready): files the build adds, then the runtime plan; acme set to follow automatically, S1 manual");
+        rel.files().forEach(f -> System.out.println("  file " + f.get("template") + ".v" + f.get("version") + ".json  extends " + Json.compact(f.get("extends"))));
+        rel.plan().forEach(l -> System.out.println("  " + l));
         System.out.println("== workflow definition (state-machine library subset): stage-gate@1");
         System.out.print(Json.write(Workflow.definition(r.resolved.get("stage-gate@1"))));
         System.out.println();

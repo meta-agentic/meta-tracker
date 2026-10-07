@@ -40,7 +40,7 @@
     "milestone": {"name": "Milestone", "parents": ["project"]},
     "task": {"parents": ["deliverable"]}
   },
-  "settings": {"defaultItemType": "project"},
+  "settings": {"defaultItemType": "project", "gatedDelivery": true},
   "cadence": {"mode": "phase"},
-  "locks": ["states.gate-1.gate", "states.gate-2.gate", "states.development.enterFrom", "states.done.enterFrom"]
+  "locks": ["states.gate-1.gate", "states.gate-2.gate", "states.development.enterFrom", "states.done.enterFrom", "settings.gatedDelivery"]
 }

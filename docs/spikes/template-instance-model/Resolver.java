@@ -230,6 +230,19 @@ final class Resolver {
                 }
             }
         }
+        // Narrowing an item type's parents orphans existing links the way removing a state orphans
+        // items: occupancy counts them as "itemTypes.<type>.parents.<parent type>".
+        Map<String, Object> types = Json.obj(after.get("itemTypes"));
+        for (String k : new TreeSet<>(types.keySet())) {
+            Object was = Json.obj(Json.obj(before.get("itemTypes")).get(k)).get("parents");
+            List<String> now = Json.strings(Json.obj(types.get(k)).get("parents"));
+            for (String p : Json.strings(was)) {
+                int n = occupancy.getOrDefault("itemTypes." + k + ".parents." + p, 0);
+                if (!now.contains(p) && n > 0) {
+                    v.add("itemTypes." + k + ".parents: no longer allows '" + p + "' while " + n + " " + k + " item(s) sit under one; move them first");
+                }
+            }
+        }
         return v;
     }
 
