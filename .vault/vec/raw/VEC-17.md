@@ -20,7 +20,7 @@ estimate:
   basis: up-front
   dated: '2026-08-30'
   note: 'Complex + broad -> REFUSED, not refined. Intension split out as VEC-46 (real-time transport spike):
-    ADR-VEC-04 unwritten, staging runs replicas:2 so an in-JVM SSE broadcast is provably wrong, no messaging/broker
+    the real-time transport ADR unwritten, staging runs replicas:2 so an in-JVM SSE broadcast is provably wrong, no messaging/broker
     dependency exists in the reactor, and no incremental event payload shape is defined. Extension spans
     vectis-server, vectis-persistence and web. Additionally blocked: there is no write path to emit events
     from (vectis-server has one resource, ExtensionDiagnosticsResource). Stays TO DO; re-point when VEC-46
@@ -50,7 +50,7 @@ for that quadrant is binding: **do not commit unsplit.**
 
 **What is undefined (the intension).** R-CORE-4 in ADR-VEC-01 decides the
 requirement — SSE, 500 ms to every open board, remote updates highlighted — but
-**ADR-VEC-04 (real-time transport) is listed there as a planned follow-on and has
+**The real-time transport ADR is listed there as a planned follow-on and has
 not been written.** Three things are genuinely open, and one of them is a
 correctness bug waiting to be built:
 

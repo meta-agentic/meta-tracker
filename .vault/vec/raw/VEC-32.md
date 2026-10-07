@@ -24,7 +24,7 @@ estimate:
   dated: '2026-08-30'
   note: 'Complex, narrow -> spike (item was already labelled spike but typed kind:story; corrected). Low
     extension: one throwaway resolver, two mock tenants, one bench, one findings doc — nothing in vectis-server/src/main
-    changes. High intension: ADR-VEC-08 is unwritten, vectis-server has no OIDC dependency and exactly
+    changes. High intension: ADR-VEC-02 is unwritten, vectis-server has no OIDC dependency and exactly
     one resource class, the schema has no tenant concept, and the reactive-resolver claim in the developer
     notes is an assertion about the pinned Quarkus version that nobody has checked. The 10ms budget was
     asserted, not measured. Time-boxed to 3 days; sequenced after VEC-14.'
@@ -68,7 +68,7 @@ Sub-questions:
 
 ADR-VEC-01 **R-SEC-1** decides the *requirement* (multi-tenant OIDC with
 federated IdPs, client-managed Authorization Code + PKCE, backend as a pure
-resource server). **ADR-VEC-08 (identity & auth) is listed as a planned
+resource server). **ADR-VEC-02 (identity & auth) is listed as a planned
 follow-on and has not been written.** Nothing in the repo authenticates anything
 today: `vectis-server` contains exactly one resource
 (`ExtensionDiagnosticsResource.java`), there is no OIDC dependency in
@@ -106,7 +106,7 @@ Explicitly out of scope:
 * Tenant *data* isolation and RLS — VEC-14.
 * User preferences bound to an identity claim — VEC-33.
 * Token introspection strategy, refresh handling, session management, and
-  logout — all belong to ADR-VEC-08 and VEC-35.
+  logout — all belong to ADR-VEC-02 and VEC-35.
 
 ## Acceptance criteria
 
@@ -127,7 +127,7 @@ Explicitly out of scope:
 6. The fallback path is covered by a test asserting both halves: unknown tenant →
    internal auth server, and unknown tenant → **never** another tenant's config.
 7. The document names a recommended resolution source and invalidation strategy
-   (sub-question 2) in a form liftable into ADR-VEC-08.
+   (sub-question 2) in a form liftable into ADR-VEC-02.
 8. `mvn -B -ntp verify` on `main` is unaffected; nothing from the prototype lands
    in `vectis-server/src/main`.
 
@@ -139,5 +139,5 @@ than stalling it.
 
 ## Feeds
 
-ADR-VEC-08 (identity & auth) — currently unwritten and blocking VEC-33 and
+ADR-VEC-02 (identity & auth) — currently unwritten and blocking VEC-33 and
 VEC-35.

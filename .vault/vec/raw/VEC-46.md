@@ -20,7 +20,7 @@ estimate:
   dated: '2026-08-30'
   note: 'Complex, narrow -> spike. This IS the intension split out of VEC-17 (complex+broad, refused unsplit).
     Low extension: a throwaway two-instance prototype and a findings/draft-ADR doc; nothing in vectis-server/src/main
-    changes. High intension: ADR-VEC-04 is unwritten, staging runs replicas:2 so an in-JVM SSE broadcast
+    changes. High intension: the real-time transport ADR is unwritten, staging runs replicas:2 so an in-JVM SSE broadcast
     is provably wrong rather than merely suboptimal, no messaging or broker dependency exists anywhere
     in the reactor, and no event payload shape exists for an incremental change. The 500ms target in R-CORE-4
     is asserted, not measured. Time-boxed to 3 days.'
@@ -74,7 +74,7 @@ Sub-questions:
 
 ADR-VEC-01 **R-CORE-4** decides the *requirement*: state changes propagate over
 SSE, visible on every open board within 500 ms, remote updates visually
-highlighted. **ADR-VEC-04 (real-time transport) is listed there as a planned
+highlighted. **The real-time transport ADR is listed there as a planned
 follow-on and has not been written.** The repo has nothing to build on:
 `vectis-server` holds one resource (`ExtensionDiagnosticsResource.java`), no
 reactive-messaging or broker dependency exists anywhere in the reactor, and there
@@ -133,7 +133,7 @@ Explicitly out of scope:
    R-CORE-4 holds. If it does not, propose the number that should replace it.
 6. Sub-question 5 is answered with a stated convergence rule and a demonstrated
    out-of-order case.
-7. The document is liftable into **ADR-VEC-04** with a Status of Proposed, and
+7. The document is liftable into **the real-time transport ADR** with a Status of Proposed, and
    states clearly what VEC-17's remaining scope is once adopted.
 8. `mvn -B -ntp verify` on `main` is unaffected; nothing lands in
    `vectis-server/src/main`.
@@ -147,4 +147,4 @@ cost" is a decision, and a decision is the deliverable.
 ## Unblocks
 
 VEC-17 (SSE workspace synchronization), and transitively VEC-31 (collaborative
-estimation poker). Feeds ADR-VEC-04.
+estimation poker). Feeds the real-time transport ADR.
