@@ -6,7 +6,7 @@
 | **Type** | Spike (architect, Core tier), VEC-66. Extends the single-level model of VEC-45 ([`template-instance-model.md`](./template-instance-model.md)) |
 | **Sprint** | VEC-S5 |
 | **Requirement** | [ADR-01](../adr/ADR-01-product-requirements-and-features.md) **R-CORE-5** (template → instance), **R-CORE-3** (workflows are data), **R-SEC-2** (tenant isolation) as a seam |
-| **Deliverables** | This model; the VEC-45 prototype extended to N levels in [`template-instance-model/`](./template-instance-model/) (91 cases); the draft decision [ADR-VEC-03](../adr/ADR-VEC-03-workflow-and-template-model.md); the shapes for VEC-68 (persistence) and VEC-69 (resolution and API) |
+| **Deliverables** | This model; the VEC-45 prototype extended to N levels in [`template-instance-model/`](./template-instance-model/) (93 cases); the draft decision [ADR-VEC-03](../adr/ADR-VEC-03-workflow-and-template-model.md); the shapes for VEC-68 (persistence) and VEC-69 (resolution and API) |
 | **Out of scope** | Product modules, migrations, UI. The form contract is VEC-67's; enforcement of transitions and gates is VEC-15's |
 
 ## Question and answer
@@ -90,7 +90,9 @@ Enforcement is two checks, and each closes a bypass the other leaves open:
 - **On the delta.** No touched path may equal a lock, lie under it, or lie above it. Setting the `gate` object, or tombstoning `gate-1`, reaches the lock on `states.gate-1.gate`; renaming `gate-1` does not, so a team may rename a gate it may not weaken (L1, L3).
 - **On the result.** The resolved value at every locked path must be unchanged. This is what makes a `stateOrder` lock mean "the set and order of states is fixed": an anchor on an inherited state, an added state and a removed state all change the order without touching the path `stateOrder`, and all are refused (L3).
 
-**Gated delivery.** Path locks cannot express a flow invariant. Under stage-gate, a level below could otherwise turn *Killed* into a `DELIVERED` end (an unguarded Idea → delivered path), recategorise a stage as a delivered end, or add a new delivered end state. `settings.gatedDelivery: true` makes it an invariant of the resolved document: every way from a `START_STATE` to an `END_STATE` with outcome `DELIVERED`, following `enterFrom`, passes a gate. It is checked at every level and on every workspace delta, so all three are refused while a delivered end state behind Gate 2 is accepted; stage-gate locks the setting itself (L4). Hybrid satisfies it too; Scrum does not, since Backlog reaches Done ungated (L4).
+**Gated delivery.** Path locks cannot express a flow invariant. Under stage-gate, a level below could otherwise turn *Killed* into a `DELIVERED` end (an unguarded Idea → delivered path), recategorise a stage as a delivered end, or add a new delivered end state. `settings.gatedDelivery: true` makes it an invariant of the resolved document: every way from a `START_STATE` to an `END_STATE` with outcome `DELIVERED`, following `enterFrom`, passes a **locked gate**. It is checked at every level and on every workspace delta, so all three are refused while a delivered end state behind Gate 2 is accepted; stage-gate locks the setting itself (L4).
+
+Only a gate whose `gate` member (or whole state) an **ancestor** locked counts; at the level that turns the rule on, that level's own locks count. Otherwise a level below could vouch for itself: add its own gate with one approval, even lock it itself, and put a new delivered end behind it; or put a one-approval gate on the unlocked *Scoping* state. Both are refused (L5). The invariant does not stop a level below rewiring the locked gates themselves, so stage-gate also locks `gate-1.enterFrom` and `gate-2.enterFrom`: without them, one field (`gate-2.enterFrom: ["idea"]`) would skip Scoping, Gate 1 and Development (L5). Hybrid satisfies the rule once a level locks its release gate; with the gate unlocked, or in Scrum, which has no gate, Backlog reaches the delivered end ungated (L4, L5). Looser and stricter variants are the PO's call (Q5).
 
 ## 5 · Mutation and propagation
 
@@ -105,7 +107,7 @@ Enforcement is two checks, and each closes a bypass the other leaves open:
 | Child | Upgrade clean | Upgrade has conflicts |
 |---|---|---|
 | follows `auto`, template | publishes its next version, rebased onto `K@v`, with the rewritten delta; then its own children are visited (P1) | stays pinned; the plan lists the conflicts; nothing below it moves (P7) |
-| follows `auto`, workspace | applied in its own transaction, which recomputes the upgrade from the current pin and delta (P10); re-pinned, delta rewritten, revision bumped, board reconciled, one `configuration.changed` (P1, P2) | stays pinned with the conflicts, no event (P5, P6) |
+| follows `auto`, workspace | applied in its own transaction, which recomputes the upgrade from the current pin and delta (P10, P12); re-pinned, delta rewritten, revision bumped, board reconciled, one `configuration.changed` (P1, P2) | stays pinned with the conflicts, no event (P5, P6) |
 | follows `manual` | stays pinned; the plan carries the dry run as a preview (P4, P9) | stays pinned; the preview shows the conflicts |
 
 ```
@@ -164,7 +166,7 @@ Sections of one document, all inherited and overridden by the same rules. Member
 - **Scrum** (`base` → `scrum`): Backlog before To Do, In Review after In Progress; epic > story or bug > task; Fibonacci points; two-week sprints (M1).
 - **Kanban** (`base` → `kanban`): continuous flow inherited from the base; WIP limit 5 on In Progress; no point field (M2).
 - **Hybrid** (`base` → `scrum` → `hybrid`, three levels): Scrum's sprints deliver; a *Release Review* gate after In Review is the only way into *Released*; phase > epic > story (M3).
-- **Stage-gate** (`base` → `stage-gate`): base's To Do and In Progress removed; Idea → Scoping → Gate 1 → Development → Gate 2 → Launched, with recycle edges back from each gate and *Killed* (the base's `no-go`, still `DISCONTINUED`) reachable from Idea and from the gates; project > deliverable > task and milestones; `phase` cadence; gates locked and delivery gated (M4, L1, L4).
+- **Stage-gate** (`base` → `stage-gate`): base's To Do and In Progress removed; Idea → Scoping → Gate 1 → Development → Gate 2 → Launched, with recycle edges back from each gate and *Killed* (the base's `no-go`, still `DISCONTINUED`) reachable from Idea and from the gates; project > deliverable > task and milestones; `phase` cadence; gates and their entries locked, delivery gated through locked gates (M4, L1, L4, L5).
 
 **Waterfall** needs no new concept: `phase` cadence, stages entered strictly in sequence through `enterFrom` (Requirements → Design → Build → Verify → Released), gates optional, for example a sign-off gate before release with `gatedDelivery` (M9). It is not shipped as a fifth built-in because it is stage-gate without mandatory gates; a tenant derives it from `base` in one small level.
 
@@ -219,7 +221,9 @@ alter table workspace
     add column follow           text   not null default 'manual' check (follow in ('manual', 'auto')),
     add foreign key (template_id, template_version) references workflow_template_version (template_id, version);
 create table template_propagation (                 -- the plan, durable: drives the job, the UI and the audit
-    id uuid primary key, origin_id uuid not null, origin_version int not null,
+    id uuid primary key,
+    origin_id uuid not null, origin_version int not null,       -- the ORIGINAL publish, copied down every level: the event's cause
+    onto_id uuid not null, onto_version int not null,           -- the version the target is rebased onto (its new parent)
     target_kind text not null check (target_kind in ('template', 'workspace')), target_id uuid not null,
     planned_from int  not null,                     -- the pin the plan saw
     planned_revision bigint,                        -- the workspace revision the plan saw (null for a template)
@@ -236,9 +240,9 @@ create table template_propagation (                 -- the plan, durable: drives
 
 **The propagation job**, in the shape VEC-71 should build (the prototype runs it synchronously; P10 and P11 execute its two rules):
 
-1. **Publish** (one transaction): lock the `workflow_template` row of the key being published (`select … for update`), check the version is the next one, insert the version row, and insert `pending` rows for its **direct** children only. Serialising per key means two publishes of one key, or an author and a propagation both producing `scrum@2`, cannot race: the second waits, then fails the next-version check, and its row is marked `failed` with the reason.
-2. **Template child** (one transaction per child): lock that child's key row; re-read its latest version; if it is no longer pinned to an older version of the parent, mark the row `skipped` (nothing is ever moved back, P11); recompute the rebase; if `auto` and clean, publish the next version as in step 1, which inserts `pending` rows for *its* direct children, discovered now rather than at the original publish; otherwise `manual` or `blocked`.
-3. **Workspace child** (one transaction per child): lock the workspace row first, the same first lock every writer takes (consistent with VEC-73's lock order, so it serialises with item writes and occupancy counted under it is stable); if it is no longer on `planned_from`, `skipped`; otherwise **recompute** the upgrade from its current delta and occupancy (the planned preview is never written; a revision past `planned_revision` is only noted, P10); then `blocked`, or VEC-45's write path: reconcile `board_column`, store the delta, bump the revision, append `configuration.changed`.
+1. **Publish** (one transaction): lock the `workflow_template` row of the key being published (`select … for update`), check the version is the next one, insert the version row, and insert `pending` rows for its **direct** children only. For built-ins, which a migration inserts from their files, the migration (or a startup step that compares versions with existing rows) enqueues those rows; the unique key makes enqueuing twice harmless. Serialising per key means two publishes of one key, or an author and a propagation both producing `scrum@2`, cannot race: the second waits, then fails the next-version check, and its row is marked `failed` with the reason.
+2. **Template child** (one transaction per child): lock that child's key row; re-read its latest version; if it is no longer pinned to an older version of the parent, mark the row `skipped` (nothing is ever moved back, P11); recompute the rebase; if `auto` and clean, publish the next version as in step 1, which inserts `pending` rows for *its* direct children, discovered now rather than at the original publish, carrying the original `origin` down so every event names the publish that started it (P2); otherwise `manual` or `blocked`.
+3. **Workspace child** (one transaction per child): lock the workspace row first, the same first lock every writer takes (consistent with VEC-73's lock order, so it serialises with item writes and occupancy counted under it is stable). If it is already **at or past** the row's target version, `skipped`. Otherwise **recompute** the upgrade from its *current* pin, delta and occupancy: the planned preview is never written, and a pin or revision that moved since `planned_from` and `planned_revision` is only noted (P10). That is what keeps two publishes applied in order from stranding a workspace: the row for `scrum@3`, planned from `scrum@1`, finds the workspace on `scrum@2` and upgrades it from there (P12). Then `blocked`, or VEC-45's write path: reconcile `board_column`, store the delta, bump the revision, append `configuration.changed` naming the row's origin.
 4. **Retries.** A row that throws is retried with `attempts + 1` and marked `failed` after a bound; the unique key makes re-planning idempotent. One huge transaction across all descendants would hold every row lock at once and fail as a whole on one conflict; per-child transactions fail per child, which is what the plan reports.
 5. **Tenant context.** Each child transaction runs as the application role with the **child's** tenant set (`set local app.current_tenant_id`), so row-level security applies to it exactly as to a request from that tenant; the job reads its queue rows through a narrow role that sees `template_propagation` across tenants and nothing else. Built-in rows carry no tenant and are readable by every tenant. Reads: `tenant_id is null or tenant_id = current tenant`; writes: own tenant only.
 
@@ -293,7 +297,7 @@ From the vendors' public documentation, not hands-on evaluation.
 java docs/spikes/template-instance-model/TemplateModelSpike.java
 ```
 
-Result on JDK 25.0.3: VEC-45's 58 cases unchanged, then 33 more:
+Result on JDK 25.0.3: VEC-45's 58 cases unchanged, then 35 more:
 
 ```
 -- hierarchy: resolution
@@ -306,10 +310,11 @@ PASS H6   provenance: every effective value names the level that last set it, ro
 PASS H7   members are a closed set: a typo is an error, not an ignored policy; description is allowed and survives resolution and round trip
 PASS S5   the published JSON Schema and the validator accept the same members, section by section; the schema is canonical
 -- hierarchy: locks
-PASS L1   stage-gate locks its gates and the entries they guard: a level below cannot drop or weaken a gate or rewire those entries, may rename it; a workspace neither; locks accumulate
+PASS L1   stage-gate locks its gates and the entries into and out of them: a level below cannot drop or weaken a gate or rewire those entries, may rename it; a workspace neither; locks accumulate
 PASS L2   an organisation's lock binds every team and workspace below it: QA cannot be loosened, Done's entry cannot be widened
 PASS L3   no way round a lock: a lock below member level or on a misspelt member is refused; setting the gate object hits a lock on it; a stateOrder lock holds against anchors, additions and removals, not only stateOrder
-PASS L4   gated delivery: a level below stage-gate cannot open an ungated way to a DELIVERED end, whether by turning No Go into a delivery, recategorising a stage, or adding an end state; one behind Gate 2 is fine; the invariant itself is locked
+PASS L4   gated delivery: a level below stage-gate cannot open an ungated way to a DELIVERED end by a changed outcome, a recategorised stage or a new end state; one behind Gate 2 is fine; the invariant itself is locked
+PASS L5   only gates an ancestor locked count: a team's own gate (even self-locked) or a weak gate on the unlocked Scoping state opens no way to a new DELIVERED end, nor does rewiring Gate 2 to follow Idea; a level that enables the rule counts the gates it locks itself
 PASS H8   built-in edges rebase at build time: a release of base@2 adds one reviewed file per rebased built-in (canonical, delta unchanged); runtime propagation never publishes a built-in
 -- methodologies
 PASS M1   Scrum: two-week sprints, epic > story or bug > task, Fibonacci points, Backlog before To Do
@@ -331,15 +336,16 @@ PASS P6   occupancy four levels down: Base drops To Do, which no level customise
 PASS P7   a conflict at a template edge: Ops had added Blocked as a start state, Scrum adds it in progress; Ops is refused and stays with its workspaces, Scrum's other children move on
 PASS P8   a parent that adds a lock on a path a child overrides refuses the child's upgrade, at a template edge and at a workspace
 PASS P9   a manual workspace sees each publish as a preview and may skip versions; a skip equals the stepwise path here, but can differ: promoted at v2 and re-added at v3, stepwise keeps the instance's place, the skip takes the template's
-PASS P10  apply recomputes in the workspace's own transaction: a delta written after the plan is kept, not overwritten by the plan's preview; a workspace upgraded meanwhile is skipped
+PASS P10  apply recomputes in the workspace's own transaction from its current pin and delta: a delta written after the plan is kept, not overwritten by the plan's preview; a workspace already at or past the target is skipped
 PASS P11  two root versions in quick succession, propagated out of order: children are discovered as each level is processed and only an older pin is upgraded, so ops lands once on base@3 and is never moved back to base@2
+PASS P12  two publishes planned from scrum@1 and applied in order: the second is recomputed from scrum@2, so the automatic workspace ends on scrum@3, not stranded on scrum@2; replaying a row is a no-op
 
-91 passed, 0 failed
+93 passed, 0 failed
 ```
 
-**Teeth.** Each new mechanism was mutated in a scratch copy (32 mutants), and every mutant fails the cases named: keeping parent anchors (H2, H3, P7); no lock check on deltas (L1, L2, P8); a set path not reaching a lock below it (L1); no check on locked values (L3); locks deeper than a member, or on unknown members (L3); child locks replacing the parent's (L1, L2); no gated-delivery check (L4); every tenant edge automatic (P4); built-ins rebased at runtime, or the release build skipped (H8, the latter also P1, P2); propagation allowed to downgrade (P11); a manual workspace upgraded (P9); applying despite conflicts at a template (P7) or a workspace (P5, P6); apply writing the plan's preview, or ignoring the pin (P10); an upgrade ignoring the new parent's locks (P8); no owner check, tenant roots, no depth limit, the depth limit off by one, or a nameless derived version (H5); provenance ignoring tombstones (H6); unchecked narrowing of parents (M8); no gate guard, or `enterFrom` ignored by the projection (M3, M5, M9); open member sets (H7); no item type loop check (M6); a sprint length outside sprints, or a gate on an end state (M7). One mutant, gates not stopping a path, fails no case by name: it makes the shipped stage-gate itself unpublishable, and the run aborts with a non-zero exit.
+**Teeth.** Each new mechanism was mutated in a scratch copy (36 mutants), and every mutant fails the cases named: keeping parent anchors (H2, H3, P7); no lock check on deltas (L1, L2, P8); a set path not reaching a lock below it (L1); no check on locked values (L3); locks deeper than a member, or on unknown members (L3); child locks replacing the parent's (L1, L2, L4); no gated-delivery check (L4, L5); any gate counting, or a level's own locks counting under an inherited rule (L5); a template rebase ignoring the child's own locks (H8, P1, P2); every tenant edge automatic (P4); built-ins rebased at runtime, or the release build skipped (H8, the latter also P1, P2); propagation allowed to downgrade (P11); a manual workspace upgraded (P9); applying despite conflicts at a template (P7) or a workspace (P5, P6); apply writing the plan's preview (P10); apply ignoring the pin (P10, P12), or skipping any moved pin (P12); an upgrade ignoring the new parent's locks (P8); no owner check, tenant roots, no depth limit, the depth limit off by one, or a nameless derived version (H5); provenance ignoring tombstones (H6); unchecked narrowing of parents (M8); no gate guard, or `enterFrom` ignored by the projection (M3, M5, M9); open member sets (H7); no item type loop check (M6); a sprint length outside sprints, or a gate on an end state (M7). One mutant, gates not stopping a path, fails no case by name: it makes the shipped stage-gate itself unpublishable, and the run aborts with a non-zero exit.
 
-**Not prototyped:** YAML (§8), the role model (§6), the propagation job's queue, retries, row locks and tenant context (§9; its two ordering rules are, P10 and P11), the board for phase mode (§7).
+**Not prototyped:** YAML (§8), the role model (§6), the propagation job's queue, retries, row locks and tenant context (§9; its ordering rules are, P10–P12), the board for phase mode (§7).
 
 ## 13 · Effect on backlog items
 
@@ -349,14 +355,14 @@ PASS P11  two root versions in quick succession, propagated out of order: childr
 | **VEC-69** (resolution and API) | Scope from §9: resolution over the materialised version, `chain`, `provenance`, `pending` in the configuration view, lock violations in 422, `GET /templates`, `GET /templates/{key}/versions/{v}`, `GET /templates/schema`; violations carry their `level`. Consumers unchanged. |
 | **VEC-71** (template authoring) | Scope: `POST /templates/{key}/versions` with dry run and plan; the propagation job of §9 (per-key lock, children discovered per level, per-child transactions that recompute under the workspace row lock, retries, tenant context); follow modes; locks and `gatedDelivery`; the authority table of §6; YAML and JSON bodies; file export and import. Plus the release-build tool that rebases built-ins into files (§5). Likely an epic: publish + plan; propagation job; build tool; authoring UI. |
 | **VEC-67** (forms spike) | Section structure fixed: build on `itemTypes` (with `parents`), `fields`, `states.<k>.gate` and `cadence`; form members it adds join the closed member set and the schema, inherited and lockable like the rest. Use `hierarchy/scrum.v1.json` and `hierarchy/stage-gate.v1.json` as its two templates. Can start now. |
-| **VEC-15** (workflow engine) | Build the runtime machine from `Workflow.definition` (§10). Vocabulary to enforce: `enterFrom` (including `[]`), `wipLimit`, `gate` guards; locks and `gatedDelivery` are enforced at configuration-write time by the configuration service, not by the engine. |
+| **VEC-15** (workflow engine) | Build the runtime machine from `Workflow.definition` (§10). Vocabulary to enforce: `enterFrom` (including `[]`), `wipLimit`, `gate` guards; locks and `gatedDelivery` are enforced at configuration-write time by the configuration service, not by the engine. Item **creation** is a route around `gatedDelivery`: under the rule, creating or placing an item directly in a `DELIVERED` end state must be refused, or require the gate decision. |
 | **VEC-62** (scrum board) | Board mode from `effective.cadence.mode`: `sprint` → sprint board, `flow` → Kanban board, `phase` → flow board over the stages with gate columns; no third view needed. |
 | **VEC-76** (definition adapter) | Format fixed: the subset of §10, not VEC's document. VEC compiles to it; the gate in its item passes with that scope. Build only if a consumer beyond VEC needs document-defined machines (Q7). |
 | **VEC-14** (tenancy) | The re-refine note it already carries applies: template versions are tenant data with a nullable `tenant_id`, parents restricted to built-in or same tenant, writes own-tenant only. Edition questions stay the founder's. |
 | **VEC-46** (done) | Proposed amendment to `realtime-transport.md`, filed as a follow-up doc edit and **not** made in this change: ancestor-caused events are written by each workspace's own upgrade transaction (§5, §9), not "in the publishing transaction". No contract change. |
 | **VEC-10** (New Project form) | The template choice lists `GET /templates` (built-in and own tenant), not two built-ins; otherwise as split. |
 | **VEC-28** | Unchanged from VEC-45 (point scale and delivery by outcome); a template without `storyPoints` (Kanban, stage-gate) has no velocity, only throughput. |
-| **VEC-54** (backlog import) | Unchanged: provisions from `scrum` with the Refined delta; with the hierarchy that is `scrum@<latest>`. |
+| **VEC-54** (backlog import) | Provisions from `scrum` with the Refined delta; with the hierarchy that is `scrum@<latest>`. New: importing into a workspace under `gatedDelivery`, the category-and-outcome fallback that lands an item directly in a `DELIVERED` end is a creation route around the gates, and must be refused or recorded as a gate decision. |
 
 ## 14 · Open questions for the PO
 
@@ -366,7 +372,7 @@ Each is also listed in ADR-VEC-03, so approving the ADR answers them explicitly.
 2. **Q2 Depth.** Proposed: at most seven template versions in a chain, root included (`MAX_TEMPLATE_LEVELS`); the workspace is not counted. Any limit works; it bounds a publish's fan-out and a provenance listing.
 3. **Q3 Tenant roots.** Proposed: roots are built-in only, so every workflow keeps the base's categories and end states and a base improvement can reach everything. Allowing tenant roots frees "not agile at all" processes from `base` at the cost of that reach.
 4. **Q4 Item type parents: may or must.** Proposed: `parents` says where a type may sit; an item without a parent is always allowed. A `requiresParent` flag is additive.
-5. **Q5 Gate governance.** `gatedDelivery` closes every ungated way to a delivered end, whether by a new end state, a changed outcome or category, or a wider `enterFrom` (L4). Confirm it as a configuration invariant checked on write, rather than a runtime policy in VEC-15, and whether further invariants (for example "every gate has at least N approvals") are wanted.
+5. **Q5 Gate governance.** Proposed: `gatedDelivery` as a configuration invariant checked on write, counting only gates an ancestor locked (the strict option, L4, L5), with the methodology also locking the `enterFrom` of its gates. Alternatives for the PO: the looser "any gate counts" (a team's own gate would then satisfy it, which is the hole L5 shows); or an "at least N approvals" variant, where any gate counts if it carries at least `N` approvals set by the enabling level. Separately: whether creation and import into a delivered end must pass a gate (§13, VEC-15 and VEC-54).
 6. **Q6 YAML comments.** Canonical JSON is the stored form and YAML comments are lost on compile. Confirm `description` as the annotation that survives, or require YAML sources to be kept alongside (two sources of truth).
 7. **Q7 VEC-76 now or later.** VEC does not need the adapter to run; it needs it only for document import and export. Build now for reuse, or park until a second consumer asks.
 8. **Q8 One organisation, several methodologies.** With one parent per level, an organisation running Scrum and Kanban teams publishes its layer once per methodology (`acme-scrum`, `acme-kanban`), locks included. ADR-VEC-03 rejects multiple parents and mixins for v1 and records a lock-and-invariant-only overlay as the reopen path. Confirm the duplication is acceptable for now.
