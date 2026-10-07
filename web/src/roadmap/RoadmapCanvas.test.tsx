@@ -183,7 +183,7 @@ describe("RoadmapCanvas edge drag", () => {
     expect(stored("k-1")).toMatchObject({ startDate: "2025-01-10", dueDate: "2025-01-18" });
   });
 
-  it("clamps a start edge dragged past the due edge to a one-day bar", () => {
+  it("clamps a start edge dragged past the due edge to a same-day item", () => {
     mount("b1");
     const handle = screen.getByRole("slider", { name: "Start date of K-1" });
 
@@ -191,7 +191,7 @@ describe("RoadmapCanvas edge drag", () => {
     fireEvent.pointerMove(handle, { pointerId: 1, clientX: 100 + 20 * DAY });
     fireEvent.pointerUp(handle, { pointerId: 1 });
 
-    expect(stored("k-1")).toMatchObject({ startDate: "2025-01-14", dueDate: "2025-01-15" });
+    expect(stored("k-1")).toMatchObject({ startDate: "2025-01-15", dueDate: "2025-01-15" });
   });
 
   it("abandons a drag on Escape", () => {
@@ -224,6 +224,52 @@ describe("RoadmapCanvas edge drag", () => {
     fireEvent.keyDown(start, { key: "ArrowLeft", shiftKey: true });
     expect(stored("k-1").startDate).toBe("2025-01-04");
     expect(dueOnScreen()).toBe(before);
+  });
+
+  it("writes nothing for a press and release without movement", () => {
+    act(() => {
+      workspaceStore.getState().upsertIssue(item("k-3", "2025-01-12", null));
+    });
+    mount("b1");
+    const handle = screen.getByRole("slider", { name: "Due date of K-3" });
+
+    fireEvent.pointerDown(handle, { button: 0, pointerId: 1, clientX: 300 });
+    fireEvent.pointerUp(handle, { pointerId: 1, clientX: 300 });
+
+    expect(stored("k-3")).toMatchObject({ startDate: "2025-01-12", dueDate: null });
+  });
+
+  it("never moves a same-day due date later on ArrowLeft", () => {
+    act(() => {
+      workspaceStore.getState().upsertIssue(item("k-3", "2025-01-12", "2025-01-12"));
+    });
+    mount("b1");
+    const handle = screen.getByRole("slider", { name: "Due date of K-3" });
+
+    fireEvent.keyDown(handle, { key: "ArrowLeft" });
+    expect(stored("k-3").dueDate).toBe("2025-01-12");
+    fireEvent.keyDown(handle, { key: "ArrowRight" });
+    expect(stored("k-3").dueDate).toBe("2025-01-13");
+  });
+
+  it("commits the dragged distance even when a sync moves the origin mid-drag", () => {
+    mount("b1");
+    const handle = screen.getByRole("slider", { name: "Due date of K-1" });
+
+    fireEvent.pointerDown(handle, { button: 0, pointerId: 1, clientX: 500 });
+    fireEvent.pointerMove(handle, { pointerId: 1, clientX: 500 + 3 * DAY });
+    act(() => {
+      workspaceStore.getState().upsertIssue(item("k-3", "2024-12-01", "2024-12-02"));
+    });
+    fireEvent.pointerUp(handle, { pointerId: 1 });
+
+    expect(stored("k-1").dueDate).toBe("2025-01-18");
+  });
+
+  it("leaves Escape to the page when no drag is in progress", () => {
+    mount("b1");
+    const handle = screen.getByRole("slider", { name: "Due date of K-1" });
+    expect(fireEvent.keyDown(handle, { key: "Escape" })).toBe(true);
   });
 
   it("draws no bar for an undated item but keeps its row in both panes", () => {
