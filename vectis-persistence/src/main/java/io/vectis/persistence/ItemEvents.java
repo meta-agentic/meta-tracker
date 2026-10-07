@@ -18,6 +18,7 @@ import java.util.UUID;
  * <p>Item events carry the item's full post-change state, so a client converges by keeping the
  * highest {@code version} whatever order representations reach it in. {@code changed} names
  * the properties that changed, for the remote-change highlight; it is a hint, never applied.
+ * An open field is named {@code fields.<key>}, the key escaped by {@link #escapeKey}.
  */
 final class ItemEvents {
 
@@ -55,10 +56,19 @@ final class ItemEvents {
         keys.addAll(item.fields().keySet());
         for (String key : keys) {
             if (!Objects.equals(oldFields.get(key), item.fields().get(key))) {
-                changed.add("fields." + key);
+                changed.add("fields." + escapeKey(key));
             }
         }
         return itemEvent(UPDATED, item, at, changed);
+    }
+
+    /**
+     * A field key as it appears after {@code fields.} in {@code changed}: {@code ~} becomes
+     * {@code ~0} and {@code .} becomes {@code ~1} (JSON Pointer's escaping, with the dot as the
+     * separator), so a key that contains a dot cannot be read as a nested path.
+     */
+    static String escapeKey(String key) {
+        return key.replace("~", "~0").replace(".", "~1");
     }
 
     /** A tombstone: the client removes the item and drops any representation at or below this version. */

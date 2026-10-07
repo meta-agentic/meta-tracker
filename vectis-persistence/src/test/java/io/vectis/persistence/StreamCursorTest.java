@@ -23,7 +23,8 @@ class StreamCursorTest {
     @ValueSource(strings = {
         "", "95", "01a0f568-ff3d-7f3a-abbe-1c614150e04b", "01a0f568-ff3d-7f3a-abbe-1c614150e04b.",
         "01a0f568-ff3d-7f3a-abbe-1c614150e04b.-1", "01a0f568-ff3d-7f3a-abbe-1c614150e04b.9.5",
-        "01a0f568-ff3d-7f3a-abbe-1c614150e04b.x", "1-2-3-4-5.95", "not-a-uuid.95"
+        "01a0f568-ff3d-7f3a-abbe-1c614150e04b.x", "1-2-3-4-5.95", "not-a-uuid.95",
+        "01a0f568-ff3d-7f3a-abbe-1c614150e04b.+5", "01a0f568-ff3d-7f3a-abbe-1c614150e04b.05"
     })
     void refusesAnythingElse(String text) {
         assertThrows(IllegalArgumentException.class, () -> StreamCursor.parse(text));
