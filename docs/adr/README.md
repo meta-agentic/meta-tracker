@@ -16,7 +16,7 @@ Planned records, not yet written:
 - Real-time transport; drafted in [`docs/spikes/realtime-transport.md`](../spikes/realtime-transport.md).
 - Client store & virtualization.
 - Extension / plugin loading; findings in [`docs/spikes/plugin-loading.md`](../spikes/plugin-loading.md).
-- Multi-tenant isolation & feature gating.
+- Multi-tenant isolation & feature gating; drafted in [`docs/spikes/tenant-isolation.md`](../spikes/tenant-isolation.md).
 - Integration & MCP contract.
 - Query language (open decision OD1).
 - Reporting engine (open decision OD2).
