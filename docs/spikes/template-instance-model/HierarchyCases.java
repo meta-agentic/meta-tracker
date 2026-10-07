@@ -213,12 +213,29 @@ final class HierarchyCases extends Cases {
                         && has(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"settings\": {\"gatedDelivery\": false}"), "t@1").violations(), "settings.gatedDelivery: locked")
                         && has(Resolver.resolve(Hierarchy.strip(scrum), patch("{\"settings\": {\"gatedDelivery\": true}}")).violations(), "settings.gatedDelivery: 'backlog' reaches the DELIVERED end state 'done'"),
                 Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, sgx), "t@1").violations());
-        check("L5", "only gates an ancestor locked count: a team's own gate (even self-locked) or a weak gate on the unlocked Scoping state opens no way to a new DELIVERED end, nor does rewiring Gate 2 to follow Idea; a level that enables the rule counts the gates it locks itself",
+        Map<String, Object> hybridBinding = derived("hg", 1, "hybrid", 1, "\"settings\": {\"gatedDelivery\": true}, \"locks\": [\"states.release-review.gate\", \"settings.gatedDelivery\"]");
+        Hierarchy.Registry rt = shipped();
+        List<String> t1Published = Hierarchy.publish(rt, "acme", derived("t1", 1, "stage-gate", 1,
+                "\"states\": {\"scoping\": {\"gate\": {\"approvals\": 1}}}, \"locks\": [\"states.scoping.gate\"]"));
+        String fromScoping = "\"states\": {\"shipped\": {\"name\": \"Shipped\", " + end + ", \"after\": \"done\", \"enterFrom\": [\"scoping\"]}}";
+        List<String> t2Refused = Hierarchy.publish(rt, "acme", derived("t2", 1, "t1", 1, fromScoping));
+        Hierarchy.Workspace onT1 = new Hierarchy.Workspace("T1", "t1", 1, patch("{" + fromScoping + "}"), false, Map.of());
+        check("L5", "only the gates frozen where the rule became binding count: a team's own gate (even self-locked), a weak gate on the unlocked Scoping state, or one locked by a level in between and used by its child or workspace opens no way to a new DELIVERED end, nor does rewiring Gate 2 to follow Idea; a level that enables and binds the rule counts the gates it locks itself",
                 has(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, ownGate), "t@1").violations(), "'idea' reaches the DELIVERED end state 'shipped' without passing a locked gate")
                         && has(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, scopingGate), "t@1").violations(), "'idea' reaches the DELIVERED end state 'shipped' without passing a locked gate")
                         && has(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"states\": {\"gate-2\": {\"enterFrom\": [\"idea\"]}}"), "t@1").violations(), "states.gate-2.enterFrom: locked by an ancestor template")
                         && has(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"states\": {\"gate-1\": {\"enterFrom\": [\"idea\"]}}"), "t@1").violations(), "states.gate-1.enterFrom: locked by an ancestor template")
                         && Hierarchy.derive(r.resolved.get("hybrid@1"), hybridGated, "hg@1").ok()
+                        && Hierarchy.derive(r.resolved.get("hybrid@1"), hybridBinding, "hg@1").ok()
+                        && has(Hierarchy.derive(Hierarchy.derive(r.resolved.get("hybrid@1"), hybridGated, "hg@1").effective(), derived("hgt", 1, "hg", 1,
+                        "\"states\": {\"fast\": {\"name\": \"Fast\", \"category\": \"IN_PROGRESS\", \"after\": \"in-progress\", \"enterFrom\": [\"in-progress\"], \"gate\": {\"approvals\": 1}},"
+                        + " \"hotfix\": {\"name\": \"Hotfix\", " + end + ", \"after\": \"done\", \"enterFrom\": [\"fast\"]}}, \"locks\": [\"states.fast.gate\"]"), "hgt@1").violations(),
+                        "hgt@1: settings.gatedDelivery: 'backlog' reaches the DELIVERED end state 'hotfix' without passing a locked gate")
+                        && is(Hierarchy.derive(r.resolved.get("hybrid@1"), hybridBinding, "hg@1").effective().get("deliveryGates"), List.of("states.release-review.gate"))
+                        && is(sg.get("deliveryGates"), List.of("states.gate-1.gate", "states.gate-2.gate"))
+                        && t1Published.isEmpty() && has(t2Refused, "t2@1: settings.gatedDelivery: 'idea' reaches the DELIVERED end state 'shipped' without passing a locked gate")
+                        && has(Hierarchy.resolveWorkspace(rt, onT1).violations(), "settings.gatedDelivery: 'idea' reaches the DELIVERED end state 'shipped' without passing a locked gate")
+                        && has(Hierarchy.publish(rt, "acme", Json.obj(Json.mergePatch(derived("t3", 1, "t1", 1, ""), patch("{\"deliveryGates\": [\"states.scoping.gate\"]}")))), "delta may not set 'deliveryGates'")
                         && has(Resolver.resolve(Hierarchy.strip(r.resolved.get("hybrid@1")), patch("{\"settings\": {\"gatedDelivery\": true}}")).violations(), "'backlog' reaches the DELIVERED end state 'done' without passing a locked gate"),
                 Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, ownGate), "t@1").violations() + " " + Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, scopingGate), "t@1").violations());
 

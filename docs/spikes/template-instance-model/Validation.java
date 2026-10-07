@@ -29,7 +29,7 @@ final class Validation {
      */
     static final Map<String, List<String>> MEMBERS = Map.of(
             "document", List.of("template", "version", "name", "description", "extends", "locks",
-                    "states", "stateOrder", "itemTypes", "fields", "settings", "cadence"),
+                    "states", "stateOrder", "itemTypes", "fields", "settings", "cadence", "deliveryGates"),
             "states", List.of("name", "description", "category", "outcome", "onBoard", "after", "before",
                     "wipLimit", "enterFrom", "gate"),
             "itemTypes", List.of("name", "description", "parents"),

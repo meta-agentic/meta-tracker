@@ -57,7 +57,12 @@
       }
     },
     "settings": {"$ref": "#/$defs/settings"},
-    "cadence": {"$ref": "#/$defs/cadence"}
+    "cadence": {"$ref": "#/$defs/cadence"},
+    "deliveryGates": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Resolved documents only, never authored: the gate locks frozen where settings.gatedDelivery became binding; only these gates count for it below that level."
+    }
   },
   "$defs": {
     "key": {"type": "string", "pattern": "^[a-z][a-zA-Z0-9-]{0,31}$"},

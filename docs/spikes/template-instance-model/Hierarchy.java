@@ -124,19 +124,30 @@ final class Hierarchy {
         List<String> v = new ArrayList<>(lockViolations(Json.strings(parent.get("locks")), delta));
         Set<String> locks = new TreeSet<>(Json.strings(parent.get("locks")));
         locks.addAll(Json.strings(document.get("locks")));
-        // Under an inherited gatedDelivery only gates an ANCESTOR locked count (Validation.gatedDelivery
-        // reads the locks in the document it validates), so this level's own locks join afterwards and
-        // a level cannot vouch for a gate it added itself. A level that turns the invariant on itself
-        // validates with its own locks: its gates are locked by the level that enables the rule.
+        // Which gates count for gatedDelivery (Validation.gatedDelivery counts the gates locked in the
+        // document it validates):
+        //  - once the rule is binding (an ancestor locked settings.gatedDelivery), only the gates frozen
+        //    at that level, carried down as deliveryGates; a gate locked anywhere below never counts,
+        //    so no level can vouch for a gate that it or its descendants then use (L5);
+        //  - while the rule is inherited but not binding, only the parent's locks: a level cannot
+        //    vouch for a gate it added itself;
+        //  - at a level that turns the rule on, its own locks count.
+        // In the first two cases this level's own locks join after validation.
+        List<String> frozen = parentResolved.get("deliveryGates") instanceof List<?> ? Json.strings(parentResolved.get("deliveryGates")) : null;
         boolean inherited = Boolean.TRUE.equals(Json.obj(parent.get("settings")).get("gatedDelivery"));
-        if (!inherited && !locks.isEmpty()) {
+        if (frozen != null) {
+            parent.put("locks", frozen);
+        } else if (!inherited && !locks.isEmpty()) {
             parent.put("locks", new ArrayList<>(locks));
         }
         Resolver.Resolution res = Resolver.resolve(parent, delta);
         v.addAll(res.violations());
-        if (inherited && !locks.isEmpty()) {
+        if ((frozen != null || inherited) && !locks.isEmpty()) {
             res.effective().put("locks", new ArrayList<>(locks));
             Validation.locks(res.effective(), v);
+        }
+        if (frozen == null) {
+            freezeDeliveryGates(res.effective());
         }
         v.addAll(lockedValues(Json.strings(parentResolved.get("locks")), parentResolved, res.effective()));
         Map<String, Object> eff = res.effective();
@@ -157,13 +168,41 @@ final class Hierarchy {
         return new Resolver.Resolution(out, v);
     }
 
+    /**
+     * The level where gatedDelivery becomes binding (it is on and settings.gatedDelivery is locked)
+     * freezes the gates that govern it: the gate locks it holds, "states.k.gate" or a whole "states.k".
+     * Recorded in the resolved document as deliveryGates, which no document may author (it is not a
+     * section), and inherited unchanged by every level and workspace below.
+     */
+    static void freezeDeliveryGates(Map<String, Object> eff) {
+        List<String> locks = Json.strings(eff.get("locks"));
+        if (Boolean.TRUE.equals(Json.obj(eff.get("settings")).get("gatedDelivery")) && locks.contains("settings.gatedDelivery")) {
+            eff.put("deliveryGates", locks.stream()
+                    .filter(l -> l.startsWith("states.") && (l.endsWith(".gate") || l.split("\\.").length == 2)).toList());
+        }
+    }
+
+    /** The resolved template version as a workspace or child validates against it: under a binding rule, only the frozen gates count. */
+    static Map<String, Object> forValidation(Map<String, Object> resolved) {
+        Map<String, Object> doc = strip(resolved);
+        if (resolved.get("deliveryGates") instanceof List<?>) {
+            doc.put("locks", Json.strings(resolved.get("deliveryGates")));
+        }
+        return doc;
+    }
+
     /** Resolve a whole chain, root first, level by level. Used at publish; reads use the materialised result. */
     static Resolver.Resolution resolveChain(List<Version> chain) {
         List<String> v = new ArrayList<>();
         Version root = chain.getFirst();
-        Resolver.Resolution r = Resolver.resolve(root.document(), Map.of());
+        Map<String, Object> rootDoc = Json.obj(Json.deepCopy(root.document()));
+        if (rootDoc.remove("deliveryGates") != null) {
+            v.add(root.ref() + ": deliveryGates: set by resolution, never authored");
+        }
+        Resolver.Resolution r = Resolver.resolve(rootDoc, Map.of());
         r.violations().forEach(x -> v.add(root.ref() + ": " + x));
         Map<String, Object> doc = r.effective();
+        freezeDeliveryGates(doc);
         for (Version x : chain.subList(1, chain.size())) {
             Resolver.Resolution d = derive(doc, x.document(), x.ref());
             v.addAll(d.violations());
@@ -176,8 +215,9 @@ final class Hierarchy {
     static Resolver.Resolution resolveWorkspace(Registry r, Workspace w) {
         Map<String, Object> parent = r.resolved.get(ref(w.template, w.version));
         List<String> v = new ArrayList<>(lockViolations(Json.strings(parent.get("locks")), w.delta));
-        Resolver.Resolution res = Resolver.resolve(strip(parent), w.delta);
+        Resolver.Resolution res = Resolver.resolve(forValidation(parent), w.delta);
         v.addAll(res.violations());
+        restoreLocks(parent, res.effective());
         v.addAll(lockedValues(Json.strings(parent.get("locks")), parent, res.effective()));
         return new Resolver.Resolution(res.effective(), v);
     }
@@ -186,10 +226,18 @@ final class Hierarchy {
     static Resolver.Resolution writeWorkspaceDelta(Registry r, Workspace w, Map<String, Object> newDelta) {
         Map<String, Object> parent = r.resolved.get(ref(w.template, w.version));
         List<String> v = new ArrayList<>(lockViolations(Json.strings(parent.get("locks")), newDelta));
-        Resolver.Resolution res = Resolver.writeDelta(strip(parent), w.delta, newDelta, w.occupancy);
+        Resolver.Resolution res = Resolver.writeDelta(forValidation(parent), w.delta, newDelta, w.occupancy);
         v.addAll(res.violations());
+        restoreLocks(parent, res.effective());
         v.addAll(lockedValues(Json.strings(parent.get("locks")), parent, res.effective()));
         return new Resolver.Resolution(res.effective(), v);
+    }
+
+    /** After validating against the frozen gates, the effective document shows the parent's full locks again. */
+    static void restoreLocks(Map<String, Object> parent, Map<String, Object> eff) {
+        if (parent.containsKey("locks")) {
+            eff.put("locks", Json.deepCopy(parent.get("locks")));
+        }
     }
 
     /** The parent's resolved document as the next level sees it: a deep copy without placement anchors. */

@@ -41,14 +41,15 @@ final class Propagation {
         Map<String, Object> d = Json.obj(Json.deepCopy(delta));
         Object ownLocks = d.remove("locks");
         Map<String, Object> target = r.resolved.get(to);
-        Map<String, Object> onto = Hierarchy.strip(target);
-        if (ownLocks != null && !Boolean.TRUE.equals(Json.obj(target.get("settings")).get("gatedDelivery"))) {
+        Map<String, Object> onto = Hierarchy.forValidation(target);
+        if (ownLocks != null && !target.containsKey("deliveryGates") && !Boolean.TRUE.equals(Json.obj(target.get("settings")).get("gatedDelivery"))) {
             // As in Hierarchy.derive: a template child that enables gatedDelivery itself validates with its own locks.
             Set<String> all = new TreeSet<>(Json.strings(target.get("locks")));
             all.addAll(Json.strings(ownLocks));
             onto.put("locks", new ArrayList<>(all));
         }
         Resolver.Upgrade u = Resolver.upgrade(Hierarchy.strip(r.resolved.get(from)), onto, d, occupancy);
+        Hierarchy.restoreLocks(target, u.effective());
         List<String> conflicts = new ArrayList<>(u.conflicts());
         List<String> locks = Json.strings(target.get("locks"));
         conflicts.addAll(Hierarchy.lockViolations(locks, u.delta()));
