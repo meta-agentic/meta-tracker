@@ -14,6 +14,7 @@
 
   "nav.boards": "Boards",
   "nav.backlog": "Backlog",
+  "nav.roadmap": "Roadmap",
   "nav.timeline": "Timeline profiler",
   "nav.label": "Main",
 
@@ -104,5 +105,11 @@
   "backlog.points_one": "{{points}} story point",
   "backlog.points_other": "{{points}} story points",
   "backlog.empty.title": "Nothing on this board yet",
-  "backlog.empty.body": "Items placed on this board appear here, grouped under their epics."
+  "backlog.empty.body": "Items placed on this board appear here, grouped under their epics.",
+
+  "roadmap.label": "Roadmap of {{board}}",
+  "roadmap.ledgerCaption": "Item",
+  "roadmap.toggle": "Show or hide the items of {{key}}",
+  "roadmap.startHandle": "Start date of {{key}}",
+  "roadmap.endHandle": "Due date of {{key}}"
 }

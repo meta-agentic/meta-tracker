@@ -13,7 +13,7 @@ import type { ID } from "./types";
 export const ACTIVE_TAB_KEY = "ui:activeTab";
 export const TREE_EXPANDED_KEY = "ui:treeExpanded";
 
-export const APP_TABS = ["boards", "backlog", "timeline"] as const;
+export const APP_TABS = ["boards", "backlog", "roadmap", "timeline"] as const;
 
 export type AppTab = (typeof APP_TABS)[number];
 

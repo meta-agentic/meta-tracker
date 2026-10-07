@@ -4,6 +4,7 @@ import "./styles/tokens.css";
 import "./styles/shell.css";
 import "./styles/board.css";
 import "./styles/tree.css";
+import "./styles/roadmap.css";
 import "./styles/panels.css";
 import { App } from "./App";
 import type { WorkspaceSyncOptions } from "./api";

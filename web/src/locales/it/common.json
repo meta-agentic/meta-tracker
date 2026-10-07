@@ -14,6 +14,7 @@
 
   "nav.boards": "Bacheche",
   "nav.backlog": "Backlog",
+  "nav.roadmap": "Roadmap",
   "nav.timeline": "Profilatore cronologia",
   "nav.label": "Principale",
 
@@ -107,5 +108,11 @@
   "backlog.points_many": "{{points}} story point",
   "backlog.points_other": "{{points}} story point",
   "backlog.empty.title": "Ancora niente su questa bacheca",
-  "backlog.empty.body": "Gli elementi collocati su questa bacheca compaiono qui, raggruppati sotto le loro epiche."
+  "backlog.empty.body": "Gli elementi collocati su questa bacheca compaiono qui, raggruppati sotto le loro epiche.",
+
+  "roadmap.label": "Roadmap di {{board}}",
+  "roadmap.ledgerCaption": "Elemento",
+  "roadmap.toggle": "Mostra o nascondi gli elementi di {{key}}",
+  "roadmap.startHandle": "Data di inizio di {{key}}",
+  "roadmap.endHandle": "Data di scadenza di {{key}}"
 }
