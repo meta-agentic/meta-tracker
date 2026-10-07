@@ -152,15 +152,15 @@ final class HierarchyCases extends Cases {
 
         section("hierarchy: locks");
         Map<String, Object> sg = res(r, "stage-gate@1");
-        check("L1", "stage-gate locks its gates and the entries they guard: a level below cannot drop or weaken a gate or rewire those entries, may rename it; a workspace neither; locks accumulate",
+        check("L1", "stage-gate locks its gates and the entries into and out of them: a level below cannot drop or weaken a gate or rewire those entries, may rename it; a workspace neither; locks accumulate",
                 has(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"states\": {\"gate-1\": {\"gate\": {\"approvals\": 1}}}"), "t@1").violations(), "states.gate-1.gate: locked by an ancestor template ('states.gate-1.gate')")
-                        && has(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"states\": {\"gate-1\": null}"), "t@1").violations(), "states.gate-1: locked by an ancestor template ('states.gate-1.gate')")
+                        && has(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"states\": {\"gate-1\": null}"), "t@1").violations(), "states.gate-1: locked by an ancestor template ('states.gate-1.")
                         && has(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"states\": {\"development\": {\"enterFrom\": [\"scoping\"]}}"), "t@1").violations(), "states.development.enterFrom: locked")
                         && Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"states\": {\"gate-1\": {\"name\": \"Investment decision\"}}"), "t@1").ok()
                         && has(Hierarchy.lockViolations(Json.strings(sg.get("locks")), patch("{\"states\": {\"done\": {\"enterFrom\": [\"development\"]}}}")), "states.done.enterFrom: locked")
                         && Json.strings(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"locks\": [\"states.idea\"]"), "t@1").effective().get("locks"))
-                        .equals(List.of("settings.gatedDelivery", "states.development.enterFrom", "states.done.enterFrom", "states.gate-1.gate", "states.gate-2.gate", "states.idea"))
-                        && Json.strings(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"locks\": []"), "t@1").effective().get("locks")).size() == 5,
+                        .equals(List.of("settings.gatedDelivery", "states.development.enterFrom", "states.done.enterFrom", "states.gate-1.enterFrom", "states.gate-1.gate", "states.gate-2.enterFrom", "states.gate-2.gate", "states.idea"))
+                        && Json.strings(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"locks\": []"), "t@1").effective().get("locks")).size() == 7,
                 "");
         Hierarchy.Workspace plat = new Hierarchy.Workspace("PLAT", "acme-platform", 1, h("instance-platform.json"), true, Map.of());
         check("L2", "an organisation's lock binds every team and workspace below it: QA cannot be loosened, Done's entry cannot be widened",
@@ -198,16 +198,29 @@ final class HierarchyCases extends Cases {
 
         Map<String, Object> sg = r.resolved.get("stage-gate@1");
         String end = "\"category\": \"END_STATE\", \"outcome\": \"DELIVERED\"";
-        check("L4", "gated delivery: a level below stage-gate cannot open an ungated way to a DELIVERED end, whether by turning No Go into a delivery, recategorising a stage, or adding an end state; one behind Gate 2 is fine; the invariant itself is locked",
-                has(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"states\": {\"no-go\": {\"name\": \"Shipped\", \"outcome\": \"DELIVERED\"}}"), "t@1").violations(),
-                        "settings.gatedDelivery: 'idea' reaches the DELIVERED end state 'no-go' without passing a gate")
+        String sgx = "\"states\": {\"no-go\": {\"name\": \"Shipped\", \"outcome\": \"DELIVERED\"}}";
+        String ownGate = "\"states\": {\"fast-track\": {\"name\": \"Fast track\", \"category\": \"IN_PROGRESS\", \"after\": \"scoping\", \"enterFrom\": [\"scoping\"], \"gate\": {\"approvals\": 1}},"
+                + " \"shipped\": {\"name\": \"Shipped\", " + end + ", \"after\": \"done\", \"enterFrom\": [\"fast-track\"]}}, \"locks\": [\"states.fast-track.gate\"]";
+        String scopingGate = "\"states\": {\"scoping\": {\"gate\": {\"approvals\": 1}},"
+                + " \"shipped\": {\"name\": \"Shipped\", " + end + ", \"after\": \"done\", \"enterFrom\": [\"scoping\"]}}";
+        Map<String, Object> hybridGated = derived("hg", 1, "hybrid", 1, "\"settings\": {\"gatedDelivery\": true}, \"locks\": [\"states.release-review.gate\"]");
+        check("L4", "gated delivery: a level below stage-gate cannot open an ungated way to a DELIVERED end by a changed outcome, a recategorised stage or a new end state; one behind Gate 2 is fine; the invariant itself is locked",
+                has(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, sgx), "t@1").violations(),
+                        "settings.gatedDelivery: 'idea' reaches the DELIVERED end state 'no-go' without passing a locked gate")
                         && has(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"states\": {\"scoping\": {" + end + "}}"), "t@1").violations(), "reaches the DELIVERED end state 'scoping'")
                         && has(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"states\": {\"shipped\": {\"name\": \"Shipped\", " + end + ", \"after\": \"done\"}}"), "t@1").violations(), "reaches the DELIVERED end state 'shipped'")
                         && Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"states\": {\"shipped\": {\"name\": \"Shipped\", " + end + ", \"after\": \"done\", \"enterFrom\": [\"gate-2\"]}}"), "t@1").ok()
                         && has(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"settings\": {\"gatedDelivery\": false}"), "t@1").violations(), "settings.gatedDelivery: locked")
-                        && Resolver.resolve(Hierarchy.strip(r.resolved.get("hybrid@1")), patch("{\"settings\": {\"gatedDelivery\": true}}")).ok()
                         && has(Resolver.resolve(Hierarchy.strip(scrum), patch("{\"settings\": {\"gatedDelivery\": true}}")).violations(), "settings.gatedDelivery: 'backlog' reaches the DELIVERED end state 'done'"),
-                Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"states\": {\"no-go\": {\"outcome\": \"DELIVERED\"}}"), "t@1").violations());
+                Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, sgx), "t@1").violations());
+        check("L5", "only gates an ancestor locked count: a team's own gate (even self-locked) or a weak gate on the unlocked Scoping state opens no way to a new DELIVERED end, nor does rewiring Gate 2 to follow Idea; a level that enables the rule counts the gates it locks itself",
+                has(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, ownGate), "t@1").violations(), "'idea' reaches the DELIVERED end state 'shipped' without passing a locked gate")
+                        && has(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, scopingGate), "t@1").violations(), "'idea' reaches the DELIVERED end state 'shipped' without passing a locked gate")
+                        && has(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"states\": {\"gate-2\": {\"enterFrom\": [\"idea\"]}}"), "t@1").violations(), "states.gate-2.enterFrom: locked by an ancestor template")
+                        && has(Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, "\"states\": {\"gate-1\": {\"enterFrom\": [\"idea\"]}}"), "t@1").violations(), "states.gate-1.enterFrom: locked by an ancestor template")
+                        && Hierarchy.derive(r.resolved.get("hybrid@1"), hybridGated, "hg@1").ok()
+                        && has(Resolver.resolve(Hierarchy.strip(r.resolved.get("hybrid@1")), patch("{\"settings\": {\"gatedDelivery\": true}}")).violations(), "'backlog' reaches the DELIVERED end state 'done' without passing a locked gate"),
+                Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, ownGate), "t@1").violations() + " " + Hierarchy.derive(sg, derived("t", 1, "stage-gate", 1, scopingGate), "t@1").violations());
 
         Hierarchy.Registry rb = shipped();
         Map<String, Object> base2 = Json.obj(Json.mergePatch(h("base.v1.json"), patch("{\"version\": 2, \"states\": {\"todo\": {\"name\": \"Ready\"}}}")));

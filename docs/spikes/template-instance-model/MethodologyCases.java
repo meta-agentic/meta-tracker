@@ -110,7 +110,7 @@ final class MethodologyCases extends Cases {
         Map<String, Object> baseRes = r.resolved.get("base@1");
         Resolver.Resolution waterfall = Hierarchy.derive(baseRes, HierarchyCases.derived("waterfall", 1, "base", 1, seq.replace("GATE", "")), "waterfall@1");
         Resolver.Resolution signedOff = Hierarchy.derive(baseRes, HierarchyCases.derived("waterfall", 1, "base", 1,
-                seq.replace("GATE", ", \"gate\": {\"approvals\": 1}") + ", \"settings\": {\"gatedDelivery\": true}"), "waterfall@1");
+                seq.replace("GATE", ", \"gate\": {\"approvals\": 1}") + ", \"settings\": {\"gatedDelivery\": true}, \"locks\": [\"states.verify.gate\"]"), "waterfall@1");
         List<String> wf = moves(Workflow.definition(waterfall.effective()));
         check("M9", "waterfall maps without a new concept: phase cadence, stages entered strictly in sequence, gates optional (a sign-off gate before release, with gated delivery, also resolves)",
                 waterfall.ok() && signedOff.ok() && is(cadence(waterfall.effective()).get("mode"), "phase")

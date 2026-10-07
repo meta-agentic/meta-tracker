@@ -196,7 +196,7 @@ final class Validation {
      * "states.x.gate" instead. The member must be one the element kind allows, so a misspelt lock
      * cannot silently lock nothing; the element must exist. Hierarchy.java enforces locks.
      */
-    private static void locks(Map<String, Object> doc, List<String> v) {
+    static void locks(Map<String, Object> doc, List<String> v) {
         Object l = doc.get("locks");
         if (l == null) {
             return;
@@ -223,9 +223,13 @@ final class Validation {
 
     /**
      * settings.gatedDelivery: every way from a START_STATE to an END_STATE with outcome DELIVERED
-     * passes through a gate. Checked on the resolved document, so it holds however a level below
-     * tries to open a path: a new delivered end state, an outcome changed to DELIVERED, a state
-     * recategorised, a wider enterFrom. Edges follow enterFrom (absent: from every other state).
+     * passes through a LOCKED gate: a state whose "gate" member (or the whole state) is in the
+     * document's locks. A gate a level below adds, or a weak gate it puts on an unlocked state, does
+     * not count, because that level could set it to anything. Hierarchy.derive arranges that the locks
+     * seen here are the ancestors' (or the enabling level's own). Checked on the resolved document,
+     * so it holds however a level below tries to open a path: a new delivered end state, an outcome
+     * changed to DELIVERED, a state recategorised, a wider enterFrom. Edges follow enterFrom (absent:
+     * from every other state).
      */
     private static void gatedDelivery(Map<String, Object> doc, List<String> v) {
         Object on = Json.obj(doc.get("settings")).get("gatedDelivery");
@@ -236,6 +240,7 @@ final class Validation {
             return;
         }
         Map<String, Object> states = Json.obj(doc.get("states"));
+        List<String> locked = Json.strings(doc.get("locks"));
         for (String start : new java.util.TreeSet<>(states.keySet())) {
             if (!"START_STATE".equals(Json.obj(states.get(start)).get("category"))) {
                 continue;
@@ -251,8 +256,8 @@ final class Validation {
                     }
                     Map<String, Object> st = Json.obj(states.get(to));
                     if ("END_STATE".equals(st.get("category")) && "DELIVERED".equals(st.get("outcome"))) {
-                        v.add("settings.gatedDelivery: '" + start + "' reaches the DELIVERED end state '" + to + "' without passing a gate");
-                    } else if (!st.containsKey("gate")) {
+                        v.add("settings.gatedDelivery: '" + start + "' reaches the DELIVERED end state '" + to + "' without passing a locked gate");
+                    } else if (!st.containsKey("gate") || !locked.contains("states." + to + ".gate") && !locked.contains("states." + to)) {
                         todo.push(to);
                     }
                 }

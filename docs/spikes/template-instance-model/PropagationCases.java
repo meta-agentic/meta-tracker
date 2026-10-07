@@ -163,12 +163,11 @@ final class PropagationCases extends Cases {
         raced.version = 2;
         String lateLine = Propagation.apply(r10, lp, "scrum@2", "scrum@2");
         String racedLine = Propagation.apply(r10, rp, "scrum@2", "scrum@2");
-        check("P10", "apply recomputes in the workspace's own transaction: a delta written after the plan is kept, not overwritten by the plan's preview; a workspace upgraded meanwhile is skipped",
+        check("P10", "apply recomputes in the workspace's own transaction from its current pin and delta: a delta written after the plan is kept, not overwritten by the plan's preview; a workspace already at or past the target is skipped",
                 late.version == 2 && is(state(eff(r10, late), "in-review").get("wipLimit"), 2L) && is(name(eff(r10, late), "todo"), "Ready")
                         && lateLine.contains("re-planned from revision 1 (the plan saw 0)") && !lp.preview().delta().containsKey("states")
-                        && racedLine.equals("workspace RACED: skipped, now on scrum@2, not scrum@1") && raced.revision == 0,
-                lateLine + " " + racedLine);
-
+                        && racedLine.equals("workspace RACED: skipped, already on scrum@2, at or past scrum@2") && raced.revision == 0,
+                lateLine + " | " + racedLine);
         Hierarchy.Registry r11 = HierarchyCases.shipped();
         Hierarchy.publish(r11, "ops", HierarchyCases.derived("ops", 1, "base", 1, ""));
         r11.follow.put("ops", "auto");
@@ -180,5 +179,18 @@ final class PropagationCases extends Cases {
                 r11.latest("ops") == 2 && is(r11.get("ops", 2).parent(), "base@3") && late3.stream().filter(l -> l.contains("ops@")).toList().equals(List.of("template ops@1 -> ops@2, rebased onto base@3"))
                         && is(name(r11.resolved.get("ops@2"), "todo"), "Queued"),
                 late3);
+
+        Hierarchy.publish(r10, Hierarchy.SYSTEM, nextOf(r10, "scrum", "{\"states\": {\"in-review\": {\"name\": \"Peer Review\"}}}"));
+        Hierarchy.Workspace both = ws("BOTH", "scrum", "{}", true, Map.of());
+        Propagation.Planned to2 = Propagation.plan(r10, both, "scrum@2");
+        Propagation.Planned to3 = Propagation.plan(r10, both, "scrum@3");
+        String line2 = Propagation.apply(r10, to2, "scrum@2", "scrum@2");
+        String line3 = Propagation.apply(r10, to3, "scrum@3", "scrum@3");
+        String again = Propagation.apply(r10, to3, "scrum@3", "scrum@3");
+        check("P12", "two publishes planned from scrum@1 and applied in order: the second is recomputed from scrum@2, so the automatic workspace ends on scrum@3, not stranded on scrum@2; replaying a row is a no-op",
+                line2.startsWith("workspace BOTH: scrum@1 -> scrum@2") && line3.startsWith("workspace BOTH: scrum@2 -> scrum@3, revision 2, re-planned from scrum@2 (the plan saw scrum@1)")
+                        && both.version == 3 && both.revision == 2 && is(name(eff(r10, both), "in-review"), "Peer Review") && is(name(eff(r10, both), "todo"), "Ready")
+                        && again.startsWith("workspace BOTH: skipped"),
+                lateLine + " | " + racedLine + " | " + line2 + " | " + line3);
     }
 }

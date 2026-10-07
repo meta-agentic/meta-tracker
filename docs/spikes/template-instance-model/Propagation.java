@@ -41,7 +41,14 @@ final class Propagation {
         Map<String, Object> d = Json.obj(Json.deepCopy(delta));
         Object ownLocks = d.remove("locks");
         Map<String, Object> target = r.resolved.get(to);
-        Resolver.Upgrade u = Resolver.upgrade(Hierarchy.strip(r.resolved.get(from)), Hierarchy.strip(target), d, occupancy);
+        Map<String, Object> onto = Hierarchy.strip(target);
+        if (ownLocks != null && !Boolean.TRUE.equals(Json.obj(target.get("settings")).get("gatedDelivery"))) {
+            // As in Hierarchy.derive: a template child that enables gatedDelivery itself validates with its own locks.
+            Set<String> all = new TreeSet<>(Json.strings(target.get("locks")));
+            all.addAll(Json.strings(ownLocks));
+            onto.put("locks", new ArrayList<>(all));
+        }
+        Resolver.Upgrade u = Resolver.upgrade(Hierarchy.strip(r.resolved.get(from)), onto, d, occupancy);
         List<String> conflicts = new ArrayList<>(u.conflicts());
         List<String> locks = Json.strings(target.get("locks"));
         conflicts.addAll(Hierarchy.lockViolations(locks, u.delta()));
@@ -169,24 +176,26 @@ final class Propagation {
     }
 
     /**
-     * The workspace's own transaction. Under its row lock: if it is no longer pinned where the plan
-     * saw it (a manual upgrade got there first), skip; otherwise recompute the upgrade from its
-     * CURRENT delta and occupancy, never the plan's preview, so a delta written since the plan is
-     * kept; refuse on conflicts; else re-pin, store, bump the revision, reconcile, emit the event.
+     * The workspace's own transaction. Under its row lock: if it is already at or past the target
+     * (a manual upgrade, or an earlier row, got there first), skip; otherwise recompute the upgrade
+     * from its CURRENT pin, delta and occupancy, never the plan's preview, so a delta written since
+     * the plan is kept and a pin moved by an earlier row is upgraded from where it now is; refuse on
+     * conflicts; else re-pin, store, bump the revision, reconcile, emit the event.
      */
     static String apply(Hierarchy.Registry r, Planned p, String to, String origin) {
         Hierarchy.Workspace w = p.workspace();
         String pin = Hierarchy.ref(w.template, w.version);
-        if (!pin.equals(p.from())) {
-            return "workspace " + w.key + ": skipped, now on " + pin + ", not " + p.from();
+        String[] t = to.split("@");
+        if (!w.template.equals(t[0]) || w.version >= Long.parseLong(t[1])) {
+            return "workspace " + w.key + ": skipped, already on " + pin + ", at or past " + to;
         }
         Resolver.Upgrade u = upgradeEdge(r, w.delta, pin, to, w.occupancy);
-        String moved = w.revision == p.revision() ? "" : ", re-planned from revision " + w.revision + " (the plan saw " + p.revision() + ")";
+        String moved = (pin.equals(p.from()) ? "" : ", re-planned from " + pin + " (the plan saw " + p.from() + ")")
+                + (w.revision == p.revision() ? "" : ", re-planned from revision " + w.revision + " (the plan saw " + p.revision() + ")");
         if (!u.conflicts().isEmpty()) {
             return "workspace " + w.key + ": blocked, stays on " + pin + ": " + u.conflicts() + moved;
         }
         Map<String, Object> before = Hierarchy.resolveWorkspace(r, w).effective();
-        String[] t = to.split("@");
         w.template = t[0];
         w.version = Long.parseLong(t[1]);
         w.delta = u.delta();

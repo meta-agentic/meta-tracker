@@ -124,11 +124,20 @@ final class Hierarchy {
         List<String> v = new ArrayList<>(lockViolations(Json.strings(parent.get("locks")), delta));
         Set<String> locks = new TreeSet<>(Json.strings(parent.get("locks")));
         locks.addAll(Json.strings(document.get("locks")));
-        if (!locks.isEmpty()) {
+        // Under an inherited gatedDelivery only gates an ANCESTOR locked count (Validation.gatedDelivery
+        // reads the locks in the document it validates), so this level's own locks join afterwards and
+        // a level cannot vouch for a gate it added itself. A level that turns the invariant on itself
+        // validates with its own locks: its gates are locked by the level that enables the rule.
+        boolean inherited = Boolean.TRUE.equals(Json.obj(parent.get("settings")).get("gatedDelivery"));
+        if (!inherited && !locks.isEmpty()) {
             parent.put("locks", new ArrayList<>(locks));
         }
         Resolver.Resolution res = Resolver.resolve(parent, delta);
         v.addAll(res.violations());
+        if (inherited && !locks.isEmpty()) {
+            res.effective().put("locks", new ArrayList<>(locks));
+            Validation.locks(res.effective(), v);
+        }
         v.addAll(lockedValues(Json.strings(parentResolved.get("locks")), parentResolved, res.effective()));
         Map<String, Object> eff = res.effective();
         for (String m : List.of("template", "version", "name", "description", "extends")) {
