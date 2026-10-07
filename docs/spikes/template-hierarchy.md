@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Proposed |
+| **Status** | Concluded — decision recorded in [ADR-VEC-03](../adr/ADR-VEC-03-workflow-and-template-model.md) (Accepted 2026-10-07) |
 | **Type** | Spike (architect, Core tier), VEC-66. Extends the single-level model of VEC-45 ([`template-instance-model.md`](./template-instance-model.md)) |
 | **Sprint** | VEC-S5 |
 | **Requirement** | [ADR-VEC-01](../adr/ADR-VEC-01-product-requirements-and-features.md) **R-CORE-5** (template → instance), **R-CORE-3** (workflows are data), **R-SEC-2** (tenant isolation) as a seam |
