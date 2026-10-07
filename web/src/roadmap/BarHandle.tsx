@@ -1,4 +1,4 @@
-import type { KeyboardEvent, PointerEvent } from "react";
+import { useEffect, useRef, type KeyboardEvent, type PointerEvent } from "react";
 import type { BarEdge } from "./roadmapModel";
 
 export interface BarHandleProps {
@@ -8,6 +8,10 @@ export interface BarHandleProps {
   day: number;
   valueText: string;
   totalDays: number;
+  /** True while this handle owns a pointer drag; Escape is handled only then. */
+  dragging: boolean;
+  onFocus: () => void;
+  onBlur: () => void;
   onDragStart: (pointerX: number) => void;
   onDragMove: (pointerX: number) => void;
   onDragEnd: (cancelled: boolean) => void;
@@ -29,11 +33,24 @@ export function BarHandle({
   day,
   valueText,
   totalDays,
+  dragging,
+  onFocus,
+  onBlur,
   onDragStart,
   onDragMove,
   onDragEnd,
   onStep,
 }: BarHandleProps) {
+  const ref = useRef<HTMLSpanElement>(null);
+
+  // Follow a keyboard nudge so the focused edge stays on screen.
+  useEffect(() => {
+    const element = ref.current;
+    if (element && document.activeElement === element) {
+      element.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    }
+  }, [day]);
+
   const onPointerDown = (event: PointerEvent<HTMLSpanElement>) => {
     if (event.button !== 0) return;
     event.preventDefault();
@@ -47,13 +64,14 @@ export function BarHandle({
     const step = event.shiftKey ? 7 : 1;
     if (event.key === "ArrowLeft") onStep(-step);
     else if (event.key === "ArrowRight") onStep(step);
-    else if (event.key === "Escape") onDragEnd(true);
+    else if (event.key === "Escape" && dragging) onDragEnd(true);
     else return;
     event.preventDefault();
   };
 
   return (
     <span
+      ref={ref}
       className={`vec-roadmap__handle vec-roadmap__handle--${edge}`}
       role="slider"
       tabIndex={0}
@@ -63,6 +81,8 @@ export function BarHandle({
       aria-valuemax={totalDays}
       aria-valuenow={day}
       aria-valuetext={valueText}
+      onFocus={onFocus}
+      onBlur={onBlur}
       onPointerDown={onPointerDown}
       onPointerMove={(event) => onDragMove(event.clientX)}
       onPointerUp={() => onDragEnd(false)}
