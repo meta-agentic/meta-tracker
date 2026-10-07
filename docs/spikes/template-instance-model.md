@@ -7,6 +7,7 @@
 | **Sprint** | VEC-S4 |
 | **Requirement** | [ADR-01](../adr/ADR-01-product-requirements-and-features.md) **R-CORE-5** (template → instance), **R-CORE-3** (workflows are data) |
 | **Deliverable** | This decision + a throwaway resolution prototype in [`template-instance-model/`](./template-instance-model/). No production code, no migration on `main`. |
+| **Continued in** | VEC-66: [`template-hierarchy.md`](./template-hierarchy.md) (templates that extend templates) and the draft [ADR-03](../adr/ADR-03-workflow-and-template-model.md) |
 | **Unblocks** | VEC-10 (provisioning). Informs VEC-15 (workflow engine), VEC-28 (point scale), VEC-11 (re-keying), VEC-54 (backlog import). |
 
 ## Context
