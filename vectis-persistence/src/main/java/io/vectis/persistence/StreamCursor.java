@@ -41,7 +41,13 @@ public record StreamCursor(UUID epoch, long seq) {
             if (!parsed.toString().equalsIgnoreCase(epoch)) {
                 throw new IllegalArgumentException("not a canonical uuid: " + epoch);
             }
-            return new StreamCursor(parsed, Long.parseLong(text.substring(dot + 1)));
+            String seqText = text.substring(dot + 1);
+            long seq = Long.parseLong(seqText);
+            // Canonical decimal only ("5", not "+5" or "05"), so a cursor round-trips through toString.
+            if (!Long.toString(seq).equals(seqText)) {
+                throw new IllegalArgumentException("not a canonical seq: " + seqText);
+            }
+            return new StreamCursor(parsed, seq);
         } catch (IllegalArgumentException e) { // NumberFormatException included
             throw new IllegalArgumentException("not a stream cursor: " + text, e);
         }

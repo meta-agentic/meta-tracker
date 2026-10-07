@@ -13,18 +13,21 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 /**
- * The write path every state change of a workspace goes through (the real-time transport
- * decision, {@code docs/spikes/realtime-transport.md}, Rules → write path).
+ * The write path every item change goes through (the real-time transport decision,
+ * {@code docs/spikes/realtime-transport.md}, Rules → write path).
  *
- * <p>{@link #write} runs the change and its events in one transaction, in this order:
+ * <p>A write runs the change and its events in one transaction, in this order:
  *
  * <ol>
  *   <li>lock the workspace row ({@code for no key update}) and read the stream's head, its
  *       epoch and the transaction time — before any other row is written, so two writers of
- *       one workspace queue on that row and cannot deadlock on the rows behind it;
+ *       one workspace queue on that row and cannot deadlock on the rows behind it. The
+ *       workspace is resolved in that same statement from what the write targets (a board, a
+ *       stored item, or the workspace itself), never taken from the caller's copy of a row;
  *   <li>apply the change, which raises {@code item.version} by one on every item it writes
  *       and returns the events describing it;
  *   <li>in one statement: append the events at the next {@code seq}s, move the head, and ring
@@ -42,8 +45,11 @@ import java.util.regex.Pattern;
  * to here", not "this one event". A change that produces none consumes no {@code seq} and
  * rings nothing.
  *
- * <p>A write made any other way is invisible to every board. Every mutating repository method
- * goes through here.
+ * <p>An item change made any other way is invisible to every board; every item mutation in
+ * {@link ItemRepository} and the item moves of {@link SprintRepository#complete} go through
+ * here. Writes that change no item append nothing today: sprint creation and start, a
+ * sprint completion that moves no item, board and workspace creation. The event contract has
+ * no sprint or board events yet.
  */
 @ApplicationScoped
 public class WorkspaceEventLog {
@@ -89,46 +95,74 @@ public class WorkspaceEventLog {
 
     /**
      * What a change runs on: the transaction's connection, already holding the workspace row
-     * lock, and the transaction's time ({@code now()}), which is the event's {@code at} and the
+     * lock; the workspace that lock resolved, which is the stream the events go to; and the
+     * transaction's time ({@code now()}), which is the event's {@code at} and the
      * {@code updated_at} the change writes.
      */
-    public record Scope(SqlConnection connection, OffsetDateTime at) {}
+    public record Scope(SqlConnection connection, UUID workspaceId, OffsetDateTime at) {}
 
-    private record Head(StreamCursor cursor, OffsetDateTime at) {}
+    private record Head(UUID workspaceId, StreamCursor cursor, OffsetDateTime at) {}
+
+    private static final String HEAD_COLUMNS = "w.id, w.event_seq, w.stream_epoch, now() as at";
 
     /**
-     * Runs {@code change} and appends its events, in one transaction.
+     * Runs {@code change} on the named workspace and appends its events, in one transaction.
+     * Fails with {@link WorkspaceNotFoundException} if the workspace does not exist.
      *
      * @param origin the writer's {@code Vectis-Origin} tag; anything that is not
      *     {@code [A-Za-z0-9._-]{1,64}} is recorded as {@code null}
-     * @throws WorkspaceNotFoundException (as the failure) if the workspace does not exist
      */
-    public <T> Uni<T> write(UUID workspaceId, String origin, Function<Scope, Uni<Change<T>>> change) {
+    public <T> Uni<T> writeToWorkspace(UUID workspaceId, String origin, Function<Scope, Uni<Change<T>>> change) {
         Objects.requireNonNull(workspaceId, "workspaceId");
-        String tag = normalizeOrigin(origin);
-        return pool.withTransaction(conn -> lock(conn, workspaceId)
-                .chain(head -> change.apply(new Scope(conn, head.at()))
-                        .chain(done -> append(conn, workspaceId, tag, head, done.events())
-                                .replaceWith(done.result()))));
+        return write("select " + HEAD_COLUMNS + " from workspace w where w.id = $1 for no key update",
+                workspaceId, () -> new WorkspaceNotFoundException(workspaceId), origin, change);
     }
 
-    private static Uni<Head> lock(SqlConnection conn, UUID workspaceId) {
-        return conn.preparedQuery("""
-                        select event_seq, stream_epoch, now() as at
-                          from workspace
-                         where id = $1
-                           for no key update
-                        """)
-                .execute(Tuple.of(workspaceId))
+    /**
+     * As {@link #writeToWorkspace}, on the workspace that owns {@code boardId}. Fails with
+     * {@link PlacementException} if the board does not exist.
+     */
+    public <T> Uni<T> writeToBoard(UUID boardId, String origin, Function<Scope, Uni<Change<T>>> change) {
+        Objects.requireNonNull(boardId, "boardId");
+        return write("select " + HEAD_COLUMNS + """
+                         from board b join workspace w on w.id = b.workspace_id
+                        where b.id = $1
+                          for no key update of w
+                        """,
+                boardId, () -> new PlacementException("board " + boardId + " does not exist"), origin, change);
+    }
+
+    /**
+     * As {@link #writeToWorkspace}, on the workspace that holds the stored item {@code itemId}.
+     * Only the workspace row is locked here; the change locks the item when it writes it.
+     * Fails with {@link ItemNotFoundException} if the item does not exist.
+     */
+    public <T> Uni<T> writeToItem(UUID itemId, String origin, Function<Scope, Uni<Change<T>>> change) {
+        Objects.requireNonNull(itemId, "itemId");
+        return write("select " + HEAD_COLUMNS + """
+                         from item i join workspace w on w.id = i.workspace_id
+                        where i.id = $1
+                          for no key update of w
+                        """,
+                itemId, () -> new ItemNotFoundException(itemId), origin, change);
+    }
+
+    private <T> Uni<T> write(String lockSql, UUID key, Supplier<RuntimeException> missing, String origin,
+            Function<Scope, Uni<Change<T>>> change) {
+        String tag = normalizeOrigin(origin);
+        return pool.withTransaction(conn -> conn.preparedQuery(lockSql).execute(Tuple.of(key))
                 .map(rows -> {
                     if (rows.rowCount() == 0) {
-                        throw new WorkspaceNotFoundException(workspaceId);
+                        throw missing.get();
                     }
                     var row = rows.iterator().next();
-                    return new Head(
+                    return new Head(row.getUUID("id"),
                             new StreamCursor(row.getUUID("stream_epoch"), row.getLong("event_seq")),
                             row.getOffsetDateTime("at"));
-                });
+                })
+                .chain(head -> change.apply(new Scope(conn, head.workspaceId(), head.at()))
+                        .chain(done -> append(conn, head.workspaceId(), tag, head, done.events())
+                                .replaceWith(done.result()))));
     }
 
     private static Uni<Void> append(
