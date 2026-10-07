@@ -86,7 +86,7 @@ public class ItemRepository {
      * {@code resync} event with reason {@code bulk} describes the whole batch: watching
      * clients reload once instead of applying one event per row.
      *
-     * @throws IllegalArgumentException if the items span more than one workspace
+     * <p>Fails with {@link IllegalArgumentException} if the items span more than one workspace.
      */
     public Uni<Integer> insertAll(List<Item> items, String origin) {
         if (items.isEmpty()) {
@@ -94,7 +94,8 @@ public class ItemRepository {
         }
         UUID workspaceId = items.getFirst().workspaceId();
         if (items.stream().anyMatch(i -> !i.workspaceId().equals(workspaceId))) {
-            throw new IllegalArgumentException("a bulk insert writes into one workspace's stream; items span several");
+            return Uni.createFrom().failure(new IllegalArgumentException(
+                    "a bulk insert writes into one workspace's stream; items span several"));
         }
         List<Tuple> batch = items.stream().map(ItemRepository::bind).toList();
         return log.write(workspaceId, origin, scope -> scope.connection()
