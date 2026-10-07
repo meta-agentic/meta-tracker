@@ -5,7 +5,7 @@
 | **Status** | Proposed |
 | **Type** | Spike (architect, Core tier), VEC-66. Extends the single-level model of VEC-45 ([`template-instance-model.md`](./template-instance-model.md)) |
 | **Sprint** | VEC-S5 |
-| **Requirement** | [ADR-01](../adr/ADR-01-product-requirements-and-features.md) **R-CORE-5** (template → instance), **R-CORE-3** (workflows are data), **R-SEC-2** (tenant isolation) as a seam |
+| **Requirement** | [ADR-VEC-01](../adr/ADR-VEC-01-product-requirements-and-features.md) **R-CORE-5** (template → instance), **R-CORE-3** (workflows are data), **R-SEC-2** (tenant isolation) as a seam |
 | **Deliverables** | This model; the VEC-45 prototype extended to N levels in [`template-instance-model/`](./template-instance-model/) (93 cases); the draft decision [ADR-VEC-03](../adr/ADR-VEC-03-workflow-and-template-model.md); the shapes for VEC-68 (persistence) and VEC-69 (resolution and API) |
 | **Out of scope** | Product modules, migrations, UI. The form contract is VEC-67's; enforcement of transitions and gates is VEC-15's |
 
