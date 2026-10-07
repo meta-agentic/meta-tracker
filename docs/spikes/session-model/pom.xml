@@ -5,7 +5,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <!--
-    Throwaway prototype for the session-model spike (ADR-VEC-08). Deliberately NOT a module
+    Throwaway prototype for the session-model spike (ADR-VEC-02). Deliberately NOT a module
     of the root reactor and NOT a child of vectis-parent: `mvn verify` at the repository root
     never sees it. It pins the reactor's Quarkus version so the findings describe the version
     Vectis actually ships.

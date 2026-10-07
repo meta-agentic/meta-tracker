@@ -1,4 +1,4 @@
-# ADR-VEC-08 — Identity & auth: the browser session model
+# ADR-VEC-02 — Identity & auth: the browser session model
 
 | | |
 |---|---|
