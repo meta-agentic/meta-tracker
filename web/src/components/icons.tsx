@@ -161,6 +161,17 @@ export function TimelineIcon(props: IconProps) {
   );
 }
 
+/** Staggered bars on a time axis: the roadmap tab. */
+export function RoadmapIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M2.5 2.5v11h11" />
+      <rect x="5" y="4" width="5" height="2" rx="1" />
+      <rect x="7.5" y="8.5" width="5" height="2" rx="1" />
+    </Icon>
+  );
+}
+
 export function LinkIcon(props: IconProps) {
   return (
     <Icon {...props}>
