@@ -3,13 +3,13 @@ import {
   LEAD_DAYS,
   MIN_SPAN_DAYS,
   TRAIL_DAYS,
-  addDays,
   barSpan,
-  edgeDates,
-  moveEdge,
+  edgeDate,
+  shiftEdge,
   timelineRange,
   unionSpan,
 } from "./roadmapModel";
+import { addDays } from "../lib/days";
 import type { Issue } from "../store/types";
 
 const ORIGIN = "2025-01-01";
@@ -76,42 +76,65 @@ describe("timelineRange", () => {
   });
 });
 
-describe("moveEdge", () => {
-  const span = { start: 10, end: 15 };
-
-  it("moves only the dragged edge", () => {
-    expect(moveEdge(span, "start", -3, 100)).toEqual({ start: 7, end: 15 });
-    expect(moveEdge(span, "end", 4, 100)).toEqual({ start: 10, end: 19 });
-  });
-
-  it("keeps the bar a day wide when an edge overshoots the other", () => {
-    expect(moveEdge(span, "start", 50, 100)).toEqual({ start: 14, end: 15 });
-    expect(moveEdge(span, "end", -50, 100)).toEqual({ start: 10, end: 11 });
-  });
-
-  it("stays inside the timeline", () => {
-    expect(moveEdge(span, "start", -50, 100)).toEqual({ start: 0, end: 15 });
-    expect(moveEdge(span, "end", 500, 100)).toEqual({ start: 10, end: 100 });
+describe("edgeDate", () => {
+  it("reads a missing date from the other, and a reversed due date at the start", () => {
+    expect(edgeDate(issue("2025-01-03", "2025-01-08"), "end")).toBe("2025-01-08");
+    expect(edgeDate(issue("2025-01-03", null), "end")).toBe("2025-01-03");
+    expect(edgeDate(issue(null, "2025-01-03"), "start")).toBe("2025-01-03");
+    expect(edgeDate(issue("2025-01-08", "2025-01-03"), "end")).toBe("2025-01-08");
+    expect(edgeDate(issue(null, null), "start")).toBeNull();
   });
 });
 
-describe("edgeDates", () => {
-  it("writes the dragged edge's field and keeps the other as stored", () => {
-    const stored = issue("2025-01-03", "2025-01-03");
-    expect(edgeDates(stored, { start: 0, end: 3 }, "start", ORIGIN)).toEqual({
-      startDate: "2025-01-01",
-      dueDate: "2025-01-03",
+describe("shiftEdge", () => {
+  const MAX = "2025-12-31";
+  const shift = (start: string | null, due: string | null, edge: "start" | "end", delta: number) =>
+    shiftEdge(issue(start, due), edge, delta, ORIGIN, MAX);
+
+  it("moves only the dragged edge's field", () => {
+    expect(shift("2025-01-10", "2025-01-15", "start", -3)).toMatchObject({
+      startDate: "2025-01-07",
+      dueDate: "2025-01-15",
     });
-    expect(edgeDates(stored, { start: 2, end: 9 }, "end", ORIGIN)).toEqual({
-      startDate: "2025-01-03",
-      dueDate: "2025-01-10",
+    expect(shift("2025-01-10", "2025-01-15", "end", 4)).toMatchObject({
+      startDate: "2025-01-10",
+      dueDate: "2025-01-19",
     });
   });
 
-  it("fills the missing date from the bar", () => {
-    expect(edgeDates(issue(null, "2025-01-03"), { start: 2, end: 6 }, "end", ORIGIN)).toEqual({
-      startDate: "2025-01-03",
+  it("never writes the drawn one-day minimum width back", () => {
+    expect(shift("2025-01-03", "2025-01-03", "end", 6).dueDate).toBe("2025-01-09");
+    expect(shift("2025-01-03", null, "end", 2).dueDate).toBe("2025-01-05");
+  });
+
+  it("does not move a same-day due date later on a move earlier", () => {
+    const stored = issue("2025-01-03", "2025-01-03");
+    expect(shiftEdge(stored, "end", -1, ORIGIN, MAX)).toBe(stored);
+  });
+
+  it("returns the input untouched for a zero or fully clamped move, inventing no date", () => {
+    const startOnly = issue("2025-01-03", null);
+    expect(shiftEdge(startOnly, "end", 0, ORIGIN, MAX)).toBe(startOnly);
+    expect(shiftEdge(startOnly, "end", -5, ORIGIN, MAX)).toBe(startOnly);
+    const dueOnly = issue(null, "2025-01-03");
+    expect(shiftEdge(dueOnly, "start", 5, ORIGIN, MAX)).toBe(dueOnly);
+  });
+
+  it("lets a due-only item's due date move earlier", () => {
+    expect(shift(null, "2025-01-10", "end", -3)).toMatchObject({
+      startDate: null,
       dueDate: "2025-01-07",
     });
+  });
+
+  it("does not cross the other date, and stays inside the timeline", () => {
+    expect(shift("2025-01-10", "2025-01-15", "start", 50).startDate).toBe("2025-01-15");
+    expect(shift("2025-01-10", "2025-01-15", "end", -50).dueDate).toBe("2025-01-10");
+    expect(shift("2025-01-10", "2025-01-15", "start", -50).startDate).toBe(ORIGIN);
+    expect(shift("2025-01-10", "2025-01-15", "end", 500).dueDate).toBe(MAX);
+  });
+
+  it("moves a reversed item's end from where it is drawn", () => {
+    expect(shift("2025-01-08", "2025-01-03", "end", 1).dueDate).toBe("2025-01-09");
   });
 });

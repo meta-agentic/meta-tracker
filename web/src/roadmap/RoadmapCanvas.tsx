@@ -14,16 +14,16 @@ import { boardIssues, selectFlatTree } from "../store/selectors";
 import { useDateFormat } from "../i18n/format";
 import type { ID } from "../store/types";
 import { ChevronIcon } from "../components/icons";
+import { addDays, daysBetween } from "../lib/days";
 import {
-  addDays,
   barSpan,
-  daysBetween,
-  edgeDates,
-  moveEdge,
+  edgeDate,
+  shiftEdge,
   timelineRange,
   unionSpan,
   type BarEdge,
   type BarSpan,
+  type ScheduleDates,
 } from "./roadmapModel";
 import { BarHandle } from "./BarHandle";
 
@@ -41,16 +41,24 @@ export interface RoadmapCanvasProps {
   onRenderStats?: (stats: { rows: number; columns: number }) => void;
 }
 
+/**
+ * A drag holds the dates it started from, not a span: a span is measured from
+ * the timeline origin, and a sync that lands mid-drag can move the origin.
+ */
 interface Drag {
   issueId: ID;
   edge: BarEdge;
   pointerX: number;
-  span: BarSpan;
+  dates: ScheduleDates;
   delta: number;
 }
 
+/** The viewer's calendar date, as the ISO day the UTC-midnight timeline indexes. */
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()))
+    .toISOString()
+    .slice(0, 10);
 }
 
 /**
@@ -79,7 +87,7 @@ export function RoadmapCanvas({
   onRenderStats,
 }: RoadmapCanvasProps) {
   const { t } = useTranslation();
-  const formatDay = useDateFormat({ day: "numeric", month: "short" });
+  const formatDay = useDateFormat({ day: "numeric", month: "short", timeZone: "UTC" });
   const issuesById = useWorkspaceStore((s) => s.issuesById);
   const epicsById = useWorkspaceStore((s) => s.epicsById);
   const boardsById = useWorkspaceStore((s) => s.boardsById);
@@ -176,12 +184,22 @@ export function RoadmapCanvas({
     onRenderStats?.({ rows: renderedRows, columns: renderedColumns });
   }, [onRenderStats, renderedRows, renderedColumns]);
 
-  const commit = (issueId: ID, edge: BarEdge, span: BarSpan) => {
+  // A focused handle keeps its bar mounted, so a keyboard nudge that carries the
+  // bar past the rendered columns does not unmount the handle and drop focus.
+  const [focusedId, setFocusedId] = useState<ID | null>(null);
+
+  const lastDay = addDays(originDate, totalDays - 1);
+  const shift = (dates: ScheduleDates, edge: BarEdge, delta: number) =>
+    shiftEdge(dates, edge, delta, originDate, lastDay);
+
+  /** Writes only the moved edge's field, onto the item as it is now. */
+  const commit = (issueId: ID, edge: BarEdge, from: ScheduleDates, delta: number) => {
     const issue = issuesById[issueId];
     if (!issue) return;
-    const dates = edgeDates(issue, span, edge, originDate);
-    if (dates.startDate === issue.startDate && dates.dueDate === issue.dueDate) return;
-    upsertIssue({ ...issue, ...dates });
+    const next = shift(from, edge, delta);
+    const field = edge === "start" ? "startDate" : "dueDate";
+    if (next === from || next[field] === issue[field]) return;
+    upsertIssue({ ...issue, [field]: next[field] });
   };
 
   const board = boardsById[boardId];
@@ -293,14 +311,17 @@ export function RoadmapCanvas({
               const epic = row.kind === "epic" ? epicsById[row.id] : undefined;
               const issue = epic ? undefined : issuesById[row.id];
               const dragging = drag !== null && drag.issueId === row.id;
-              const stored = epic
+              const dates = issue && dragging ? shift(drag.dates, drag.edge, drag.delta) : issue;
+              const span = epic
                 ? (epicSpans.get(row.id) ?? null)
-                : issue
-                  ? barSpan(issue, originDate)
+                : dates
+                  ? barSpan(dates, originDate)
                   : null;
-              const span = dragging ? moveEdge(drag.span, drag.edge, drag.delta, totalDays) : stored;
               const visible =
-                span !== null && (dragging || (span.end >= visibleStartDay && span.start <= visibleEndDay));
+                span !== null &&
+                (dragging ||
+                  focusedId === row.id ||
+                  (span.end >= visibleStartDay && span.start <= visibleEndDay));
 
               return (
                 <div
@@ -336,41 +357,52 @@ export function RoadmapCanvas({
                       }}
                     >
                       <span className="vec-roadmap__bar-label">{issue.key}</span>
-                      {(["start", "end"] as const).map((edge) => (
-                        <BarHandle
-                          key={edge}
-                          edge={edge}
-                          label={
-                            edge === "start"
-                              ? t("roadmap.startHandle", { key: issue.key })
-                              : t("roadmap.endHandle", { key: issue.key })
-                          }
-                          day={edge === "start" ? span.start : span.end}
-                          totalDays={totalDays}
-                          valueText={dayLabel(edge === "start" ? span.start : span.end)}
-                          onDragStart={(pointerX) =>
-                            setDrag({ issueId: issue.id, edge, pointerX, span, delta: 0 })
-                          }
-                          onDragMove={(pointerX) => {
-                            const current = dragRef.current;
-                            if (!current) return;
-                            const delta = Math.round((pointerX - current.pointerX) / dayWidth);
-                            if (delta !== current.delta) setDrag({ ...current, delta });
-                          }}
-                          onDragEnd={(cancelled) => {
-                            const current = dragRef.current;
-                            if (current && !cancelled) {
-                              commit(
-                                current.issueId,
-                                current.edge,
-                                moveEdge(current.span, current.edge, current.delta, totalDays),
-                              );
+                      {(["start", "end"] as const).map((edge) => {
+                        const day = daysBetween(
+                          originDate,
+                          edgeDate(dates ?? issue, edge) ?? originDate,
+                        );
+                        return (
+                          <BarHandle
+                            key={edge}
+                            edge={edge}
+                            label={
+                              edge === "start"
+                                ? t("roadmap.startHandle", { key: issue.key })
+                                : t("roadmap.endHandle", { key: issue.key })
                             }
-                            setDrag(null);
-                          }}
-                          onStep={(days) => commit(issue.id, edge, moveEdge(span, edge, days, totalDays))}
-                        />
-                      ))}
+                            day={day}
+                            totalDays={totalDays}
+                            valueText={dayLabel(day)}
+                            dragging={dragging && drag.edge === edge}
+                            onFocus={() => setFocusedId(issue.id)}
+                            onBlur={() => setFocusedId((id) => (id === issue.id ? null : id))}
+                            onDragStart={(pointerX) =>
+                              setDrag({
+                                issueId: issue.id,
+                                edge,
+                                pointerX,
+                                dates: { startDate: issue.startDate, dueDate: issue.dueDate },
+                                delta: 0,
+                              })
+                            }
+                            onDragMove={(pointerX) => {
+                              const current = dragRef.current;
+                              if (!current) return;
+                              const delta = Math.round((pointerX - current.pointerX) / dayWidth);
+                              if (delta !== current.delta) setDrag({ ...current, delta });
+                            }}
+                            onDragEnd={(cancelled) => {
+                              const current = dragRef.current;
+                              if (current && !cancelled && current.delta !== 0) {
+                                commit(current.issueId, current.edge, current.dates, current.delta);
+                              }
+                              setDrag(null);
+                            }}
+                            onStep={(days) => commit(issue.id, edge, issue, days)}
+                          />
+                        );
+                      })}
                     </div>
                   )}
                 </div>

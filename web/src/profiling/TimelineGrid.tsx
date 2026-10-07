@@ -3,17 +3,10 @@ import { useTranslation } from "react-i18next";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useDateFormat } from "../i18n/format";
 import type { Issue } from "../store/types";
-
-const DAY_MS = 86_400_000;
+import { DAY_MS, daysBetween } from "../lib/days";
 
 /** Height of the sticky day axis, in px. Excluded from the virtualized rows. */
 const AXIS_HEIGHT = 22;
-
-function daysBetween(fromIso: string, toIso: string): number {
-  return Math.round(
-    (Date.parse(toIso) - Date.parse(fromIso)) / DAY_MS,
-  );
-}
 
 function dayToDate(originIso: string, dayIndex: number): Date {
   return new Date(Date.parse(originIso) + dayIndex * DAY_MS);
