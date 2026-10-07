@@ -32,7 +32,7 @@ flowchart TB
   sg --> ws3(["workspace GATE: delta"])
 ```
 
-The levels are not typed. "Methodology", "organisation" and "team" are roles a level plays, not kinds the model knows: any template may extend any visible template, up to seven template levels, and a workspace may hang off any of them. The shipped hierarchy in [`hierarchy/`](./template-instance-model/hierarchy/) has a root `base`, four methodology templates, and one tenant's organisation level `acme` and team level `acme-platform`.
+The levels are not typed. "Methodology", "organisation" and "team" are roles a level plays, not kinds the model knows: any template may extend any visible template, up to five template levels, root included (Q2), and a workspace may hang off any of them. The shipped hierarchy in [`hierarchy/`](./template-instance-model/hierarchy/) has a root `base`, four methodology templates, and one tenant's organisation level `acme` and team level `acme-platform`.
 
 A **root** is a complete document, as VEC-45's `scrum.v1.json` is. A **derived** document has the same identity members (`template`, `version`, `name`, optional `description`) plus `extends: {"template": <key>, "version": <n>}`, and its sections are a delta. A team template is therefore as small as what the team changed ([`acme-platform.v1.json`](./template-instance-model/hierarchy/acme-platform.v1.json) is four lines of content).
 
@@ -76,8 +76,8 @@ Consequences, each executed:
 A version, once published, is never changed (VEC-45 §1). `Hierarchy.publish` refuses (H5):
 
 - a version that is not the key's next one, including re-publishing an existing one;
-- a key owned by another owner; a parent owned by another tenant (a tenant builds on built-ins and on its own templates only); a root from a tenant (**roots are built-in**; open question Q3);
-- a parent that is not published; a chain longer than seven template levels;
+- a key owned by another owner; a parent owned by another tenant (a tenant builds on built-ins and on its own templates only); a root from a tenant (**roots are built-in**, decided by the PO, Q3);
+- a parent that is not published; a chain longer than five template levels, root included (Q2);
 - a derived version without its own name, one that breaks an inherited lock, or one that does not resolve cleanly.
 
 Keys stay immutable at every level, as in VEC-45: a level that needs a different key removes and adds.
@@ -93,7 +93,7 @@ Enforcement is two checks, and each closes a bypass the other leaves open:
 
 **Gated delivery.** Path locks cannot express a flow invariant. Under stage-gate, a level below could otherwise turn *Killed* into a `DELIVERED` end (an unguarded Idea → delivered path), recategorise a stage as a delivered end, or add a new delivered end state. `settings.gatedDelivery: true` makes it an invariant of the resolved document: every way from a `START_STATE` to an `END_STATE` with outcome `DELIVERED`, following `enterFrom`, passes a **locked gate**. It is checked at every level and on every workspace delta, so all three are refused while a delivered end state behind Gate 2 is accepted; stage-gate locks the setting itself (L4).
 
-Which gates count is fixed where the rule becomes **binding**, at the level that locks `settings.gatedDelivery`: the gate locks held there (`states.k.gate`, or a whole `states.k`) are frozen into the resolved document as `deliveryGates`, which no document may author, and only those count at every level and workspace below. Before the rule is bound, only gates an ancestor locked count, and at the level that turns it on, its own. Otherwise a level below could vouch for itself: add its own gate with one approval, even lock it itself, and put a new delivered end behind it; put a one-approval gate on the unlocked *Scoping* state; or split the two across levels, one level locking a weak gate on Scoping and its child, or a workspace on it, adding a delivered end entered from Scoping. All are refused (L5). The invariant does not stop a level below rewiring the locked gates themselves, so stage-gate also locks `gate-1.enterFrom` and `gate-2.enterFrom`: without them, one field (`gate-2.enterFrom: ["idea"]`) would skip Scoping, Gate 1 and Development (L5). Hybrid satisfies the rule once a level locks its release gate; with the gate unlocked, or in Scrum, which has no gate, Backlog reaches the delivered end ungated (L4, L5). Looser and stricter variants are the PO's call (Q5).
+Which gates count is fixed where the rule becomes **binding**, at the level that locks `settings.gatedDelivery`: the gate locks held there (`states.k.gate`, or a whole `states.k`) are frozen into the resolved document as `deliveryGates`, which no document may author, and only those count at every level and workspace below. Before the rule is bound, only gates an ancestor locked count, and at the level that turns it on, its own. Otherwise a level below could vouch for itself: add its own gate with one approval, even lock it itself, and put a new delivered end behind it; put a one-approval gate on the unlocked *Scoping* state; or split the two across levels, one level locking a weak gate on Scoping and its child, or a workspace on it, adding a delivered end entered from Scoping. All are refused (L5). The invariant does not stop a level below rewiring the locked gates themselves, so stage-gate also locks `gate-1.enterFrom` and `gate-2.enterFrom`: without them, one field (`gate-2.enterFrom: ["idea"]`) would skip Scoping, Gate 1 and Development (L5). Hybrid satisfies the rule once a level locks its release gate; with the gate unlocked, or in Scrum, which has no gate, Backlog reaches the delivered end ungated (L4, L5). The PO chose this strict variant over the looser ones (Q5).
 
 ## 5 · Mutation and propagation
 
@@ -101,7 +101,7 @@ Which gates count is fixed where the rule becomes **binding**, at the level that
 
 **Built-in edges are rebased at build time.** A release that changes a built-in runs the same rebase over every built-in below it and adds the results to the release as reviewed files, one per version (`scrum.v2.json` extending `base@2`). A built-in that does not rebase cleanly fails the build. At runtime a built-in version is only ever inserted from its file; propagation never publishes one (H8). The rebased files carry the same delta when nothing needed rewriting.
 
-**Follow modes for runtime edges.** Each tenant-template edge and each workspace has a mode chosen by the **child's owner**, because it is the child's configuration that would change: `manual` or `auto`. Proposed default: `manual` (Q1, pending the PO).
+**Follow modes for runtime edges.** Each tenant-template edge and each workspace has a mode chosen by the **child's owner**, because it is the child's configuration that would change: `manual` or `auto`. The default is `manual`, decided by the PO (Q1).
 
 **Propagation.** After a release, or a tenant publish of `K@v`, `Propagation.propagate` walks the runtime edges top-down. Each tenant template whose latest version is pinned to an *older* version of `K`, and each workspace pinned to one, is dry-run upgraded with VEC-45's `upgrade` between the two resolved parent versions plus both lock checks. Children are discovered as each level is processed, not up front, and a child already on a newer version is never moved back: two root versions published in quick succession and propagated out of order land each child once, on the newest (P11).
 
@@ -146,7 +146,7 @@ Design, not prototyped beyond ownership (H5); the role model is VEC-71's and the
 | intermediate and team levels | tenant | template administrators, or a team granted that template key | as above |
 | workspace delta | workspace | workspace administrators | `PUT …/configuration/delta` (VEC-45) |
 
-The follow mode of an edge is set by whoever may publish the child. A tenant that publishes its levels from CI and also lets a level follow automatically gets propagated versions it did not author; its CI must dry-run against the server's latest version and export propagated versions back, and a stale file is refused because it is not the key's next version (H5). Roots are proposed to be built-in only (Q3, pending the PO). **Tenancy:** organisation and team levels are tenant data. Their rows carry the tenant; built-in rows carry none and stay readable by every tenant; a tenant row may reference a built-in or a same-tenant parent, never another tenant's (H5). This is more than VEC-45's "global rows readable" note on VEC-14. Whether tenant-authored templates, or more than a fixed number of levels, belong to one edition or another is a founder decision recorded under VEC-14; nothing here depends on it.
+The follow mode of an edge is set by whoever may publish the child. A tenant that publishes its levels from CI and also lets a level follow automatically gets propagated versions it did not author; its CI must dry-run against the server's latest version and export propagated versions back, and a stale file is refused because it is not the key's next version (H5). Roots are built-in only, decided by the PO (Q3). **Tenancy:** organisation and team levels are tenant data. Their rows carry the tenant; built-in rows carry none and stay readable by every tenant; a tenant row may reference a built-in or a same-tenant parent, never another tenant's (H5). This is more than VEC-45's "global rows readable" note on VEC-14. Whether tenant-authored templates, or more than a fixed number of levels, belong to one edition or another is a founder decision recorded under VEC-14; nothing here depends on it.
 
 ## 7 · What a methodology contributes
 
@@ -182,7 +182,7 @@ The PO's 2026-10-01 requirements, and how the model meets them:
 - **Canonical JSON is the stored, diffed and reviewed form**, as VEC-45 fixed. The canonical writer is deterministic: parse → write reproduces every checked-in file byte for byte (S1, H1), and resolution does not depend on member order (I12, H1), so a tool that edits one value changes one line.
 - **Versioned files reviewed in a PR.** Built-in templates live in the repository as one file per version (`scrum.v1.json`, `scrum.v2.json`); a released version's file is never edited, and a built-in rebased because its parent changed gets its file from the release build, so no built-in version exists only as a row (H8). Tenant templates can be exported (`GET … versions/{v}` returns the authored document) and published from a file with a dry run, so a tenant can keep its levels in its own repository and publish them from CI.
 - **A published JSON Schema** ([`template.schema.json`](./template-instance-model/template.schema.json), draft 2020-12) covers roots, derived levels and workspace deltas: shape only, with `null` allowed where a delta may remove or unset. Completeness, references, categories, outcomes and locks are checked by resolution, which reports the same dotted paths. The schema's members match the validator's (S5).
-- **YAML is an authoring syntax** that compiles to the canonical JSON, restricted to the JSON-compatible subset of YAML 1.2: no anchors, aliases, tags or merge keys, string keys only, duplicates rejected. **Comments do not survive** the compile, so a round trip through tools is lossless only for the JSON; annotations that must survive go in `description`, which does (H7). Not prototyped: the prototype is dependency-free and has no YAML parser; VEC-76's round-trip tests cover it (Q6).
+- **YAML is an authoring syntax** that compiles to the canonical JSON, restricted to the JSON-compatible subset of YAML 1.2: no anchors, aliases, tags or merge keys, string keys only, duplicates rejected. **Comments do not survive** the compile, so a round trip through tools is lossless only for the JSON; annotations that must survive go in `description`, which does (H7; decided by the PO, Q6). Not prototyped: the prototype is dependency-free and has no YAML parser; VEC-76's round-trip tests cover it (Q6).
 
 ## 9 · Shapes for VEC-68 and VEC-69
 
@@ -280,7 +280,7 @@ VEC-15's runtime is the extracted state-machine library: transitions `(from, eve
 - Every transition leaving a gate carries the guard `gate:<state>`; the host binds it. The document never contains code.
 - End states carry their outcome as an opaque label; categories, boards, item types, cadence and locks stay VEC's and are not in the subset (M5).
 
-Stage-gate compiles to ten transitions, none from Idea straight to Development, and every way out of a gate guarded (M5); Hybrid has exactly one way into Released, through the release gate (M3). VEC-15 can build its machine from this object with the library's builder without a parse; the adapter's loader serves import, export and other consumers. Whether VEC-76 is built now is Q7.
+Stage-gate compiles to ten transitions, none from Idea straight to Development, and every way out of a gate guarded (M5); Hybrid has exactly one way into Released, through the release gate (M3). VEC-15 can build its machine from this object with the library's builder without a parse; the adapter's loader serves import, export and other consumers. VEC-76 is parked until a second consumer needs it (Q7).
 
 ## 11 · Prior art
 
@@ -358,22 +358,22 @@ PASS P12  two publishes planned from scrum@1 and applied in order: the second is
 | **VEC-67** (forms spike) | Section structure fixed: build on `itemTypes` (with `parents`), `fields`, `states.<k>.gate` and `cadence`; form members it adds join the closed member set and the schema, inherited and lockable like the rest. Use `hierarchy/scrum.v1.json` and `hierarchy/stage-gate.v1.json` as its two templates. Can start now. |
 | **VEC-15** (workflow engine) | Build the runtime machine from `Workflow.definition` (§10). Vocabulary to enforce: `enterFrom` (including `[]`), `wipLimit`, `gate` guards; locks and `gatedDelivery` are enforced at configuration-write time by the configuration service, not by the engine. Item **creation** is a route around `gatedDelivery`: under the rule, creating or placing an item directly in a `DELIVERED` end state must be refused, or require the gate decision. |
 | **VEC-62** (scrum board) | Board mode from `effective.cadence.mode`: `sprint` → sprint board, `flow` → Kanban board, `phase` → flow board over the stages with gate columns; no third view needed. |
-| **VEC-76** (definition adapter) | Format fixed: the subset of §10, not VEC's document. VEC compiles to it; the gate in its item passes with that scope. Build only if a consumer beyond VEC needs document-defined machines (Q7). |
+| **VEC-76** (definition adapter) | Format fixed: the subset of §10, not VEC's document. VEC compiles to it; the gate in its item passes with that scope. Parked by the PO until a consumer beyond VEC needs document-defined machines (Q7). |
 | **VEC-14** (tenancy) | The re-refine note it already carries applies: template versions are tenant data with a nullable `tenant_id`, parents restricted to built-in or same tenant, writes own-tenant only. Edition questions stay the founder's. |
 | **VEC-46** (done) | Proposed amendment to `realtime-transport.md`, filed as a follow-up doc edit and **not** made in this change: ancestor-caused events are written by each workspace's own upgrade transaction (§5, §9), not "in the publishing transaction". No contract change. |
 | **VEC-10** (New Project form) | The template choice lists `GET /templates` (built-in and own tenant), not two built-ins; otherwise as split. |
 | **VEC-28** | Unchanged from VEC-45 (point scale and delivery by outcome); a template without `storyPoints` (Kanban, stage-gate) has no velocity, only throughput. |
 | **VEC-54** (backlog import) | Provisions from `scrum` with the Refined delta; with the hierarchy that is `scrum@<latest>`. New: importing into a workspace under `gatedDelivery`, the category-and-outcome fallback that lands an item directly in a `DELIVERED` end is a creation route around the gates, and must be refused or recorded as a gate decision. |
 
-## 14 · Open questions for the PO
+## 14 · Questions decided by the PO
 
-Each is also listed in ADR-VEC-03, so approving the ADR answers them explicitly.
+The PO decided all eight on 2026-10-07, choosing between the options and trade-offs this spike set out; ADR-VEC-03 records the same answers.
 
-1. **Q1 Default follow mode.** Proposed: `manual` for every runtime edge unless the child's owner sets `auto`. The alternative, `auto` by default within one tenant, propagates organisation changes faster and surprises teams more.
-2. **Q2 Depth.** Proposed: at most seven template versions in a chain, root included (`MAX_TEMPLATE_LEVELS`); the workspace is not counted. Any limit works; it bounds a publish's fan-out and a provenance listing.
-3. **Q3 Tenant roots.** Proposed: roots are built-in only, so every workflow keeps the base's categories and end states and a base improvement can reach everything. Allowing tenant roots frees "not agile at all" processes from `base` at the cost of that reach.
-4. **Q4 Item type parents: may or must.** Proposed: `parents` says where a type may sit; an item without a parent is always allowed. A `requiresParent` flag is additive.
-5. **Q5 Gate governance.** Proposed: `gatedDelivery` as a configuration invariant checked on write, counting only gates an ancestor locked (the strict option, L4, L5), with the methodology also locking the `enterFrom` of its gates. Alternatives for the PO: the looser "any gate counts" (a team's own gate would then satisfy it, which is the hole L5 shows); or an "at least N approvals" variant, where any gate counts if it carries at least `N` approvals set by the enabling level. Separately: whether creation and import into a delivered end must pass a gate (§13, VEC-15 and VEC-54).
-6. **Q6 YAML comments.** Canonical JSON is the stored form and YAML comments are lost on compile. Confirm `description` as the annotation that survives, or require YAML sources to be kept alongside (two sources of truth).
-7. **Q7 VEC-76 now or later.** VEC does not need the adapter to run; it needs it only for document import and export. Build now for reuse, or park until a second consumer asks.
-8. **Q8 One organisation, several methodologies.** With one parent per level, an organisation running Scrum and Kanban teams publishes its layer once per methodology (`acme-scrum`, `acme-kanban`), locks included. ADR-VEC-03 rejects multiple parents and mixins for v1 and records a lock-and-invariant-only overlay as the reopen path. Confirm the duplication is acceptable for now.
+1. **Q1 Default follow mode: decided, `manual`.** A child stays pinned until its owner opts in to `auto`.
+2. **Q2 Depth: decided, five levels**, root included, workspace not counted (`MAX_TEMPLATE_LEVELS = 5`, H5), instead of the seven proposed here.
+3. **Q3 Tenant roots: decided, built-in only.** Every template derives from `base`; reopen if a real tenant cannot fit it.
+4. **Q4 Item type parents: decided, "may"**, with an optional, additive `requiresParent` flag.
+5. **Q5 Gate governance: decided, strict.** Only gates locked at or above the level that made `gatedDelivery` binding count (L4, L5); creating or importing an item straight into a delivered end must pass a gate or be recorded as a gate decision (VEC-15, VEC-54).
+6. **Q6 Annotations: decided, `description` members.** YAML comments are throwaway.
+7. **Q7 VEC-76: decided, parked** until a second consumer needs the generic adapter.
+8. **Q8 One organisation, several methodologies: decided, duplication accepted for v1.** Reopen with a lock-and-invariant-only tenant overlay when a real organisation needs it.
