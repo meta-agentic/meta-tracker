@@ -47,7 +47,7 @@ Design goals, in priority order:
 
 Product requirements and architectural decisions are recorded as ADRs under
 [`docs/adr/`](./docs/adr/) — start with
-[ADR-01 — product requirements & feature model](./docs/adr/ADR-01-product-requirements-and-features.md).
+[ADR-VEC-01 — product requirements & feature model](./docs/adr/ADR-VEC-01-product-requirements-and-features.md).
 
 **The backlog ships with the source.** The whole of it — open items, finished
 work, rejected proposals and the reasoning behind each — lives in

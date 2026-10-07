@@ -4,7 +4,7 @@
 |---|---|
 | **Type** | Spike (Core tier) |
 | **Sprint** | VEC-S1 |
-| **Requirement** | Resolves the identity spike behind [ADR-01](../../adr/ADR-01-product-requirements-and-features.md) **R-CORE-2** |
+| **Requirement** | Resolves the identity spike behind [ADR-VEC-01](../../adr/ADR-VEC-01-product-requirements-and-features.md) **R-CORE-2** |
 | **Deliverable** | Benchmark + recommendation. **Not** a key migration (see [Follow-up](#follow-up-migration-story)). |
 
 ## Question
@@ -169,7 +169,7 @@ change. A separate implementation story must:
    is a single hotspot that caps at ~4.7M op/s under contention, whereas the
    sharded/per-ms-random path sustains 30M+/s. At the 100k-write target the
    single hotspot is fine (~47× headroom), but sharding is the known escape hatch
-   for horizontal scale and should be recorded in the identity ADR (ADR-08).
+   for horizontal scale and should be recorded in the identity-strategy ADR (not yet written).
 4. Load-test the full write path (id → persist → SSE) against the literal 100k
    concurrent-write R-CORE-2 target with a real Postgres, confirming index
    bloat/fragmentation stays flat over sustained inserts.

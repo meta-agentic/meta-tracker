@@ -1,0 +1,14 @@
+{
+  "template": "kanban",
+  "version": 1,
+  "name": "Kanban",
+  "extends": {"template": "base", "version": 1},
+  "states": {
+    "in-progress": {"wipLimit": 5}
+  },
+  "itemTypes": {
+    "bug": {"name": "Bug", "parents": ["epic"]},
+    "epic": {"name": "Epic"},
+    "task": {"parents": ["epic"]}
+  }
+}
