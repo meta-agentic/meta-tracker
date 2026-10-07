@@ -11,7 +11,7 @@ provenance: >-
 > **Published with the repository.** This record and the backlog it governs ship
 > inside `.vault/`, so the reasoning behind the product is readable by anyone who
 > clones the project. A condensed version of this record is also kept at
-> `docs/adr/ADR-01-product-requirements-and-features.md` for readers who want the
+> `docs/adr/ADR-VEC-01-product-requirements-and-features.md` for readers who want the
 > requirements without the backlog around them.
 
 | | |
