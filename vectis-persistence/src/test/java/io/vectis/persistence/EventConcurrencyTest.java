@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.LongStream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 /**
  * Parallel writers to one workspace. The write path's ordering argument is that the workspace
@@ -41,6 +42,7 @@ import org.junit.jupiter.api.Test;
  * so the doorbells a {@code LISTEN} session receives are the commit order of the writes.
  */
 @QuarkusTest
+@Timeout(120) // a deadlock or a lost wake-up fails the test instead of hanging the build
 class EventConcurrencyTest {
 
     private static final AtomicInteger KEY_SEQ = new AtomicInteger();
@@ -78,7 +80,11 @@ class EventConcurrencyTest {
         List<BoardColumn> cols = f.board().orderedColumns();
         return switch (random.nextInt(3)) {
             case 0 -> items.move(item, cols.get(random.nextInt(cols.size())).id(), "r" + n, "w" + n);
-            case 1 -> items.edit(item.withFields(Map.of("n", n)), "w" + n);
+            // An edit names the version it read, so a concurrent write makes it conflict: re-read and retry.
+            case 1 -> Uni.createFrom().deferred(() -> items.findById(item.id())
+                            .chain(current -> items.edit(current.orElseThrow().withFields(Map.of("n", n)),
+                                    current.orElseThrow().version(), "w" + n)))
+                    .onFailure(ItemVersionConflictException.class).retry().atMost(1_000);
             default -> items.moveToSprint(item, random.nextBoolean() ? f.sprint().id() : null, "w" + n);
         };
     }

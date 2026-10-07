@@ -1,12 +1,12 @@
 package io.vectis.persistence;
 
 import io.smallrye.mutiny.Uni;
-import io.vectis.domain.Item;
 import io.vectis.domain.Sprint;
 import io.vectis.domain.SprintStatus;
 import io.vectis.persistence.WorkspaceEventLog.Change;
 import io.vertx.mutiny.sqlclient.Pool;
 import io.vertx.mutiny.sqlclient.Row;
+import io.vertx.mutiny.sqlclient.SqlConnection;
 import io.vertx.mutiny.sqlclient.Tuple;
 import io.vertx.pgclient.PgException;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -14,7 +14,6 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -24,6 +23,13 @@ import java.util.UUID;
 public class SprintRepository {
 
     private static final String SINGLE_ACTIVE_CONSTRAINT = "sprint_board_single_active_idx";
+
+    /** Moves a completed sprint's items, returning them in PostgreSQL's uuid order, which is the event order. */
+    private static final String MOVE_ITEMS = "with moved as ("
+            + " update item set sprint_id = $1, version = version + 1, updated_at = now()"
+            + " where id = any($2) and workspace_id = $3 and board_id = $4"
+            + " returning " + ItemRepository.SELECT_COLUMNS
+            + ") select * from moved order by id";
 
     private final Pool pool;
     private final WorkspaceEventLog log;
@@ -121,57 +127,56 @@ public class SprintRepository {
      * item move is attempted — nothing is left half-applied.
      *
      * <p>The item moves are sprint assignments, so the transaction goes through
-     * {@link WorkspaceEventLog#write} on the board's workspace: each moved item gets its
-     * {@code version} raised and one {@code item.updated} event, in item id order. Only items
-     * of that workspace move; an id from another workspace is left alone, as an unknown id
-     * always was, because its change would otherwise reach no stream.
+     * {@link WorkspaceEventLog#writeToBoard} on the sprint's board, whose workspace is resolved
+     * under the lock: each moved item gets its {@code version} raised and one
+     * {@code item.updated} event, in item id order. Only items of that board move; an id from
+     * another board is left alone, as an unknown id always was, because a sprint scopes the
+     * items of its own board. The destination must be a sprint of the same board that is not
+     * completed, or the whole completion fails with {@link PlacementException}.
      */
     public Uni<Sprint> complete(
             Sprint sprint, List<UUID> itemIdsToMove, UUID destinationSprintId, String origin) {
-        return pool.preparedQuery("select workspace_id from board where id = $1")
-                .execute(Tuple.of(sprint.boardId()))
-                .chain(boards -> {
-                    if (boards.rowCount() == 0) { // no board, so no ACTIVE sprint on it either
-                        return Uni.createFrom().failure(new IllegalSprintTransitionException(
-                                sprint.id(), SprintStatus.ACTIVE, sprint.status()));
-                    }
-                    UUID workspaceId = boards.iterator().next().getUUID("workspace_id");
-                    return log.write(workspaceId, origin, scope -> completeIn(
-                            scope, workspaceId, sprint, itemIdsToMove, destinationSprintId));
-                });
+        return log.writeToBoard(sprint.boardId(), origin, scope -> {
+            var conn = scope.connection();
+            return conn.preparedQuery("""
+                            update sprint set status = $1, completed_at = $2
+                             where id = $3 and board_id = $4 and status = 'ACTIVE'
+                            """)
+                    .execute(Tuple.of(
+                            sprint.status().name(), toOffset(sprint.completedAt()), sprint.id(), sprint.boardId()))
+                    .chain(rows -> {
+                        if (rows.rowCount() == 0) {
+                            return Uni.createFrom().failure(new IllegalSprintTransitionException(
+                                    sprint.id(), SprintStatus.ACTIVE, sprint.status()));
+                        }
+                        if (itemIdsToMove.isEmpty()) {
+                            return Uni.createFrom().item(Change.of(sprint));
+                        }
+                        return checkDestination(conn, sprint.boardId(), destinationSprintId)
+                                .chain(() -> conn.preparedQuery(MOVE_ITEMS)
+                                        .execute(Tuple.of(destinationSprintId, itemIdsToMove.toArray(UUID[]::new),
+                                                scope.workspaceId(), sprint.boardId())))
+                                .map(moved -> new Change<>(sprint, ItemRepository.mapAll(moved).stream()
+                                        .map(item -> ItemEvents.sprintAssigned(item, scope.at()))
+                                        .toList()));
+                    });
+        });
     }
 
-    private static Uni<Change<Sprint>> completeIn(
-            WorkspaceEventLog.Scope scope, UUID workspaceId, Sprint sprint, List<UUID> itemIdsToMove,
-            UUID destinationSprintId) {
-        var conn = scope.connection();
-        // board_id too: the workspace locked is the one sprint.boardId() names, so a caller's
-        // copy naming the wrong board must not complete a sprint of another workspace.
-        return conn.preparedQuery("""
-                        update sprint set status = $1, completed_at = $2
-                         where id = $3 and board_id = $4 and status = 'ACTIVE'
-                        """)
-                .execute(Tuple.of(
-                        sprint.status().name(), toOffset(sprint.completedAt()), sprint.id(), sprint.boardId()))
-                .chain(rows -> {
+    /** The backlog (null), or a sprint of the same board that is still open. */
+    private static Uni<Void> checkDestination(SqlConnection conn, UUID boardId, UUID destinationSprintId) {
+        if (destinationSprintId == null) {
+            return Uni.createFrom().voidItem();
+        }
+        return conn.preparedQuery("select 1 from sprint where id = $1 and board_id = $2 and status <> 'COMPLETED'")
+                .execute(Tuple.of(destinationSprintId, boardId))
+                .invoke(rows -> {
                     if (rows.rowCount() == 0) {
-                        return Uni.createFrom().failure(new IllegalSprintTransitionException(
-                                sprint.id(), SprintStatus.ACTIVE, sprint.status()));
+                        throw new PlacementException("sprint " + destinationSprintId
+                                + " is not an open sprint of board " + boardId);
                     }
-                    if (itemIdsToMove.isEmpty()) {
-                        return Uni.createFrom().item(Change.of(sprint));
-                    }
-                    return conn.preparedQuery("""
-                                    update item set sprint_id = $1, version = version + 1, updated_at = now()
-                                     where id = any($2) and workspace_id = $3
-                                    returning\s""" + ItemRepository.SELECT_COLUMNS)
-                            .execute(Tuple.of(
-                                    destinationSprintId, itemIdsToMove.toArray(UUID[]::new), workspaceId))
-                            .map(moved -> new Change<>(sprint, ItemRepository.mapAll(moved).stream()
-                                    .sorted(Comparator.comparing(Item::id))
-                                    .map(item -> ItemEvents.sprintAssigned(item, scope.at()))
-                                    .toList()));
-                });
+                })
+                .replaceWithVoid();
     }
 
     private static OffsetDateTime toOffset(Instant instant) {

@@ -124,7 +124,8 @@ class EventWritePathTest {
         assertEquals(1, created.version());
         assertDescribes(e1, created);
 
-        Item edited = items.edit(created.withTitle("Final").withFields(Map.of("storyPoints", 5, "epic", "E-1")))
+        Item edited = items.edit(created.withTitle("Final").withFields(Map.of("storyPoints", 5, "epic", "E-1")),
+                        created.version(), null)
                 .await().indefinitely();
         LoggedEvent e2 = assertOneEventAppended(ws, List.of(e1), "item.updated");
         assertEquals(2, edited.version());
@@ -158,7 +159,7 @@ class EventWritePathTest {
         assertDescribes(e5, returned);
         assertEquals(xmin("sprint", sprint.id()), e5.xmin(), "the completion and its item moves are one transaction");
 
-        items.delete(returned).await().indefinitely();
+        items.delete(returned, null).await().indefinitely();
         LoggedEvent e6 = assertOneEventAppended(ws, List.of(e1, e2, e3, e4, e5), "item.deleted");
         assertEquals(new JsonObject().put("id", returned.id().toString()).put("key", returned.key()).put("version", 6),
                 e6.payload().getJsonObject("item"), "the tombstone is one version above the last representation");
@@ -271,10 +272,11 @@ class EventWritePathTest {
     }
 
     @Test
-    void aWriteToAnUnknownWorkspaceIsRefused() {
+    void aWriteToAnUnknownBoardOrWorkspaceIsRefused() {
         Item orphan = Item.create(TimeOrderedId.next(), TimeOrderedId.next(), TimeOrderedId.next(), "NONE-1", "A", "m");
 
-        assertThrows(WorkspaceNotFoundException.class, () -> items.insert(orphan).await().indefinitely());
+        assertThrows(PlacementException.class, () -> items.insert(orphan).await().indefinitely());
+        assertThrows(WorkspaceNotFoundException.class, () -> items.insertAll(List.of(orphan)).await().indefinitely());
     }
 
     @Test

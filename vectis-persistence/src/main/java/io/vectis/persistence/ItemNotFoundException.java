@@ -13,4 +13,8 @@ public class ItemNotFoundException extends RuntimeException {
     public ItemNotFoundException(UUID workspaceId, UUID itemId) {
         super("item " + itemId + " is not in workspace " + workspaceId);
     }
+
+    public ItemNotFoundException(UUID itemId) {
+        super("item " + itemId + " does not exist");
+    }
 }
