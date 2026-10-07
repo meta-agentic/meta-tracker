@@ -1,4 +1,4 @@
-# Template hierarchy across methodologies (spike) — input to ADR-03
+# Template hierarchy across methodologies (spike) — input to ADR-VEC-03
 
 | | |
 |---|---|
@@ -6,7 +6,7 @@
 | **Type** | Spike (architect, Core tier), VEC-66. Extends the single-level model of VEC-45 ([`template-instance-model.md`](./template-instance-model.md)) |
 | **Sprint** | VEC-S5 |
 | **Requirement** | [ADR-01](../adr/ADR-01-product-requirements-and-features.md) **R-CORE-5** (template → instance), **R-CORE-3** (workflows are data), **R-SEC-2** (tenant isolation) as a seam |
-| **Deliverables** | This model; the VEC-45 prototype extended to N levels in [`template-instance-model/`](./template-instance-model/) (84 cases); the draft decision [ADR-03](../adr/ADR-03-workflow-and-template-model.md); the shapes for VEC-68 (persistence) and VEC-69 (resolution and API) |
+| **Deliverables** | This model; the VEC-45 prototype extended to N levels in [`template-instance-model/`](./template-instance-model/) (84 cases); the draft decision [ADR-VEC-03](../adr/ADR-VEC-03-workflow-and-template-model.md); the shapes for VEC-68 (persistence) and VEC-69 (resolution and API) |
 | **Out of scope** | Product modules, migrations, UI. The form contract is VEC-67's; enforcement of transitions and gates is VEC-15's |
 
 ## Question and answer
@@ -89,7 +89,7 @@ Locks protect paths, not flow invariants. Stage-gate locks its gates and the ent
 
 ## 5 · Mutation and propagation
 
-**Pinned at every level.** Each derived version pins its parent version and each workspace pins its template version, so publishing anything changes nothing until an upgrade (H4). The alternatives, floating references at some levels or live shared schemes, are rejected in ADR-03 for the reason VEC-45 gave: nobody could refuse a change that orphans items, and nothing could preview it.
+**Pinned at every level.** Each derived version pins its parent version and each workspace pins its template version, so publishing anything changes nothing until an upgrade (H4). The alternatives, floating references at some levels or live shared schemes, are rejected in ADR-VEC-03 for the reason VEC-45 gave: nobody could refuse a change that orphans items, and nothing could preview it.
 
 **Follow modes.** Each edge has a mode chosen by the **child's owner**, because it is the child's configuration that would change: `manual` (the default) or `auto`. The built-in methodology templates follow `base` automatically, since they ship together in a release.
 
@@ -159,7 +159,7 @@ Sections of one document, all inherited and overridden by the same rules. Member
 
 **Board mode (VEC-62 seam).** `cadence.mode` decides it: `sprint` is the sprint board, `flow` the Kanban board, and `phase` renders the flow board over the stage states, with gates as columns and no sprint header or sprint planning. VEC-62 covers sprint and flow; phase needs nothing beyond the flow view. Design, not prototyped beyond reading the cadence (M4).
 
-**Not covered, deliberately:** a different workflow per item type (Jira's per-issue-type workflows; reopen in ADR-03), time-boxed phases with dates, who may approve a gate (a role, VEC-71/VEC-14), and the form a decision is recorded with (VEC-67).
+**Not covered, deliberately:** a different workflow per item type (Jira's per-issue-type workflows; reopen in ADR-VEC-03), time-boxed phases with dates, who may approve a gate (a role, VEC-71/VEC-14), and the form a decision is recorded with (VEC-67).
 
 ## 8 · Documents, schema and round trip
 

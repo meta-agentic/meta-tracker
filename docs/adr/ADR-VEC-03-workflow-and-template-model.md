@@ -1,4 +1,4 @@
-# ADR-03 — Workflow and template model: a pinned hierarchy of templates resolved to a workspace instance
+# ADR-VEC-03 — Workflow and template model: a pinned hierarchy of templates resolved to a workspace instance
 
 | | |
 |---|---|
