@@ -40,6 +40,9 @@ final class TemplateProbe {
                 refused(pool, tenantA, c -> insert(c, "template_level", UUID.randomUUID(), tenantB, builtIn)), "");
         ok &= check("tenant A cannot extend B's level (policy checks the parent is visible)",
                 refused(pool, tenantA, c -> insert(c, "template_level", UUID.randomUUID(), tenantA, levelB)), "");
+        ok &= check("tenant A cannot re-parent its own level onto B's (the same check on UPDATE)",
+                refused(pool, tenantA, c -> c.preparedQuery("update template_level set parent_id = $1 where id = $2")
+                        .execute(Tuple.of(levelB, levelA)).replaceWithVoid()), "");
         boolean naiveAccepted = !refused(pool, tenantA,
                 c -> insert(c, "template_level_naive", UUID.randomUUID(), tenantA, levelB));
         Log.out("templates: %s  with a policy on tenant_id alone, tenant A %s extend B's level"

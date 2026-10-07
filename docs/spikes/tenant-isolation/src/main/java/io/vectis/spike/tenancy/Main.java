@@ -17,6 +17,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
  *   <li>{@code setup}: create and seed the scratch schema as the owner role;
  *   <li>{@code probe}: the leak probe with transaction-local binding (exit 1 on any leak);
  *   <li>{@code control}: the leak probe with session binding, which must leak;
+ *   <li>{@code control-textual}: the leak probe with transaction control sent as SQL text, which must leak;
  *   <li>{@code templates}: the template-level policy checks;
  *   <li>{@code bench}: the read-path benchmark, sequential and at 16 in flight, and its plan.
  * </ul>
@@ -37,7 +38,7 @@ public class Main implements QuarkusApplication {
     @ConfigProperty(name = "spike.seed", defaultValue = "14") long seed;
 
     @Override
-    public int run(String... args) {
+    public int run(String... args) throws Exception {
         String command = args.length == 0 ? "probe" : args[0];
         Log.out("postgres: %s", app.query("select version()").execute().await().indefinitely()
                 .iterator().next().getString(0));
@@ -51,9 +52,12 @@ public class Main implements QuarkusApplication {
                 yield 0;
             }
             case "probe" -> LeakProbe.run(app, tenantIds(), itemsPerTenant, probeRequests, probeInFlight,
-                    LeakProbe.Binding.LOCAL, seed) ? 0 : 1;
+                    LeakProbe.Mode.LOCAL, seed) ? 0 : 1;
+            // The controls pass when they leak.
             case "control" -> LeakProbe.run(app, tenantIds(), itemsPerTenant, probeRequests / 10, probeInFlight,
-                    LeakProbe.Binding.SESSION, seed) ? 1 : 0; // the control passes when it leaks
+                    LeakProbe.Mode.SESSION, seed) ? 1 : 0;
+            case "control-textual" -> LeakProbe.run(app, tenantIds(), itemsPerTenant, probeRequests / 10,
+                    probeInFlight, LeakProbe.Mode.TEXTUAL, seed) ? 1 : 0;
             case "templates" -> {
                 List<UUID> ids = tenantIds();
                 yield TemplateProbe.run(app, ids.get(0), ids.get(1)) ? 0 : 1;
@@ -74,7 +78,8 @@ public class Main implements QuarkusApplication {
 
     private List<UUID> tenantIds() {
         List<UUID> ids = new ArrayList<>();
-        app.query("select id from tenant order by id").execute().await().indefinitely()
+        // As the owner: the app role sees only the tenant it is bound to.
+        owner.query("select id from tenant order by id").execute().await().indefinitely()
                 .forEach(row -> ids.add(row.getUUID("id")));
         return ids;
     }
