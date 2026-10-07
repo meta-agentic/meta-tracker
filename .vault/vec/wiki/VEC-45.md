@@ -88,7 +88,7 @@ Every clause in that sentence is an open decision:
 
 The requirement is decided; the model is not. **ADR-VEC-03 (workflow model) is
 listed in ADR-VEC-01 as a planned follow-on and has not been written**, and
-neither has ADR-VEC-11. Sub-question 3 in particular is not answerable by
+neither has the reporting engine ADR. Sub-question 3 in particular is not answerable by
 analysis — it is a set of interacting cases whose cost only shows up when you try
 to build them, which is what makes this a probe rather than a design task. Any
 acceptance criteria written for VEC-10 today would be inventing this model in
