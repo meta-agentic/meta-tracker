@@ -27,6 +27,15 @@ final class Schema {
      */
     static final String CURRENT_TENANT = "nullif(current_setting('app.current_tenant_id', true), '')::uuid";
 
+    /**
+     * A level may extend only a level its tenant can see (a built-in or its own). Referential
+     * checks do not apply RLS, so the foreign key alone would accept another tenant's id; this
+     * subquery runs under the read policy. The outer column is qualified with the table name:
+     * unqualified, {@code parent_id} would bind to the subquery's own row.
+     */
+    static final String VISIBLE_PARENT =
+            "(parent_id is null or exists (select 1 from template_level p where p.id = template_level.parent_id))";
+
     /** The one built-in template level, {@code scrum} version 1. */
     static final String BUILT_IN = "00000000-0000-7000-8000-0000000000b1";
 
@@ -34,7 +43,7 @@ final class Schema {
 
     static void create(Pool owner, int tenants, int itemsPerTenant) {
         List<String> ddl = List.of(
-                "drop table if exists item, item_plain, template_level, template_level_naive, bench_target, tenant cascade",
+                "drop table if exists item, item_plain, template_level, template_level_naive, bench_target, probe_commit, tenant cascade",
                 "create table tenant (id uuid primary key, name text not null)",
                 """
                 create table item (
@@ -109,22 +118,28 @@ final class Schema {
                 // A tenant writes only its own levels, and extends only a level it can see: the
                 // foreign key alone would accept another tenant's id, because referential checks
                 // do not apply RLS. The subquery runs under the read policy.
-                """
-                create policy template_insert on template_level for insert
-                    with check (tenant_id = %1$s
-                                and (parent_id is null
-                                     or exists (select 1 from template_level p where p.id = template_level.parent_id)))"""
-                        .formatted(CURRENT_TENANT),
+                // The same check on UPDATE: re-parenting an existing level is a reference too.
+                "create policy template_insert on template_level for insert with check (tenant_id = %s and %s)"
+                        .formatted(CURRENT_TENANT, VISIBLE_PARENT),
                 """
                 create policy template_update on template_level for update
-                    using (tenant_id = %1$s) with check (tenant_id = %1$s)""".formatted(CURRENT_TENANT),
+                    using (tenant_id = %1$s) with check (tenant_id = %1$s and %2$s)"""
+                        .formatted(CURRENT_TENANT, VISIBLE_PARENT),
                 "create policy template_delete on template_level for delete using (tenant_id = %s)"
                         .formatted(CURRENT_TENANT),
                 "create policy naive_read on template_level_naive for select using (tenant_id is null or tenant_id = %s)"
                         .formatted(CURRENT_TENANT),
                 "create policy naive_write on template_level_naive for insert with check (tenant_id = %s)"
                         .formatted(CURRENT_TENANT),
+                // The tenant registry: a tenant sees its own row only. The harness lists tenants
+                // as the owner, which is not forced here.
+                "alter table tenant enable row level security",
+                "create policy tenant_self on tenant for select using (id = %s)".formatted(CURRENT_TENANT),
+                // Harness bookkeeping, not tenant data: the probe's commit counter and the
+                // benchmark's targets.
+                "create table probe_commit (tenant_id uuid not null)",
                 "grant select on tenant, bench_target to spike_app",
+                "grant select, insert, delete on probe_commit to spike_app",
                 "grant select, insert, update, delete on item, item_plain, template_level, template_level_naive to spike_app",
                 "analyze tenant, item, item_plain, bench_target, template_level, template_level_naive");
         owner.withTransaction(conn -> {
