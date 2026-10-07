@@ -1,11 +1,11 @@
-# Template → instance model (spike) — draft ADR-03: workflow and template model
+# Template → instance model (spike) — draft ADR-VEC-03: workflow and template model
 
 | | |
 |---|---|
 | **Status** | Proposed |
-| **Type** | Spike (Core tier), VEC-45 — written to be renamed `docs/adr/ADR-03-workflow-and-template-model.md` |
+| **Type** | Spike (Core tier), VEC-45 — written to be renamed `docs/adr/ADR-VEC-03-workflow-and-template-model.md` |
 | **Sprint** | VEC-S4 |
-| **Requirement** | [ADR-01](../adr/ADR-01-product-requirements-and-features.md) **R-CORE-5** (template → instance), **R-CORE-3** (workflows are data) |
+| **Requirement** | [ADR-VEC-01](../adr/ADR-VEC-01-product-requirements-and-features.md) **R-CORE-5** (template → instance), **R-CORE-3** (workflows are data) |
 | **Deliverable** | This decision + a throwaway resolution prototype in [`template-instance-model/`](./template-instance-model/). No production code, no migration on `main`. |
 | **Continued in** | VEC-66: [`template-hierarchy.md`](./template-hierarchy.md) (templates that extend templates) and the draft [ADR-VEC-03](../adr/ADR-VEC-03-workflow-and-template-model.md) |
 | **Unblocks** | VEC-10 (provisioning). Informs VEC-15 (workflow engine), VEC-28 (point scale), VEC-11 (re-keying), VEC-54 (backlog import). |

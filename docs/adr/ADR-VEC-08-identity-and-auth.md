@@ -5,8 +5,8 @@
 | **Status** | Proposed |
 | **Type** | ADR from spike VEC-77 (Core IAM tier); the evidence is the prototype in [`docs/spikes/session-model/`](../spikes/session-model/) |
 | **Sprint** | VEC-S5 |
-| **Requirement** | [ADR-01](./ADR-01-product-requirements-and-features.md) **R-SEC-1** (multi-tenant OIDC with federated IdPs; client-managed Authorization Code + PKCE; the backend is a pure resource server) and **R-SEC-2** (tenant isolation fails closed) |
-| **Supersedes** | The *mechanism* clause of R-SEC-1 — "client-managed … the backend is a pure resource server". The requirement's intent (OIDC, PKCE, federated IdPs, no credentials through Vectis's data path) stands. ADR-01's body is not edited. |
+| **Requirement** | [ADR-VEC-01](./ADR-VEC-01-product-requirements-and-features.md) **R-SEC-1** (multi-tenant OIDC with federated IdPs; client-managed Authorization Code + PKCE; the backend is a pure resource server) and **R-SEC-2** (tenant isolation fails closed) |
+| **Supersedes** | The *mechanism* clause of R-SEC-1 — "client-managed … the backend is a pure resource server". The requirement's intent (OIDC, PKCE, federated IdPs, no credentials through Vectis's data path) stands. ADR-VEC-01's body is not edited. |
 | **Deliverable** | This decision + a throwaway prototype in [`docs/spikes/session-model/`](../spikes/session-model/), a standalone Maven project outside the reactor, exercised by a browser probe against a real OIDC provider. No production code on `main`. |
 | **Reading** | The ADR is Context, Decision, Rules and Consequences. Findings F1–F12 are the evidence; the appendices map the acceptance criteria, mark each claim measured or argued, and say how to reproduce. |
 | **Unblocks** | VEC-35 (sign-in), VEC-81 (tenant binding). Constrains VEC-74 (stream auth), VEC-78 (one origin), VEC-80 (RLS input), VEC-32 (federation, now an amendment to this ADR). |

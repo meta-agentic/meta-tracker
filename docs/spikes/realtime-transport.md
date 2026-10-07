@@ -1,11 +1,11 @@
-# Real-time transport (spike) — draft ADR-04: real-time transport
+# Real-time transport (spike) — draft ADR-VEC-04: real-time transport
 
 | | |
 |---|---|
 | **Status** | Proposed |
-| **Type** | Spike (Core tier), VEC-46 — written to be renamed `docs/adr/ADR-04-realtime-transport.md` |
+| **Type** | Spike (Core tier), VEC-46 — written to be renamed `docs/adr/ADR-VEC-04-realtime-transport.md` |
 | **Sprint** | VEC-S4 |
-| **Requirement** | [ADR-01](../adr/ADR-01-product-requirements-and-features.md) **R-CORE-4** (state changes propagate over SSE, visible on every open board within 500 ms) |
+| **Requirement** | [ADR-VEC-01](../adr/ADR-VEC-01-product-requirements-and-features.md) **R-CORE-4** (state changes propagate over SSE, visible on every open board within 500 ms) |
 | **Deliverable** | This decision + a throwaway two-instance prototype in [`realtime-transport/`](./realtime-transport/), a standalone Maven project outside the reactor. No production code, no migration on `main`. |
 | **Reading** | The ADR is Context, Decision, Rules and Consequences. Findings §1 to §5 are the evidence; the appendices map the acceptance criteria, mark each claim measured or argued, and say how to reproduce. |
 | **Unblocks** | VEC-17 (SSE workspace synchronization), and through it VEC-31 (estimation poker). Constrains VEC-35 (stream authentication). |
@@ -325,7 +325,7 @@ The 20 ms stall stands in for a GC pause or a slow read on the instance holding 
 | **4. Three payloads in full, bytes on the wire, with the decision and its reason** | [§2](#2--event-contract): `item.moved`, `item.updated`, `item.created`, plus `configuration.changed` (own delta, and an ancestor publish fanned out to two workspaces) and `resync`, copied from the stream of the prototype. |
 | **5. Measured p50/p95, method, environment, verdict on 500 ms** | [§4](#4--budget): three runs, method and environment recorded. 500 ms holds; the proposal is to keep the number and say what it means during a reconnect. |
 | **6. Convergence rule and a demonstrated out-of-order case** | [§5](#5--ordering-and-loss): two demonstrations, a broker-shaped publish after commit that leaves a client permanently wrong under last-arrival-wins, and the own-write race in the recommended design. |
-| **7. Liftable into ADR-04 as Proposed, with VEC-17's remaining scope** | The ADR is the top of this document: header, Context, [Decision](#decision), [Rules](#rules), [Consequences](#consequences) and [VEC-17's remaining scope](#vec-17s-remaining-scope). Findings and appendices are the evidence and stay behind. |
+| **7. Liftable into ADR-VEC-04 as Proposed, with VEC-17's remaining scope** | The ADR is the top of this document: header, Context, [Decision](#decision), [Rules](#rules), [Consequences](#consequences) and [VEC-17's remaining scope](#vec-17s-remaining-scope). Findings and appendices are the evidence and stay behind. |
 | **8. Root `mvn -B -ntp verify` unaffected, nothing in `vectis-server/src/main`** | The prototype is its own Maven project under `docs/spikes/realtime-transport/`, not a reactor module and not a child of `vectis-parent`. |
 
 ## Appendix B · Evidence: measured or argued
@@ -377,7 +377,7 @@ Requires Docker and a Maven repository that can resolve the Quarkus 3.37.1 BOM (
 
 ## Appendix E · Premises re-checked on today's `main`
 
-- **Still true:** staging runs `replicas: 2`; no `pom.xml` in the reactor names messaging, Kafka, AMQP or Redis; `vectis-server` holds one resource, `ExtensionDiagnosticsResource`; `WorkspaceSnapshot` is the only payload shape; ADR-04 is unwritten (`docs/adr/` holds ADR-01 only, and VEC-45's draft is ADR-03).
+- **Still true:** staging runs `replicas: 2`; no `pom.xml` in the reactor names messaging, Kafka, AMQP or Redis; `vectis-server` holds one resource, `ExtensionDiagnosticsResource`; `WorkspaceSnapshot` is the only payload shape; ADR-VEC-04 is unwritten (`docs/adr/` holds ADR-VEC-01 only, and VEC-45's draft is ADR-VEC-03).
 - **No longer true:** "there is no write path yet from which an event could be emitted". `vectis-persistence` now has reactive write methods (`ItemRepository.insert`, `insertAll`, `move`, `moveToSprint`; sprint, board and workspace repositories). No REST endpoint calls them yet, and `vectis-server` does not depend on `vectis-persistence`.
 - **Missing, and needed by this design:** `item.version`. Item updates today are blind writes.
 - **Rejected:** VEC-17's developer note ("use Quarkus Reactive Messaging to broadcast update details") describes the in-JVM broadcast of §1, which leaves the clients of every other replica stale.

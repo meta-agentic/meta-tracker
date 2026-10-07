@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| **Status** | Proposed (the PO decided its open questions on 2026-10-07; accepting the record is a separate decision) |
+| **Status** | Accepted (2026-10-07, by the PO) |
 | **Date** | 2026-10-07 |
 | **Deciders** | Product Owner |
-| **Requirement** | [ADR-01](./ADR-01-product-requirements-and-features.md) **R-CORE-5** (template → instance), **R-CORE-3** (workflows are data); **R-SEC-2** as a constraint |
+| **Requirement** | [ADR-VEC-01](./ADR-VEC-01-product-requirements-and-features.md) **R-CORE-5** (template → instance), **R-CORE-3** (workflows are data); **R-SEC-2** as a constraint |
 | **Evidence** | VEC-45 spike [`template-instance-model.md`](../spikes/template-instance-model.md) (single level, 58 cases) and VEC-66 spike [`template-hierarchy.md`](../spikes/template-hierarchy.md) (N levels, 35 further cases), one executable prototype: `java docs/spikes/template-instance-model/TemplateModelSpike.java` |
 
 ## Context
