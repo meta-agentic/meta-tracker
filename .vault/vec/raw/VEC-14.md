@@ -21,8 +21,8 @@ estimate:
   basis: up-front
   dated: '2026-08-30'
   note: 'Complex, narrow -> spike. Low extension: a throwaway harness in one module plus a findings doc;
-    no production module changes. Very high intension: R-SEC-2 mandates fail-closed RLS but ADR-VEC-07
-    is unwritten, the shipped schema (V1__initial_schema.sql) has no tenant column at all, and whether
+    no production module changes. Very high intension: R-SEC-2 mandates fail-closed RLS but the multi-tenant isolation
+    & feature gating ADR is unwritten, the shipped schema (V1__initial_schema.sql) has no tenant column at all, and whether
     SET LOCAL survives a shared reactive Vert.x pool is an unknown unknown that only a probe can settle.
     Time-boxed to 5 days; a negative result closes it. Anchor: VEC-9 (pk bench spike) 1, VEC-13 (plugin
     loading spike) 3 — this is broader than both.'
@@ -61,8 +61,8 @@ Three sub-questions, each with a yes/no or a number as its answer:
 
 **R-SEC-2** in ADR-VEC-01 mandates that tenant isolation fails closed via
 PostgreSQL RLS — *missing tenant binding ⇒ rows invisible*. That is the
-requirement. The **mechanism** is undecided: ADR-VEC-07 (multi-tenant isolation
-& feature gating) is listed in ADR-VEC-01 as a planned follow-on and has not
+requirement. The **mechanism** is undecided: the multi-tenant isolation & feature
+gating ADR is listed in ADR-VEC-01 as a planned follow-on and has not
 been written. Meanwhile the persistence slice shipped by VEC-41 has **no tenant
 column anywhere** — `V1__initial_schema.sql` defines `workspace`, `board`,
 `board_column` and `item` with no `tenant_id` and no RLS policy — and
@@ -117,7 +117,7 @@ Explicitly out of scope:
    numbers is not an answer.
 4. The document names an explicit **recommendation** — RLS, application-level
    filtering, or both in layers — with the evidence for it, in a form that can be
-   lifted directly into ADR-VEC-07.
+   lifted directly into the multi-tenant isolation & feature gating ADR.
 5. Sub-question 3 is answered as a diagram or table mapping each named Enterprise
    capability to a concrete extension point in `vectis-extension-spi`, or states
    which capability the current SPI cannot host and why.
@@ -136,5 +136,5 @@ and report — sub-questions 2 and 3 are moot without it.
 
 ## Feeds
 
-ADR-VEC-07 (multi-tenant isolation & feature gating) — currently unwritten and
+The multi-tenant isolation & feature gating ADR — currently unwritten and
 blocking VEC-32, VEC-33 and VEC-35.

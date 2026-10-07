@@ -26,6 +26,13 @@ import java.util.UUID;
  * {@code columnId}: sprint scope must be indexed and queried, so it cannot live in the
  * open {@code fields} document. {@code null} means the item is in the backlog rather
  * than assigned to any sprint.
+ *
+ * <p>{@code version} is the persisted revision this representation reflects: 1 when the
+ * item is first written, raised by one by every write that changes it, deletion
+ * included. Only the persistence layer raises it, in the same transaction as the change
+ * and its event, so the {@code with…} methods here carry it over unchanged. It is what a
+ * client compares to tell a newer representation from an older one, and what an
+ * {@code If-Match} on an item edit names.
  */
 public record Item(
         UUID id,
@@ -36,7 +43,8 @@ public record Item(
         String title,
         String rank,
         Map<String, Object> fields,
-        UUID sprintId) {
+        UUID sprintId,
+        long version) {
 
     public Item {
         Objects.requireNonNull(id, "id");
@@ -53,25 +61,33 @@ public record Item(
         if (rank.isBlank()) {
             throw new IllegalArgumentException("item rank must not be blank");
         }
+        if (version < 1) {
+            throw new IllegalArgumentException("item version starts at 1: " + version);
+        }
     }
 
     public static Item create(
             UUID workspaceId, UUID boardId, UUID columnId, String key, String title, String rank) {
-        return new Item(TimeOrderedId.next(), workspaceId, boardId, columnId, key, title, rank, Map.of(), null);
+        return new Item(TimeOrderedId.next(), workspaceId, boardId, columnId, key, title, rank, Map.of(), null, 1);
     }
 
     /** The same item moved to another column, leaving every other attribute alone. */
     public Item movedTo(UUID targetColumnId, String newRank) {
-        return new Item(id, workspaceId, boardId, targetColumnId, key, title, newRank, fields, sprintId);
+        return new Item(id, workspaceId, boardId, targetColumnId, key, title, newRank, fields, sprintId, version);
+    }
+
+    /** The same item with its title replaced. */
+    public Item withTitle(String newTitle) {
+        return new Item(id, workspaceId, boardId, columnId, key, newTitle, rank, fields, sprintId, version);
     }
 
     /** The same item with its open field set replaced. */
     public Item withFields(Map<String, Object> newFields) {
-        return new Item(id, workspaceId, boardId, columnId, key, title, rank, newFields, sprintId);
+        return new Item(id, workspaceId, boardId, columnId, key, title, rank, newFields, sprintId, version);
     }
 
     /** The same item assigned to a sprint, or returned to the backlog if {@code sprintId} is null. */
     public Item withSprint(UUID sprintId) {
-        return new Item(id, workspaceId, boardId, columnId, key, title, rank, fields, sprintId);
+        return new Item(id, workspaceId, boardId, columnId, key, title, rank, fields, sprintId, version);
     }
 }
