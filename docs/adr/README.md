@@ -1,6 +1,8 @@
 # Architecture decision records
 
-Decision records are named `ADR-VEC-NN-<slug>.md` and cited as `ADR-VEC-NN`. They are numbered consecutively in the order they are written; no number is reserved for a planned record, which gets the next free number when it is written. A decision usually starts as a spike document in [`docs/spikes/`](../spikes/) written to be lifted into its record.
+Naming, numbering and this index follow the [meta-os decision-record rule](https://github.com/meta-agentic/meta-os/blob/main/systems/repo-docs.md#decision-records), with project key `VEC`.
+
+A decision usually starts as a spike document in [`docs/spikes/`](../spikes/) written to be lifted into its record.
 
 | Number | Title | Status |
 |---|---|---|
@@ -8,7 +10,7 @@ Decision records are named `ADR-VEC-NN-<slug>.md` and cited as `ADR-VEC-NN`. The
 | [ADR-VEC-02](./ADR-VEC-02-identity-and-auth.md) | Identity & auth: the browser session model | Proposed |
 | [ADR-VEC-03](./ADR-VEC-03-workflow-and-template-model.md) | Workflow and template model | Accepted (2026-10-07) |
 
-Planned records, not yet written, so not yet numbered:
+Planned records, not yet written:
 
 - Identity strategy (item IDs and primary keys); evidence in [`docs/spikes/time-ordered-pk/`](../spikes/time-ordered-pk/README.md).
 - Real-time transport; drafted in [`docs/spikes/realtime-transport.md`](../spikes/realtime-transport.md).
