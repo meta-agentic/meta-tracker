@@ -54,13 +54,13 @@ The binding may be pipelined with the transaction's next statement. The Vert.x c
 
 A connection that is closed inside a transaction it opened as text goes back to the pool still inside that transaction, with its binding. The next borrower runs in that same transaction and sees the other tenant's rows, even through `withTransaction`, whose own `BEGIN` only draws a warning. Demonstrated by the second control (§1). A connection closed inside an API transaction is rolled back, and nothing leaks (the `ABANDONED` kind, §1).
 
-Guard, recommended and not built: a test that fails when a SQL string constant in the persistence code starts a statement with one of those keywords.
+Guard, recommended and not built: a test over the SQL string constants in the persistence code. It fails on any statement that starts with one of those keywords, on any string that holds more than one statement (a `;` outside a literal, which is how `begin; …` hides a transaction inside an ordinary-looking query), and on any `set_config(…, false)`. A keyword check alone would miss the last two.
 
 **Policy expression.** `tenant_id = nullif(current_setting('app.current_tenant_id', true), '')::uuid`. The `nullif` is required. Once a session has set the variable, it reads back as `''` (not null) after the transaction ends, and `''::uuid` raises an error (demonstrated, §3). Without `nullif`, an unbound read on a used connection errors instead of returning nothing. That still fails closed, but as an error, not as zero rows.
 
 **Where `tenant_id` lives.** It is a column on every tenant-scoped table (`workspace`, `board`, `board_column`, `item`, `sprint`, `workspace_event`, template levels, and every later table), so that each policy is a column comparison and not a join. Its consistency with the parent row is kept by composite foreign keys, for example `(workspace_id, tenant_id) references workspace (id, tenant_id)`. Argued, not prototyped.
 
-The tenant registry is itself under RLS: a bound session sees its own tenant row only.
+The tenant registry is itself under RLS: a bound session sees its own tenant row only. That leaves an open design point for the ADR: ADR-VEC-02 D2 maps the verified `(iss, tenant claim)` to a tenant *before* anything is bound, and an unbound session sees no tenant at all. The lookup therefore needs either a definer function that resolves exactly one claim to one tenant (under the preconditions below), or a claim-to-tenant mapping table outside the tenant policy that holds no tenant data.
 
 **References across rows.** Referential checks do not apply RLS. A row may therefore reference a parent its tenant cannot see, unless the policy's `WITH CHECK` requires the parent to be visible, on **INSERT and UPDATE** alike. For example: `parent_id is null or exists (select 1 from template_level p where p.id = template_level.parent_id)`.
 
@@ -69,6 +69,12 @@ Demonstrated (§1): with a policy on `tenant_id` alone, tenant A extended tenant
 **Global rows.** Built-in template levels have `tenant_id` null. Their read policy is `tenant_id is null or tenant_id = <bound>`, and their write policies require `tenant_id = <bound>`. So built-ins are readable by every tenant, even unbound, and writable by none (demonstrated, §1). They are seeded by a release, through whichever migration role §3 settles on: under `FORCE`, the plain owner cannot.
 
 **Cross-tenant system work.** Some paths serve many tenants by design: the real-time feed and its catch-up poll (VEC-74), the event prune job, and template propagation (VEC-71). These either bind each tenant in turn (the workspace row names its tenant), or call a narrow `SECURITY DEFINER` function that takes the workspace id. Such a function must be owned by a role that bypasses the policy (option 3) or that a policy admits (option 2). Owned by a forced owner, it sees nothing (demonstrated, §3). These paths never share a `BYPASSRLS` pool with request paths.
+
+**Preconditions of every definer function** (option 3, and any registry lookup). PostgreSQL grants `EXECUTE` on a new function to `PUBLIC` by default, so a definer-role function is callable by every role in the cluster: in review, an unrelated role called one and saw all 100,000 rows. Each such function therefore:
+
+- runs `REVOKE EXECUTE … FROM PUBLIC`, then grants `EXECUTE` to the runtime role only;
+- pins `SET search_path` to its own schema, so a caller cannot shadow the tables or operators it uses;
+- takes arguments that scope it, for example one workspace id, and never returns more than that scope.
 
 **Write path.** VEC-73's write-path helper already opens the transaction and locks the workspace row first. The binding becomes that transaction's first statement, pipelined with the lock, so writes pay no extra round trip. Argued.
 
@@ -264,7 +270,7 @@ With `FORCE` on and nothing else, the owner cannot seed a built-in. A data migra
 |---|---|---|---|
 | **1. Migration role with `BYPASSRLS`** | Flyway's JDBC datasource connects as a role with the `BYPASSRLS` attribute, which owns the schema or is granted the needed rights | One attribute and no extra policies. Migrations and built-in seeding see every row, as they must. Its credential lives only where migrations run. | Creating a `BYPASSRLS` role needs a superuser (or a managed provider's equivalent; unverified per provider). A leaked migration credential reads everything. |
 | **2. `FORCE` plus owner-scoped policies** | `create policy owner_all on <table> to <owner> using (true) with check (true)` on every tenant-scoped table | Everything is in the schema and visible in the policy listing; no role attribute. Owner-owned definer functions work. | One more policy per table that must never be forgotten. The owner is then as unrestricted as option 1, by a different route. |
-| **3. Dedicated definer role with `BYPASSRLS`** | System functions (feed reads, prune, propagation) are `SECURITY DEFINER` and owned by a `NOLOGIN BYPASSRLS` role granted only what they read; the runtime role may only execute them | The narrowest grant: each cross-tenant path is one reviewed function. No login can use the role directly. | Covers system jobs only; migrations still need option 1 or 2. Each function is a reviewed hole in the policy, so its arguments must scope it, for example to one workspace. |
+| **3. Dedicated definer role with `BYPASSRLS`** | System functions (feed reads, prune, propagation) are `SECURITY DEFINER` and owned by a `NOLOGIN BYPASSRLS` role granted only what they read; the runtime role may only execute them | The narrowest grant: each cross-tenant path is one reviewed function. No login can use the role directly. | Covers system jobs only; migrations still need option 1 or 2. Each function is a reviewed hole in the policy, so its arguments must scope it, for example to one workspace. `EXECUTE` is granted to `PUBLIC` by default and must be revoked, and `search_path` pinned (see Rules). |
 
 **Recommendation, for the ADR to decide:** options 1 and 3 together. `FORCE` stays on every tenant-scoped table. Migrations and built-in seeding run as a `BYPASSRLS` migration role on the JDBC datasource only. Cross-tenant system paths are `SECURITY DEFINER` functions owned by a `NOLOGIN BYPASSRLS` definer role. The runtime role remains `NOSUPERUSER NOBYPASSRLS` and owns nothing. Option 2 is the fallback where a `BYPASSRLS` role cannot be created.
 
@@ -342,6 +348,8 @@ The sources disagree:
 | Composite foreign keys keep `tenant_id` consistent | **Argued**; not prototyped |
 | Binding pipelined with VEC-73's workspace lock costs writes nothing extra | **Argued** from the `RLS_PIPELINED` measurement |
 | A build-time guard against textual transaction control | **Recommended**, not built |
+| A definer function is callable by any role unless `EXECUTE` is revoked from `PUBLIC` | **Demonstrated** in review (an unrelated role saw all 100,000 rows); not in the recorded run |
+| The D2 registry lookup needs a path outside the tenant policy | **Argued**; open design point for the ADR |
 | `BYPASSRLS` roles are available on the target managed PostgreSQL | **Unverified** |
 | Audit completeness needs an in-transaction outbox; SCIM cannot be hosted by the SPI | **Argued** from the SPI's contracts and Quarkus's build-time resource discovery |
 | No leak behind PgBouncer | **Not tested**. Transaction pooling preserves `set_config(…, true)` by construction, but the probe should be rerun behind it before such a deployment |
