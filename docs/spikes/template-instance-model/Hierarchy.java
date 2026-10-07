@@ -35,9 +35,9 @@ final class Hierarchy {
 
     /**
      * The most template versions a chain may hold, root included; the workspace is not counted.
-     * Base, methodology, organisation, unit, team fit with room to spare.
+     * Base, methodology, organisation, unit, team: five, the PO's limit (ADR-VEC-03, Q2).
      */
-    static final int MAX_TEMPLATE_LEVELS = 7;
+    static final int MAX_TEMPLATE_LEVELS = 5;
     /** Document members that say what a version is, not what it configures; never part of a delta. */
     static final Set<String> IDENTITY = Set.of("template", "version", "name", "description", "extends");
     /** The owner of built-in templates, shipped by a Vectis release. Any other owner is a tenant. */

@@ -105,10 +105,7 @@ final class HierarchyCases extends Cases {
 
         Hierarchy.Registry r5 = shipped();
         Map<String, Object> deep = derived("d1", 1, "acme-platform", 1, "");
-        Hierarchy.publish(r5, "acme", deep);
-        for (int i = 2; i <= 3; i++) {
-            Hierarchy.publish(r5, "acme", derived("d" + i, 1, "d" + (i - 1), 1, ""));
-        }
+        Hierarchy.publish(r5, "acme", deep);   // base > scrum > acme > acme-platform > d1: five, the limit
         check("H5", "publish refuses: a re-published version, an unknown parent, another tenant's parent or key, a tenant root, no name, too many levels, a level that does not resolve",
                 has(Hierarchy.publish(r5, Hierarchy.SYSTEM, h("scrum.v1.json")), "scrum is at version 1; a new version is 2")
                         && has(Hierarchy.publish(r5, "acme", derived("x", 1, "scrum", 9, "")), "scrum@9 is not a published template version")
@@ -116,7 +113,7 @@ final class HierarchyCases extends Cases {
                         && has(Hierarchy.publish(r5, "globex", derived("acme", 2, "scrum", 1, "")), "'acme' belongs to acme")
                         && has(Hierarchy.publish(r5, "globex", Json.obj(Json.mergePatch(h("base.v1.json"), patch("{\"template\": \"mine\"}")))), "roots are built-in")
                         && has(Hierarchy.publish(r5, "acme", Json.obj(Json.mergePatch(derived("n", 1, "scrum", 1, ""), patch("{\"name\": null}")))), "n@1: name: a template version needs its own name")
-                        && r5.latest("d3") == 1 && has(Hierarchy.publish(r5, "acme", derived("d4", 1, "d3", 1, "")), "more than 7 template levels")
+                        && r5.latest("d1") == 1 && has(Hierarchy.publish(r5, "acme", derived("d2", 1, "d1", 1, "")), "more than 5 template levels")
                         && has(Hierarchy.publish(r5, "acme", derived("y", 1, "acme", 1, "\"states\": {\"qa\": {\"enterFrom\": [\"ghost\"]}}")), "locked")
                         && has(Hierarchy.publish(r5, "acme", derived("z", 1, "acme", 1, "\"itemTypes\": {\"story\": null}")), "z@1: settings.defaultItemType: references unknown item type"),
                 Hierarchy.publish(r5, "acme", derived("z", 1, "acme", 1, "\"itemTypes\": {\"story\": null}")));
