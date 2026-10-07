@@ -58,7 +58,7 @@ The forces: a change at a high level must reach many workspaces without anyone r
 - Teams need a different workflow per item type, per-board state subsets, or a status ≠ column mapping.
 - A tenant needs a root that does not derive from the built-in base.
 - Gate governance needs flow invariants beyond `gatedDelivery`.
-- Organisations routinely maintain more than a few parallel organisation layers, one per methodology (the overlay of the multi-parent alternative).
+- A real organisation needs one policy across several methodologies: reopen with a lock-and-invariant-only tenant overlay (the multi-parent alternative, Q8).
 - Reports need SQL-side access to effective configuration at scale (a stored per-workspace effective document, or category and outcome on `board_column`).
 - Propagation fan-out (workspaces per publish) makes per-child transactions too slow for the publish preview to be useful.
 
