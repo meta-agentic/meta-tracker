@@ -1,4 +1,4 @@
-# ADR-01 — Vectis product requirements & feature model
+# ADR-VEC-01 — Vectis product requirements & feature model
 
 | | |
 |---|---|
@@ -152,11 +152,12 @@ operational tooling is out of tree and out of scope here — see
   restating thresholds; the numbers above become the single source (500 ms
   SSE, 60 fps × 2,500 × 365, 100k-write identity target, <3 s / 100k report).
 - R-UX-2/3/6 and R-REP-1/2/5/6 are **new scope** relative to the current roadmap detail: the roadmap's reporting milestone gains the query language, command dialog, distribution reports, dashboard/widget framework, and report sharing/export as explicit deliverables. The backlog ships with the repository in `.vault/`; where an item delivers a requirement, it cites the R-number.
-- Follow-on ADRs planned: **02** identity strategy, **03** workflow model,
-  **04** real-time transport, **05** client store & virtualization,
-  **06** extension/plugin loading, **07** multi-tenant isolation &
-  feature gating, **08** identity & auth, **09** integration & MCP contract,
-  **10** query language (OD1), **11** reporting engine (OD2).
+- Follow-on ADRs planned: identity strategy, workflow model, real-time
+  transport, client store & virtualization, extension/plugin loading,
+  multi-tenant isolation & feature gating, identity & auth, integration &
+  MCP contract, query language (OD1), reporting engine (OD2). ADRs are
+  numbered in order as they are written, with no reserved numbers: the
+  workflow model is ADR-VEC-03.
 - Non-goals: cloning YouTrack's UI or scope wholesale; no proprietary
   code/assets are referenced or reused. Where we diverge (e.g. no built-in
   JS-scripted workflow automation in Community v1), the divergence is

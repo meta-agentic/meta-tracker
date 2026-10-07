@@ -1,0 +1,237 @@
+{
+  "ran": "2026-10-06T20:35:53.605Z",
+  "results": [
+    {
+      "id": "P1",
+      "criterion": "anonymous deep link is sent to Vectis's sign-in page, not to the provider",
+      "pass": true,
+      "evidence": {
+        "url": "https://app.vectis.localhost:8443/signin.html?next=%2Fboard%2F42"
+      }
+    },
+    {
+      "id": "P2",
+      "criterion": "anonymous XHR to the API gets 401, not a redirect",
+      "pass": true,
+      "evidence": {
+        "status": 401
+      }
+    },
+    {
+      "id": "P3",
+      "criterion": "anonymous event-stream subscribe gets 401",
+      "pass": true,
+      "evidence": {
+        "status": 401
+      }
+    },
+    {
+      "id": "P4",
+      "criterion": "XHR with an unusable session cookie gets a status, not a redirect (Quarkus answers 499)",
+      "pass": true,
+      "evidence": {
+        "status": 499
+      }
+    },
+    {
+      "id": "P5",
+      "criterion": "same-site: sign-in completes the code flow and lands on the requested deep link",
+      "pass": true,
+      "evidence": {
+        "landed": "https://app.vectis.localhost:8443/signin.html?next=%2Fboard%2F42",
+        "final": "https://app.vectis.localhost:8443/board/42",
+        "signInToBoardMs": 497
+      }
+    },
+    {
+      "id": "P6",
+      "criterion": "the SPA shell and an API call succeed on the session",
+      "pass": true,
+      "evidence": {
+        "subject": "62224554-1dff-4b3d-a598-ade2345b962e",
+        "tenant": "0199a3b0-0000-7000-8000-000000000001",
+        "events": 3
+      }
+    },
+    {
+      "id": "P7",
+      "criterion": "the event stream authenticates with the session cookie (EventSource)",
+      "pass": true,
+      "evidence": {
+        "events": 3
+      }
+    },
+    {
+      "id": "P8",
+      "criterion": "no token is readable by script (storage, document.cookie, response bodies)",
+      "pass": true,
+      "evidence": {
+        "documentCookie": "",
+        "localStorage": 0,
+        "sessionStorage": 0,
+        "appResponsesScanned": 8,
+        "tokenInBody": [],
+        "sessionCookies": [
+          {
+            "name": "q_session",
+            "bytes": 869,
+            "httpOnly": true,
+            "secure": true,
+            "sameSite": "Lax"
+          },
+          {
+            "name": "q_session_at",
+            "bytes": 945,
+            "httpOnly": true,
+            "secure": true,
+            "sameSite": "Lax"
+          }
+        ]
+      }
+    },
+    {
+      "id": "P9",
+      "criterion": "the provider's session cookie is stored for its own host only (same-site)",
+      "pass": true,
+      "evidence": {
+        "domain": "iam.vectis.localhost",
+        "sameSite": "Strict",
+        "httpOnly": true
+      }
+    },
+    {
+      "id": "P10",
+      "criterion": "a state-changing call without the CSRF header is refused; with it, accepted",
+      "pass": true,
+      "evidence": {
+        "withoutHeader": 403,
+        "withHeader": 201
+      }
+    },
+    {
+      "id": "P11",
+      "criterion": "a session minted by replica A is accepted by replica B (shared key, no session store)",
+      "pass": true,
+      "evidence": {
+        "status": 200,
+        "me": {
+          "subject": "62224554-1dff-4b3d-a598-ade2345b962e",
+          "path": "session",
+          "idToken.realm_tenant": "0199a3b0-0000-7000-8000-000000000001",
+          "idToken.email": null,
+          "accessToken.realm_tenant": null,
+          "accessToken.client_id": "vectis-bff",
+          "accessToken.aud": [
+            "https://iam.vectis.localhost:9443"
+          ]
+        }
+      }
+    },
+    {
+      "id": "P12",
+      "criterion": "a bearer token for an allow-listed client is accepted on the service path",
+      "pass": true,
+      "evidence": {
+        "status": 200,
+        "me": {
+          "subject": "62224554-1dff-4b3d-a598-ade2345b962e",
+          "path": "bearer",
+          "accessToken.realm_tenant": null,
+          "accessToken.client_id": "vectis-bff",
+          "accessToken.aud": [
+            "https://iam.vectis.localhost:9443"
+          ]
+        },
+        "tokenClaims": {
+          "aud": "https://iam.vectis.localhost:9443",
+          "client_id": "vectis-bff",
+          "realm_tenant": null
+        }
+      }
+    },
+    {
+      "id": "P13",
+      "criterion": "a bearer token with a broken signature is refused",
+      "pass": true,
+      "evidence": {
+        "status": 401
+      }
+    },
+    {
+      "id": "P14",
+      "criterion": "a valid token minted for a client not on the allow-list is refused",
+      "pass": true,
+      "evidence": {
+        "status": 401,
+        "body": "{\"error\":\"client_not_allowed\"}"
+      }
+    },
+    {
+      "id": "P15",
+      "criterion": "requiring a dedicated API audience refuses the provider's tokens (aud = issuer)",
+      "pass": true,
+      "evidence": {
+        "status": 401,
+        "tokenAud": "https://iam.vectis.localhost:9443"
+      }
+    },
+    {
+      "id": "P16",
+      "criterion": "sign-out ends the Vectis and the provider session; back does not restore access",
+      "pass": true,
+      "evidence": {
+        "afterLogout": "https://app.vectis.localhost:8443/signin.html",
+        "vectisCookieCleared": true,
+        "providerCookieCleared": true,
+        "afterBack": "https://app.vectis.localhost:8443/signin.html?next=%2Fboard%2F42",
+        "apiAfterLogout": 401
+      }
+    },
+    {
+      "id": "P17",
+      "criterion": "after sign-out the provider refuses to issue a code without a fresh sign-in",
+      "pass": true,
+      "evidence": {
+        "status": 400,
+        "url": "https://iam.vectis.localhost:9443/authorize"
+      }
+    },
+    {
+      "id": "P18",
+      "criterion": "cross-site: /login succeeds but its SameSite=Strict cookie is not stored, so /authorize refuses",
+      "pass": true,
+      "evidence": {
+        "loginStatus": 204,
+        "providerCookieStored": false,
+        "authorize": {
+          "status": 400
+        },
+        "final": "https://iam.vectis.localhost:9443/authorize",
+        "body": "{\"error\":\"access_denied\",\"error_description\":\"no authenticated subject\"}"
+      }
+    },
+    {
+      "id": "M1",
+      "criterion": "submit → deep link rendered, full chain (/login, /auth/start, /authorize, /callback, /token, restore, shell), 10 fresh browsers",
+      "pass": true,
+      "evidence": {
+        "n": 10,
+        "p50ms": 323,
+        "p90ms": 567,
+        "maxMs": 567,
+        "samplesMs": [
+          282,
+          288,
+          299,
+          299,
+          322,
+          323,
+          333,
+          343,
+          453,
+          567
+        ]
+      }
+    }
+  ]
+}

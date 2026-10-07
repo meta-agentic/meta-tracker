@@ -7,8 +7,9 @@
 // Loads the two built-in templates and the two instance deltas from the .json files next
 // to this source, prints the worked example (effective configuration, reviewable override
 // list, board_column projection), then runs every instance-edit and template-evolution
-// case as an assertion. Exit status is non-zero if any case fails. The assertion helpers
-// are in Cases.java.
+// case as an assertion, then the template-hierarchy cases (HierarchyCases.java,
+// MethodologyCases.java, PropagationCases.java over the documents in hierarchy/). Exit status
+// is non-zero if any case fails. The assertion helpers are in Cases.java.
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -443,6 +444,9 @@ public class TemplateModelSpike extends Cases {
                 review, empty);
         check("T7", "template renames an item type; instance deleted it: stays deleted",
                 !types(t7.effective()).containsKey("bug") && t7.delta().equals(review), t7);
+
+        // ---- the template hierarchy (VEC-66) -----------------------------
+        HierarchyCases.run();
 
         System.out.println();
         System.out.println(passed + " passed, " + failed + " failed");

@@ -1,0 +1,5 @@
+{
+  "states": {
+    "in-progress": {"wipLimit": 4}
+  }
+}

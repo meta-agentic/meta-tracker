@@ -12,7 +12,14 @@ import { BoardView } from "./components/BoardView";
 import { BacklogTree, type BacklogTreeHandle } from "./components/BacklogTree";
 import { IssueDetail } from "./components/IssueDetail";
 import { PreferenceControls } from "./components/PreferenceControls";
-import { BoardIcon, InboxIcon, LogoMark, TimelineIcon, TreeIcon } from "./components/icons";
+import {
+  BoardIcon,
+  InboxIcon,
+  LogoMark,
+  RoadmapIcon,
+  TimelineIcon,
+  TreeIcon,
+} from "./components/icons";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import {
   BoardCrash,
@@ -24,6 +31,7 @@ import {
   SyncIndicator,
 } from "./components/states";
 import { ProfilingHarness } from "./profiling/ProfilingHarness";
+import { RoadmapCanvas } from "./roadmap/RoadmapCanvas";
 
 export interface AppProps {
   /**
@@ -214,6 +222,42 @@ function BacklogTab({ sync }: { sync: WorkspaceSync }) {
   );
 }
 
+function RoadmapTab({ sync }: { sync: WorkspaceSync }) {
+  const { t } = useTranslation();
+  const activeBoardId = useWorkspaceStore((s) => s.activeBoardId);
+  const hasBoards = useWorkspaceStore((s) => Object.keys(s.boardsById).length > 0);
+
+  if (sync.status === "loading") return <LoadingTree />;
+  if (sync.status === "error") return <ErrorState sync={sync} />;
+
+  if (!hasBoards) {
+    return (
+      <EmptyState
+        icon={<InboxIcon size={22} />}
+        title={t("board.noBoards.title")}
+        body={t("board.noBoards.body")}
+      />
+    );
+  }
+
+  return (
+    <>
+      {sync.status === "stale" && <StaleBanner sync={sync} />}
+      <BoardSwitcher />
+      {activeBoardId ? (
+        <div className="vec-roadmap-tab">
+          {/* Keyed on the board: the scroll position and a drag in progress belong to one board. */}
+          <ErrorBoundary resetKey={activeBoardId} fallback={(error) => <BoardCrash error={error} />}>
+            <RoadmapCanvas key={activeBoardId} boardId={activeBoardId} />
+          </ErrorBoundary>
+        </div>
+      ) : (
+        <p className="vec-muted-note">{t("board.empty")}</p>
+      )}
+    </>
+  );
+}
+
 export function App({ sync: syncOptions }: AppProps = {}) {
   const { t, i18n } = useTranslation();
   const sync = useWorkspaceSync(syncOptions);
@@ -251,9 +295,9 @@ export function App({ sync: syncOptions }: AppProps = {}) {
   }, [workspace, t]);
 
   return (
-    // The backlog fills the window and scrolls inside its tree; the other tabs
-    // scroll the page.
-    <div className={tab === "backlog" ? "vec-app vec-app--fill" : "vec-app"}>
+    // The backlog and the roadmap fill the window and scroll inside themselves;
+    // the other tabs scroll the page.
+    <div className={tab === "backlog" || tab === "roadmap" ? "vec-app vec-app--fill" : "vec-app"}>
       <a className="vec-skip" href="#vec-main">
         {t("app.skipToContent")}
       </a>
@@ -302,6 +346,15 @@ export function App({ sync: syncOptions }: AppProps = {}) {
           <button
             type="button"
             className="vec-nav__item"
+            aria-current={tab === "roadmap" ? "page" : undefined}
+            onClick={() => setTab("roadmap")}
+          >
+            <RoadmapIcon />
+            {t("nav.roadmap")}
+          </button>
+          <button
+            type="button"
+            className="vec-nav__item"
             aria-current={tab === "timeline" ? "page" : undefined}
             onClick={() => setTab("timeline")}
           >
@@ -319,6 +372,7 @@ export function App({ sync: syncOptions }: AppProps = {}) {
       <main id="vec-main" className="vec-main" tabIndex={-1}>
         {tab === "boards" && <BoardsTab sync={sync} />}
         {tab === "backlog" && <BacklogTab sync={sync} />}
+        {tab === "roadmap" && <RoadmapTab sync={sync} />}
         {/* The profiler generates its own data and is deliberately not gated on
             the sync state: it must run with no server listening. */}
         {tab === "timeline" && <ProfilingHarness />}

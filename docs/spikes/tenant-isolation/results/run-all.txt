@@ -1,0 +1,103 @@
+== setup
+postgres: PostgreSQL 16.14 on aarch64-unknown-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit
+role: spike_owner super=false bypassrls=false, spike_app super=false bypassrls=false
+schema: 1000 tenants x 100 items = 100000 rows in item and in item_plain
+== probe
+postgres: PostgreSQL 16.14 on aarch64-unknown-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit
+role: spike_owner super=false bypassrls=false, spike_app super=false bypassrls=false
+probe: mode=LOCAL requests=50000 in-flight=200 seed=14 elapsed=8748 ms
+probe: kinds {BOUND=27428, UNBOUND=7440, UNBOUND_TX=3456, FAILING=3001, TIMED_OUT=3032, ABANDONED=3085, BOUND_OUTSIDE_TX=2558}
+probe: 20 physical connections served the reads; reads per connection min 1833 max 2211
+probe: 9013 reads came straight after a BOUND read on the same connection (completion order)
+probe: expected failure x3001  FAILING: PgException ERROR: division by zero (22012)
+probe: expected failure x3032  TIMED_OUT: TimeoutException
+probe: TIMED_OUT requests 3032, of which committed their write anyway: 3032
+probe: LEAKS 0 {}
+== control
+postgres: PostgreSQL 16.14 on aarch64-unknown-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit
+role: spike_owner super=false bypassrls=false, spike_app super=false bypassrls=false
+probe: mode=SESSION requests=5000 in-flight=200 seed=14 elapsed=1011 ms
+probe: kinds {BOUND=2769, UNBOUND=747, UNBOUND_TX=306, FAILING=298, TIMED_OUT=298, ABANDONED=326, BOUND_OUTSIDE_TX=256}
+probe: 20 physical connections served the reads; reads per connection min 156 max 265
+probe: 909 reads came straight after a BOUND read on the same connection (completion order)
+probe: expected failure x298  FAILING: PgException ERROR: division by zero (22012)
+probe: expected failure x298  TIMED_OUT: TimeoutException
+probe: LEAKS 1304 {UNBOUND=742, UNBOUND_TX=306, BOUND_OUTSIDE_TX=256}
+probe: leak example Outcome[kind=UNBOUND, tenant=095d3e70-fd8b-4905-b9e7-0a2083fc613f, read=true, pid=733, setting=fad13e28-9dd7-47bb-915f-30ec64c49942, visible=100, foreign=100, error=null]
+probe: leak example Outcome[kind=UNBOUND, tenant=109fbbb3-0b1a-44af-99f3-ffb5cc257062, read=true, pid=740, setting=c7ab7ba9-abe9-4f9f-ae53-cfe3f2ca9740, visible=100, foreign=100, error=null]
+probe: leak example Outcome[kind=UNBOUND, tenant=4bd7ae8d-c7a9-4c4c-80c0-508fec127a91, read=true, pid=728, setting=c2d44b2d-ed48-4e6f-a148-cb056b99ecc4, visible=100, foreign=100, error=null]
+== control-textual
+postgres: PostgreSQL 16.14 on aarch64-unknown-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit
+role: spike_owner super=false bypassrls=false, spike_app super=false bypassrls=false
+probe: mode=TEXTUAL requests=5000 in-flight=200 seed=14 elapsed=728 ms
+probe: kinds {BOUND=2769, UNBOUND=747, UNBOUND_TX=306, FAILING=298, TIMED_OUT=298, ABANDONED=326, BOUND_OUTSIDE_TX=256}
+probe: 20 physical connections served the reads; reads per connection min 42 max 83
+probe: 0 reads came straight after a BOUND read on the same connection (completion order)
+probe: expected failure x298  FAILING: PgException ERROR: division by zero (22012)
+probe: expected failure x298  TIMED_OUT: TimeoutException
+probe: LEAKS 1011 {UNBOUND=576, UNBOUND_TX=241, BOUND_OUTSIDE_TX=194}
+probe: leak example Outcome[kind=BOUND_OUTSIDE_TX, tenant=8397a1a8-49aa-498e-b452-0644ec7bece7, read=true, pid=749, setting=8397a1a8-49aa-498e-b452-0644ec7bece7, visible=100, foreign=0, error=null]
+probe: leak example Outcome[kind=UNBOUND, tenant=095d3e70-fd8b-4905-b9e7-0a2083fc613f, read=true, pid=761, setting=c7ab7ba9-abe9-4f9f-ae53-cfe3f2ca9740, visible=100, foreign=100, error=null]
+probe: leak example Outcome[kind=UNBOUND, tenant=109fbbb3-0b1a-44af-99f3-ffb5cc257062, read=true, pid=757, setting=90519ed4-9696-45e5-94bf-bbc65ea6e1d2, visible=100, foreign=100, error=null]
+== templates
+postgres: PostgreSQL 16.14 on aarch64-unknown-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit
+role: spike_owner super=false bypassrls=false, spike_app super=false bypassrls=false
+templates: PASS  tenant A sees the built-in and its own level, not B's 
+templates: PASS  unbound sees the built-in only 
+templates:       refused: ERROR: new row violates row-level security policy for table "template_level" (42501)
+templates: PASS  tenant A cannot write a built-in level (tenant_id null) 
+templates: PASS  tenant A cannot update the built-in 
+templates:       refused: ERROR: new row violates row-level security policy for table "template_level" (42501)
+templates: PASS  tenant A cannot write a level owned by B 
+templates:       refused: ERROR: new row violates row-level security policy for table "template_level" (42501)
+templates: PASS  tenant A cannot extend B's level (policy checks the parent is visible) 
+templates:       refused: ERROR: new row violates row-level security policy for table "template_level" (42501)
+templates: PASS  tenant A cannot re-parent its own level onto B's (the same check on UPDATE) 
+templates: SHOWN  with a policy on tenant_id alone, tenant A CAN extend B's level (a foreign key check does not apply RLS)
+== bypass
+superuser vectis, unbound, sees 100000
+owner, FORCE on, unbound, sees 0
+owner, FORCE off, unbound, sees 100000
+app, unbound, sees 0
+app, never set, setting reads NULL
+t
+app, after a committed local binding, setting reads []
+ERROR:  invalid input syntax for type uuid: ""
+== roles
+-- owner, FORCE on: seed a built-in, migrate data, run a SECURITY DEFINER function it owns
+owner: data migration touches 0 rows
+owner: definer function owned by the owner sees 0
+ERROR:  new row violates row-level security policy for table "template_level"
+-- option 1: migrations run as a BYPASSRLS role
+migrator: data migration touches 100000 rows
+migrator: built-in seeded, built-ins now 2
+-- option 2: FORCE kept, plus policies scoped to the owner role
+owner + owner policy: data migration touches 100000 rows
+owner + owner policy: definer function sees 100000
+owner + owner policy: built-in seeded, built-ins now 2
+-- option 3: system functions owned by a dedicated BYPASSRLS definer role; the owner stays forced
+app calling a definer-role function sees 100000
+app directly, unbound, sees 0
+== bench
+postgres: PostgreSQL 16.14 on aarch64-unknown-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit
+role: spike_owner super=false bypassrls=false, spike_app super=false bypassrls=false
+plan APP: Index Scan using item_plain_board_column_rank_idx on item_plain  (cost=0.42..8.44 rows=1 width=154) (actual rows=33 loops=1)
+plan APP:   Index Cond: ((board_id = '98b63daf-c305-43d3-aaf3-453543f78a88'::uuid) AND (column_id = 'cd594325-e4a8-4bc4-a609-20e2c0eedcae'::uuid))
+plan APP:   Filter: (tenant_id = '4b547e66-92b5-4ba7-9432-2a8bbdba2942'::uuid)
+plan RLS: Index Scan using item_board_column_rank_idx on item  (cost=0.42..8.46 rows=1 width=154) (actual rows=33 loops=1)
+plan RLS:   Index Cond: ((board_id = '98b63daf-c305-43d3-aaf3-453543f78a88'::uuid) AND (column_id = 'cd594325-e4a8-4bc4-a609-20e2c0eedcae'::uuid))
+plan RLS:   Filter: (tenant_id = (NULLIF(current_setting('app.current_tenant_id'::text, true), ''::text))::uuid)
+bench: in-flight=1, 5 rounds x 2000 requests per mode, latency per request in ms
+bench: mode                n      p50      p95      p99     mean
+bench: APP             10000    0.491    0.616    0.739    0.502
+bench: APP_TX          10000    1.107    1.476    1.618    1.159
+bench: RLS             10000    1.557    2.022    2.447    1.624
+bench: RLS_PIPELINED    10000    1.132    1.658    1.774    1.182
+bench: RLS_AND_APP     10000    1.537    1.968    2.248    1.599
+bench: in-flight=16, 5 rounds x 2000 requests per mode, latency per request in ms
+bench: mode                n      p50      p95      p99     mean
+bench: APP             10000    0.892    1.556    2.088    0.956
+bench: APP_TX          10000    2.084    3.025    4.335    2.181
+bench: RLS             10000    2.715    3.887    4.892    2.824
+bench: RLS_PIPELINED    10000    2.292    3.216    4.185    2.380
+bench: RLS_AND_APP     10000    2.709    3.730    4.918    2.813

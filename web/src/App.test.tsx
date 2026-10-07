@@ -396,6 +396,34 @@ describe("board cards and the item detail panel", () => {
   });
 });
 
+describe("roadmap tab", () => {
+  giveElementSize("roadmap-scroll", { width: 1000, height: 600 });
+
+  it("shows the tree as a ledger beside its bars, sharing the backlog's expansion", async () => {
+    mount(
+      snapshotRecording([
+        epicItemFixture,
+        itemFixture({
+          fields: { parentId: "epic-1", startDate: "2025-03-03", dueDate: "2025-03-10" },
+        }),
+      ]),
+    );
+    await screen.findByText("Wire the client");
+
+    fireEvent.click(screen.getByRole("button", { name: "Roadmap" }));
+
+    const roadmap = screen.getByRole("region", { name: "Roadmap of Delivery" });
+    expect(within(roadmap).queryByText("Wire the client")).not.toBeInTheDocument();
+    fireEvent.click(within(roadmap).getByRole("button", { name: /items of/ }));
+    expect(within(roadmap).getByText("Wire the client")).toBeInTheDocument();
+    expect(within(roadmap).getByRole("slider", { name: "Due date of VEC-2" })).toBeInTheDocument();
+    expect(workspaceStore.getState().activeTab).toBe("roadmap");
+
+    // The expansion is the backlog tree's own persisted set, not a copy.
+    expect(workspaceStore.getState().treeExpanded).toEqual(["epic-1"]);
+  });
+});
+
 describe("backlog tab", () => {
   giveElementSize("backlog-scroll", { width: 800, height: 600 });
 
