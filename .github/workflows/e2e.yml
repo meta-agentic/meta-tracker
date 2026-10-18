@@ -1,0 +1,105 @@
+name: E2E
+
+# The browser sign-in journey (VEC-79): Vectis and a real OIDC provider, both started
+# here, driven by Playwright from `e2e/`. Until VEC-35 ships sign-in the journey is an
+# expected failure (`test.fail` in e2e/tests/sign-in.spec.ts): it runs on every build and
+# the job stays green, and the day the journey starts passing Playwright fails the job, so
+# VEC-35 must remove the marker. A separate harness check must pass outright, so a
+# provider or server that never started cannot hide behind the expected failure.
+#
+# The provider image is the one OidcProviderContainer pins; bump both together.
+
+on:
+  push:
+    branches: [main]
+    paths: &e2e-paths
+      - 'e2e/**'
+      - 'vectis-*/**'
+      - 'pom.xml'
+      - 'web/**'
+      - '.github/workflows/e2e.yml'
+  pull_request:
+    branches: [main]
+    paths: *e2e-paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  JAVA_VERSION: '25'
+  NODE_VERSION: '24'
+  # keycloak 26.8.1, equal to OidcProviderContainer.IMAGE
+  OIDC_PROVIDER_IMAGE: quay.io/keycloak/keycloak@sha256:79c623a22abacf3fe6c00a5fb30f5b7843d717b234033b80995891c06116d244
+  # One host for both, so the two are same-site (ADR-VEC-02 D4).
+  VECTIS_URL: http://localhost:8080
+  OIDC_ISSUER: http://localhost:8180/realms/vectis
+
+jobs:
+  sign-in:
+    name: browser sign-in (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Start the OIDC provider
+        # Started first so it boots while the server builds.
+        run: |
+          docker run -d --name oidc -p 8180:8080 \
+            -v "$PWD/vectis-server/src/test/resources/oidc/vectis-realm.json:/opt/keycloak/data/import/vectis-realm.json:ro" \
+            "$OIDC_PROVIDER_IMAGE" start-dev --import-realm
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          cache: maven
+
+      - name: Build and start Vectis
+        run: |
+          mvn -B -ntp -pl vectis-server -am package -DskipTests
+          nohup java -jar vectis-server/target/quarkus-app/quarkus-run.jar > vectis.log 2>&1 &
+
+      - name: Set up Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Install Playwright
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Wait for the provider and Vectis
+        # Any HTTP answer counts: once VEC-35 lands, /api answers 401 without a session.
+        run: |
+          for url in "$OIDC_ISSUER/.well-known/openid-configuration" "$VECTIS_URL/api/extensions"; do
+            for _ in $(seq 60); do curl -sS -o /dev/null "$url" && continue 2; sleep 1; done
+            echo "::error::$url did not answer within 60 s"; docker logs oidc; cat vectis.log; exit 1
+          done
+
+      - name: Sign-in journey
+        working-directory: e2e
+        run: npx playwright test
+
+      - name: Upload the Playwright report
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-report-${{ github.sha }}
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+            vectis.log
+          if-no-files-found: ignore
+          retention-days: 7

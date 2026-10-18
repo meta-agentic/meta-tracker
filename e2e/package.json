@@ -1,0 +1,12 @@
+{
+  "name": "@vectis/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Browser journeys against a running Vectis and a real OIDC provider (VEC-79).",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1"
+  }
+}
