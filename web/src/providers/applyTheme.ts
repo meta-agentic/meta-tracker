@@ -7,7 +7,7 @@ import { resolveTheme } from "../store/preferences";
  * `index.html` does this before the bundle is fetched, which is what actually
  * prevents the flash. This is the same write for the case where the bundle runs
  * without that document (a test, an embed, a future SSR shell), so no consumer
- * depends on the inline script being present to get the right first paint.
+ * depends on the bootstrap script being present to get the right first paint.
  */
 export function applyPersistedThemeSync(): void {
   if (typeof document === "undefined") return;
