@@ -45,6 +45,21 @@ public final class DeltaWriter {
     }
 
     /**
+     * A workspace delta write over its pinned template version's materialised resolution:
+     * {@link #write} plus the ancestors' locks, so a locked key is refused whether the delta
+     * touches it or only changes its resolved value. Violations are attributed to
+     * {@link TemplateResolver#WORKSPACE}.
+     */
+    public static Resolution writeWorkspace(Map<String, Object> templateResolved, Map<String, Object> oldDelta,
+                                            Map<String, Object> newDelta, Map<String, Integer> occupancy) {
+        Resolution res = TemplateResolver.resolveWorkspace(templateResolved, newDelta);
+        List<Violation> v = new ArrayList<>(res.violations());
+        write(TemplateHierarchy.forValidation(templateResolved), oldDelta, newDelta, occupancy).violations().stream()
+                .map(x -> x.at(TemplateResolver.WORKSPACE)).filter(x -> !v.contains(x)).forEach(v::add);
+        return new Resolution(res.effective(), v);
+    }
+
+    /**
      * An element may leave the effective configuration only when nothing uses it, and an item
      * type's parents may narrow only when no link sits under a parent it drops: either would
      * orphan items nobody moved.
