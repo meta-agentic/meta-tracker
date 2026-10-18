@@ -257,13 +257,16 @@ class LevelResolverTest {
     }
 
     @Test
-    @DisplayName("enterFrom is an array of state keys: a string, a number or an array of numbers is refused")
+    @DisplayName("enterFrom is an array of state keys or null: a string, a number or an array of numbers is refused")
     void enterFromShape() {
         for (String x : List.of("\"in-review\"", "7", "[7]")) {
             List<Violation> v = violations(SCRUM, "{\"states\": {\"done\": {\"enterFrom\": " + x + "}}}");
             assertTrue(has(v, "states.done.enterFrom", "must be an array of state keys"), () -> x + " " + v);
         }
         assertTrue(LevelResolver.resolve(SCRUM, patch("{\"states\": {\"done\": {\"enterFrom\": [\"in-review\"]}}}")).ok());
+        Map<String, Object> nullEnterFrom = TemplateJson.obj(TemplateJson.deepCopy(SCRUM));
+        TemplateJson.obj(TemplateJson.obj(nullEnterFrom.get("states")).get("done")).put("enterFrom", null);
+        assertTrue(LevelResolver.resolve(nullEnterFrom, NONE).ok(), "the schema allows a null enterFrom in a document: from every state");
     }
 
     /** Scrum with In Review as a gate before Done, the gate locked as the parent level would lock it. */
