@@ -1,0 +1,5 @@
+{
+  "states": {
+    "refined": {"name": "Refined", "category": "START_STATE", "after": "backlog"}
+  }
+}
