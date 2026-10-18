@@ -81,6 +81,9 @@ final class TemplateValidator {
             if (wip != null && !(wip instanceof Long n && n > 0)) {
                 v.add(Violation.of(p + ".wipLimit", "must be a positive integer"));
             }
+            if (st.containsKey("enterFrom") && !isKeyList(st.get("enterFrom"))) {
+                v.add(Violation.of(p + ".enterFrom", "must be an array of state keys"));
+            }
             for (String from : strings(st.get("enterFrom"))) {
                 if (!states.containsKey(from)) {
                     v.add(Violation.of(p + ".enterFrom", "references unknown state '" + from + "'"));
@@ -274,6 +277,10 @@ final class TemplateValidator {
                 }
             }
         }
+    }
+
+    private static boolean isKeyList(Object x) {
+        return x instanceof List<?> l && l.stream().allMatch(e -> e instanceof String);
     }
 
     /** A missing value is simply not a member. */

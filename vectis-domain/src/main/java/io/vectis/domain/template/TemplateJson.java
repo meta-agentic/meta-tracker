@@ -18,8 +18,14 @@ import java.util.Map;
  */
 public final class TemplateJson {
 
-    /** Deeper input is refused rather than risking the reader's stack; a template is four levels deep. */
+    /** At most this many nested objects and arrays; deeper input is refused rather than risking the reader's stack. */
     static final int MAX_DEPTH = 64;
+
+    /**
+     * The longest number token read. Templates hold small integers, and a long token would make
+     * the decimal conversion cost grow faster than linearly with its length.
+     */
+    static final int MAX_NUMBER_LENGTH = 64;
 
     private TemplateJson() {
     }
@@ -57,7 +63,7 @@ public final class TemplateJson {
         }
 
         Object value(int depth) {
-            if (depth > MAX_DEPTH) {
+            if (depth >= MAX_DEPTH && (peek() == '{' || peek() == '[')) {
                 throw error("nested deeper than " + MAX_DEPTH);
             }
             return switch (s.charAt(i)) {
@@ -136,27 +142,56 @@ public final class TemplateJson {
                     case 'r' -> sb.append('\r');
                     case 'b' -> sb.append('\b');
                     case 'f' -> sb.append('\f');
-                    case 'u' -> {
-                        sb.append((char) Integer.parseInt(s.substring(i, i + 4), 16));
-                        i += 4;
-                    }
+                    case 'u' -> sb.append(hex4());
                     case '"', '\\', '/' -> sb.append(e);
                     default -> throw error("invalid escape \\" + e);
+                }
+            }
+            for (int k = 0; k < sb.length(); k++) {
+                char c = sb.charAt(k);
+                boolean paired = Character.isHighSurrogate(c) && k + 1 < sb.length() && Character.isLowSurrogate(sb.charAt(k + 1));
+                if (paired) {
+                    k++;
+                } else if (Character.isSurrogate(c)) {
+                    throw error("unpaired surrogate in a string");
                 }
             }
             return sb.toString();
         }
 
+        /** The four hex digits of a \\u escape: exactly four, no sign. */
+        char hex4() {
+            int code = 0;
+            for (int k = 0; k < 4; k++) {
+                int d = Character.digit(s.charAt(i++), 16);
+                if (d < 0) {
+                    throw error("a \\u escape takes four hex digits");
+                }
+                code = code * 16 + d;
+            }
+            return (char) code;
+        }
+
         Object number() {
             int start = i;
             while (i < s.length() && "+-0123456789.eE".indexOf(s.charAt(i)) >= 0) {
+                if (i - start == MAX_NUMBER_LENGTH) {
+                    throw error("number longer than " + MAX_NUMBER_LENGTH + " characters");
+                }
                 i++;
             }
             String n = s.substring(start, i);
             if (!n.matches("-?(0|[1-9]\\d*)(\\.\\d+)?([eE][+-]?\\d+)?")) {
                 throw error("unexpected character");
             }
-            return n.matches("-?\\d+") ? (Object) Long.valueOf(n) : new BigDecimal(n);
+            if (!n.matches("-?\\d+")) {
+                return new BigDecimal(n);
+            }
+            try {
+                return Long.valueOf(n);
+            } catch (NumberFormatException e) {
+                throw error("integer out of range");
+            }
         }
 
         Object literal(String word, Object v) {
