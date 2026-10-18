@@ -1,0 +1,13 @@
+{
+  "states": {
+    "in-review": {"name": "Code Review"},
+    "qa": {
+      "name": "QA",
+      "category": "IN_PROGRESS",
+      "wipLimit": 3,
+      "after": "in-review"
+    },
+    "done": {"enterFrom": ["qa"]}
+  },
+  "itemTypes": {"bug": null}
+}

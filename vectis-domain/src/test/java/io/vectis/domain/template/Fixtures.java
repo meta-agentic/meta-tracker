@@ -1,0 +1,83 @@
+package io.vectis.domain.template;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/** Fixtures and helpers shared by the cases ported from the VEC-45/VEC-66 spike. */
+final class Fixtures {
+
+    private Fixtures() {
+    }
+
+    static String text(String resource) {
+        try (InputStream in = Fixtures.class.getResourceAsStream("/templates/" + resource)) {
+            if (in == null) {
+                throw new IllegalArgumentException("no resource templates/" + resource);
+            }
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    static Map<String, Object> load(String resource) {
+        return TemplateJson.parseObject(text(resource));
+    }
+
+    static Map<String, Object> patch(String json) {
+        return TemplateJson.parseObject(json);
+    }
+
+    /** The next version of a template, derived from it by a merge patch. */
+    static Map<String, Object> next(Map<String, Object> template, String change) {
+        Map<String, Object> t = TemplateJson.obj(TemplateJson.mergePatch(template, patch(change)));
+        t.put("version", (Long) template.get("version") + 1);
+        return t;
+    }
+
+    /** The same document with every object's members in reverse order, as a store that keeps no order may return it. */
+    static Map<String, Object> reversed(Map<String, Object> doc) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        List.copyOf(doc.keySet()).reversed().forEach(k -> out.put(k,
+                doc.get(k) instanceof Map<?, ?> m ? reversed(TemplateJson.obj(m)) : doc.get(k)));
+        return out;
+    }
+
+    static Map<String, Object> eff(Map<String, Object> template, Map<String, Object> delta) {
+        return LevelResolver.resolve(template, delta).effective();
+    }
+
+    static List<Violation> violations(Map<String, Object> template, String delta) {
+        return LevelResolver.resolve(template, patch(delta)).violations();
+    }
+
+    static Map<String, Object> states(Map<String, Object> eff) {
+        return TemplateJson.obj(eff.get("states"));
+    }
+
+    static Map<String, Object> state(Map<String, Object> eff, String key) {
+        return TemplateJson.obj(states(eff).get(key));
+    }
+
+    static Object name(Map<String, Object> eff, String key) {
+        return state(eff, key).get("name");
+    }
+
+    static List<String> order(Map<String, Object> eff) {
+        return TemplateJson.strings(eff.get("stateOrder"));
+    }
+
+    static Map<String, Object> types(Map<String, Object> eff) {
+        return TemplateJson.obj(eff.get("itemTypes"));
+    }
+
+    /** Whether any line, in the spike's "level: field: message" form, contains the fragment. */
+    static boolean has(List<?> lines, String fragment) {
+        return lines.stream().anyMatch(l -> l.toString().contains(fragment));
+    }
+}
