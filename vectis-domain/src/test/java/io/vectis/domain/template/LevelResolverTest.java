@@ -192,6 +192,43 @@ class LevelResolverTest {
         assertEquals(eff(SCRUM, described), TemplateJson.parse(TemplateJson.write(eff(SCRUM, described))));
     }
 
+    /**
+     * The spike runs M6 and M7 against the hierarchy's resolved scrum@1, which is VEC-45's scrum
+     * plus item type parents and a sprint cadence; this is that document, built at one level.
+     */
+    static final Map<String, Object> SCRUM_WITH_PARENTS = TemplateJson.obj(TemplateJson.mergePatch(SCRUM, patch(
+            "{\"itemTypes\": {\"story\": {\"parents\": [\"epic\"]}, \"bug\": {\"parents\": [\"epic\"]}, \"task\": {\"parents\": [\"story\", \"bug\"]}},"
+                    + " \"cadence\": {\"mode\": \"sprint\", \"sprintDays\": 14}}")));
+
+    @Test
+    @DisplayName("M6 item type hierarchy: an unknown parent, a loop, or removing a type another still names as parent is rejected")
+    void m6() {
+        Map<String, Object> base = SCRUM_WITH_PARENTS;
+        assertTrue(LevelResolver.resolve(base, NONE).ok());
+        assertTrue(has(violations(base, "{\"itemTypes\": {\"story\": {\"parents\": [\"saga\"]}}}"), "itemTypes.story.parents: references unknown item type 'saga'"));
+        assertTrue(has(violations(base, "{\"itemTypes\": {\"epic\": {\"parents\": [\"task\"]}}}"), "an item type cannot be its own ancestor"));
+        assertTrue(has(violations(base, "{\"itemTypes\": {\"bug\": null}}"), "itemTypes.task.parents: references unknown item type 'bug'"));
+        assertTrue(LevelResolver.resolve(base, patch("{\"itemTypes\": {\"bug\": null, \"task\": {\"parents\": [\"story\"]}}}")).ok());
+    }
+
+    @Test
+    @DisplayName("M7 cadence and gates validate: a closed set of modes, a sprint length only with sprints, no gate on an end state, approvals a positive count")
+    void m7() {
+        Map<String, Object> base = SCRUM_WITH_PARENTS;
+        assertTrue(has(violations(base, "{\"cadence\": {\"mode\": \"waterfall\"}}"), "cadence.mode: must be one of [sprint, flow, phase]"));
+        assertTrue(has(violations(base, "{\"cadence\": {\"mode\": \"flow\"}}"), "cadence.sprintDays: a whole number of days from 1 to 56, and only with mode sprint"));
+        assertTrue(LevelResolver.resolve(base, patch("{\"cadence\": {\"mode\": \"flow\", \"sprintDays\": null}}")).ok());
+        assertTrue(has(violations(base, "{\"states\": {\"done\": {\"gate\": {\"approvals\": 1}}}}"), "states.done.gate: an END_STATE state cannot be a gate"));
+        assertTrue(has(violations(base, "{\"states\": {\"in-review\": {\"gate\": {\"approvals\": 0}}}}"), "states.in-review.gate.approvals: must be a positive integer"));
+        assertTrue(has(violations(base, "{\"states\": {\"in-review\": {\"gate\": true}}}"), "states.in-review.gate: must be an object"));
+    }
+
+    @Test
+    @DisplayName("RESOLVER_VERSION is exposed for the resolved document's resolver_version column")
+    void resolverVersion() {
+        assertEquals(1, TemplateResolver.RESOLVER_VERSION);
+    }
+
     @Test
     @DisplayName("violations are typed: field and message are separate, never a string prefix; a single level carries no level yet")
     void typedViolations() {
