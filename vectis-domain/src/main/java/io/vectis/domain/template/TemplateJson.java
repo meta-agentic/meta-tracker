@@ -163,7 +163,8 @@ public final class TemplateJson {
         char hex4() {
             int code = 0;
             for (int k = 0; k < 4; k++) {
-                int d = Character.digit(s.charAt(i++), 16);
+                char c = s.charAt(i++);
+                int d = c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
                 if (d < 0) {
                     throw error("a \\u escape takes four hex digits");
                 }

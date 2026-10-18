@@ -81,7 +81,7 @@ final class TemplateValidator {
             if (wip != null && !(wip instanceof Long n && n > 0)) {
                 v.add(Violation.of(p + ".wipLimit", "must be a positive integer"));
             }
-            if (st.containsKey("enterFrom") && !isKeyList(st.get("enterFrom"))) {
+            if (st.get("enterFrom") != null && !isKeyList(st.get("enterFrom"))) {
                 v.add(Violation.of(p + ".enterFrom", "must be an array of state keys"));
             }
             for (String from : strings(st.get("enterFrom"))) {
