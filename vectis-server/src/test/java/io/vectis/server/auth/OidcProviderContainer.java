@@ -13,9 +13,11 @@ import org.testcontainers.utility.MountableFile;
  * PKCE (S256), and one password user, from {@code oidc/vectis-realm.json} (Keycloak
  * requires the file to be named after the realm).
  *
- * <p>Keycloak stands in until the provider ADR-VEC-02 names publishes a container image;
- * tests depend only on {@link #issuer()} and the constants below, so swapping the image
- * touches this class and the realm fixture only.
+ * <p>Keycloak stands in until the provider ADR-VEC-02 chose publishes a container image.
+ * Swapping to that provider is more than an image change: besides this class and the realm
+ * fixture, {@code OidcProviderPkceTest} replaces its login step, which scrapes Keycloak's
+ * login form, and adds the provider's signing algorithm to its RS256-only verification.
+ * ADR-VEC-02 records that provider as serving no login page and signing with EdDSA.
  *
  * <p>Bumping the image: take the newest release tag from quay.io/keycloak/keycloak, pin
  * its manifest digest in {@link #IMAGE} (tag kept as the comment), run

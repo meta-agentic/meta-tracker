@@ -7,7 +7,8 @@ import io.quarkus.test.common.QuarkusTestResourceLifecycleManager;
 /**
  * {@link OidcProviderContainer} as a Quarkus test resource, for {@code @QuarkusTest}s that
  * sign in against a real provider (VEC-35 onwards):
- * {@code @QuarkusTestResource(OidcProviderResource.class)}. Pair it with
+ * {@code @WithTestResource(OidcProviderResource.class)}. Not {@code @QuarkusTestResource},
+ * which starts the provider for every {@code @QuarkusTest} in the module. Pair it with
  * {@code @Testcontainers(disabledWithoutDocker = true)} on the test class so a machine
  * without Docker skips the class instead of failing it.
  */
