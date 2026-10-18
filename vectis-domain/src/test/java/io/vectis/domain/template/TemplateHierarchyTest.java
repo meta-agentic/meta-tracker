@@ -103,7 +103,7 @@ class TemplateHierarchyTest {
         assertTrue(h3.ok(), h3::toString);
         assertEquals(List.of("backlog", "todo", "in-progress", "on-hold", "in-review", "done", "no-go"), order(h3.effective()));
         assertFalse(state(h3.effective(), "in-review").containsKey("after"));
-        assertTrue(has(LevelResolver.resolve(r.res("scrum@1"), TemplateHierarchy.sections(hold)).violations(), "already placed after 'in-progress'"));
+        assertTrue(has(LevelResolver.resolve(r.res("scrum@1"), TemplateHierarchy.sections(hold)).violations(), null, "states.on-hold.after", "states.in-review is already placed after 'in-progress'"));
     }
 
     @Test
@@ -126,18 +126,18 @@ class TemplateHierarchyTest {
     @DisplayName("H5 publish refuses: a re-published version, an unknown parent, another tenant's parent or key, a tenant root, no name, too many levels, a level that does not resolve")
     void h5() {
         assertEquals(List.of(), r.publish("acme", derived("d1", 1, "acme-platform", 1, "")));   // base > scrum > acme > acme-platform > d1: five, the limit
-        assertTrue(has(r.publish(TemplateResolver.SYSTEM, load("scrum.v1.json")), "scrum is at version 1; a new version is 2"));
-        assertTrue(has(r.publish("acme", derived("x", 1, "scrum", 9, "")), "scrum@9 is not a published template version"));
-        assertTrue(has(r.publish("globex", derived("g", 1, "acme", 1, "")), "acme@1 belongs to another owner"));
-        assertTrue(has(r.publish("globex", derived("acme", 2, "scrum", 1, "")), "'acme' belongs to acme"));
-        assertTrue(has(r.publish("globex", obj(TemplateJson.mergePatch(load("base.v1.json"), patch("{\"template\": \"mine\"}")))), "roots are built-in"));
+        assertTrue(has(r.publish(TemplateResolver.SYSTEM, load("scrum.v1.json")), "scrum@1", "version", "scrum is at version 1; a new version is 2"));
+        assertTrue(has(r.publish("acme", derived("x", 1, "scrum", 9, "")), "x@1", "extends", "scrum@9 is not a published template version"));
+        assertTrue(has(r.publish("globex", derived("g", 1, "acme", 1, "")), "g@1", "extends", "acme@1 belongs to another owner"));
+        assertTrue(has(r.publish("globex", derived("acme", 2, "scrum", 1, "")), "acme@2", "template", "'acme' belongs to acme"));
+        assertTrue(has(r.publish("globex", obj(TemplateJson.mergePatch(load("base.v1.json"), patch("{\"template\": \"mine\"}")))), "mine@1", "extends", "roots are built-in"));
         assertTrue(has(r.publish("acme", obj(TemplateJson.mergePatch(derived("n", 1, "scrum", 1, ""), patch("{\"name\": null}")))),
-                "n@1: name: a template version needs its own name"));
+                "n@1", "name", "a template version needs its own name"));
         assertEquals(1, r.latest("d1"));
-        assertTrue(has(r.publish("acme", derived("d2", 1, "d1", 1, "")), "more than 5 template levels"));
-        assertTrue(has(r.publish("acme", derived("y", 1, "acme", 1, "\"states\": {\"qa\": {\"enterFrom\": [\"ghost\"]}}")), "locked"));
+        assertTrue(has(r.publish("acme", derived("d2", 1, "d1", 1, "")), "d2@1", "extends", "more than 5 template levels"));
+        assertTrue(has(r.publish("acme", derived("y", 1, "acme", 1, "\"states\": {\"qa\": {\"enterFrom\": [\"ghost\"]}}")), "y@1", "states.qa.enterFrom", "locked"));
         assertTrue(has(r.publish("acme", derived("z", 1, "acme", 1, "\"itemTypes\": {\"story\": null}")),
-                "z@1: settings.defaultItemType: references unknown item type"));
+                "z@1", "settings.defaultItemType", "references unknown item type"));
     }
 
     @Test
@@ -191,8 +191,52 @@ class TemplateHierarchyTest {
                 TemplateResolver.resolve(six, null).violations());
         List<Map<String, Object>> shuffled = new ArrayList<>(r.documents("acme", 1));
         shuffled.add(1, load("kanban.v1.json"));
-        assertTrue(has(TemplateResolver.resolve(shuffled, null).violations(), "not root first"));
+        assertTrue(has(TemplateResolver.resolve(shuffled, null).violations(), "acme@1", "extends", "not root first"));
         assertTrue(TemplateResolver.resolve(r.documents("acme-platform", 1), null).ok());
+    }
+
+    @Test
+    @DisplayName("publish refuses a candidate whose document names another key or version than the one it is published as")
+    void publishIdentity() {
+        TemplateVersion candidate = new TemplateVersion("acme2", 1, "acme", derived("other", 7, "scrum", 1, ""));
+        List<Violation> v = TemplateResolver.publish(candidate, r).violations();
+        assertTrue(has(v, "acme2@1", "template", "the document names template \"other\"; it is published as acme2@1"), v::toString);
+        assertTrue(has(v, "acme2@1", "version", "the document names version 7; it is published as acme2@1"), v::toString);
+        assertTrue(TemplateResolver.publish(TemplateVersion.of("acme", derived("acme2", 1, "scrum", 1, "")), r).ok());
+    }
+
+    @Test
+    @DisplayName("extends is an object naming a template key and a version from 1, and nothing else: a string or any other shape is refused")
+    void extendsShape() {
+        for (String e : List.of("\"base@1\"", "{\"template\": \"base\"}", "{\"template\": \"base\", \"version\": 0}",
+                "{\"template\": \"base\", \"version\": 1, \"note\": \"x\"}", "{\"template\": \"Base\", \"version\": 1}")) {
+            Map<String, Object> scrum = obj(TemplateJson.mergePatch(load("scrum.v1.json"), patch("{\"extends\": null}")));
+            scrum.put("extends", TemplateJson.parse(e));
+            List<Violation> v = TemplateResolver.resolve(List.of(load("base.v1.json"), scrum), null).violations();
+            assertEquals(List.of(new Violation("extends", "scrum@1", TemplateHierarchy.EXTENDS_SHAPE)), v, e);
+            assertTrue(has(TemplateResolver.publish(TemplateVersion.of(TemplateResolver.SYSTEM, obj(TemplateJson.mergePatch(scrum,
+                    patch("{\"template\": \"s2\"}")))), r).violations(), "s2@1", "extends", TemplateHierarchy.EXTENDS_SHAPE), e);
+        }
+    }
+
+    @Test
+    @DisplayName("deliveryGates is set by resolution: a root that authors it is refused")
+    void rootAuthoredDeliveryGates() {
+        Map<String, Object> base = obj(TemplateJson.mergePatch(load("base.v1.json"), patch("{\"deliveryGates\": [\"states.done\"]}")));
+        assertEquals(List.of(new Violation("deliveryGates", "base@1", "set by resolution, never authored")),
+                TemplateResolver.resolve(List.of(base), null).violations());
+    }
+
+    @Test
+    @DisplayName("provenance: a field a later level unsets loses its entry; its element's other fields keep theirs")
+    void provenanceOfAnUnsetField() {
+        List<Map<String, Object>> chain = List.of(load("base.v1.json"), load("scrum.v1.json"),
+                derived("w", 1, "scrum", 1, "\"states\": {\"in-progress\": {\"wipLimit\": 3}}"));
+        assertEquals("w@1", TemplateResolver.resolve(chain, null).provenance().get("states.in-progress.wipLimit"));
+        Resolution unset = TemplateResolver.resolve(chain, patch("{\"states\": {\"in-progress\": {\"wipLimit\": null}}}"));
+        assertTrue(unset.ok(), unset::toString);
+        assertFalse(unset.provenance().containsKey("states.in-progress.wipLimit"));
+        assertEquals("base@1", unset.provenance().get("states.in-progress.name"));
     }
 
     @Test

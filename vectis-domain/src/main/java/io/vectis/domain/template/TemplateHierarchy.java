@@ -33,6 +33,8 @@ final class TemplateHierarchy {
     private TemplateHierarchy() {
     }
 
+    static final String EXTENDS_SHAPE = "must be an object with a template key and a version from 1";
+
     /** Document members that say what a version is, not what it configures; never part of a delta. */
     static final List<String> IDENTITY = List.of("template", "version", "name", "description", "extends");
 
@@ -52,6 +54,10 @@ final class TemplateHierarchy {
             if (out.size() > TemplateResolver.MAX_TEMPLATE_LEVELS) {
                 v.add(new Violation("extends", leaf.ref(), "more than " + TemplateResolver.MAX_TEMPLATE_LEVELS
                         + " template levels, root included"));
+                break;
+            }
+            if (!x.extendsWellFormed()) {
+                v.add(new Violation("extends", x.ref(), EXTENDS_SHAPE));
                 break;
             }
             String p = x.parent();
