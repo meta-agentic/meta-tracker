@@ -33,10 +33,22 @@ public record TemplateVersion(String key, long version, String owner, Map<String
         return ref(key, version);
     }
 
-    /** The parent this version extends, as {@code key@version}, or null for a root. */
+    /** The parent this version extends, as {@code key@version}; null for a root or a malformed {@code extends}. */
     public String parent() {
+        return document.containsKey("extends") && extendsWellFormed()
+                ? ref(((Map<?, ?>) document.get("extends")).get("template"), ((Map<?, ?>) document.get("extends")).get("version"))
+                : null;
+    }
+
+    /**
+     * Whether {@code extends}, when present, has the schema's shape: exactly a template key and a
+     * version from 1. A root has no {@code extends} and is well formed.
+     */
+    public boolean extendsWellFormed() {
         Object e = document.get("extends");
-        return e == null ? null : e instanceof Map<?, ?> m ? ref(m.get("template"), m.get("version")) : String.valueOf(e);
+        return !document.containsKey("extends") || e instanceof Map<?, ?> m && m.size() == 2
+                && m.get("template") instanceof String t && LevelResolver.KEY.matcher(t).matches()
+                && m.get("version") instanceof Long n && n >= 1;
     }
 
     /** The published template versions a chain is looked up in. */

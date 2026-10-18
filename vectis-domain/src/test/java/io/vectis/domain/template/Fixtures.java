@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /** Fixtures and helpers shared by the cases ported from the VEC-45/VEC-66 spike. */
 final class Fixtures {
@@ -77,11 +78,8 @@ final class Fixtures {
         return violations.stream().anyMatch(v -> v.field().equals(field) && v.level() == null && v.message().contains(messageFragment));
     }
 
-    /**
-     * Whether any line contains the fragment, in its {@code toString()} form: for a violation that
-     * is "level: field: message", so a fragment can pin the level a multi-level case attributes it to.
-     */
-    static boolean has(List<?> lines, String fragment) {
-        return lines.stream().anyMatch(l -> l.toString().contains(fragment));
+    /** Whether a violation has exactly this level and field, and a message containing the fragment. */
+    static boolean has(List<Violation> violations, String level, String field, String messageFragment) {
+        return violations.stream().anyMatch(v -> Objects.equals(v.level(), level) && v.field().equals(field) && v.message().contains(messageFragment));
     }
 }
