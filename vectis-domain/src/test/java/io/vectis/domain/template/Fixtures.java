@@ -33,13 +33,6 @@ final class Fixtures {
         return TemplateJson.parseObject(json);
     }
 
-    /** The next version of a template, derived from it by a merge patch. */
-    static Map<String, Object> next(Map<String, Object> template, String change) {
-        Map<String, Object> t = TemplateJson.obj(TemplateJson.mergePatch(template, patch(change)));
-        t.put("version", (Long) template.get("version") + 1);
-        return t;
-    }
-
     /** The same document with every object's members in reverse order, as a store that keeps no order may return it. */
     static Map<String, Object> reversed(Map<String, Object> doc) {
         Map<String, Object> out = new LinkedHashMap<>();
@@ -76,8 +69,11 @@ final class Fixtures {
         return TemplateJson.obj(eff.get("itemTypes"));
     }
 
-    /** Whether any line, in the spike's "level: field: message" form, contains the fragment. */
-    static boolean has(List<?> lines, String fragment) {
-        return lines.stream().anyMatch(l -> l.toString().contains(fragment));
+    /**
+     * Whether a violation has exactly this field, no level (a single level attaches none), and a
+     * message containing the fragment.
+     */
+    static boolean has(List<Violation> violations, String field, String messageFragment) {
+        return violations.stream().anyMatch(v -> v.field().equals(field) && v.level() == null && v.message().contains(messageFragment));
     }
 }
