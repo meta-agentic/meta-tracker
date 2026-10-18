@@ -59,7 +59,11 @@ public record Upgrade(Map<String, Object> delta, Map<String, Object> effective, 
      * </ul>
      * A state the new version recategorises is always noted, and refused while it holds items whose
      * meaning would change. Anything else (additions, renames, reorders) is inherited by resolving
-     * again. States are rewritten in key order, so the result never depends on member order.
+     * again. Elements are rewritten in key order, so the result never depends on member order.
+     *
+     * <p>{@code from} and {@code to} are parents as a delta resolves over them: template documents,
+     * or materialised versions stripped of placement anchors. A workspace upgrade between two
+     * materialised versions goes through {@link #ofWorkspace}, which also enforces their locks.
      */
     public static Upgrade of(Map<String, Object> from, Map<String, Object> to, Map<String, Object> delta,
                              Map<String, Integer> occupancy) {
@@ -132,6 +136,23 @@ public record Upgrade(Map<String, Object> delta, Map<String, Object> effective, 
         return new Upgrade(d, r.effective(), notes, conflicts);
     }
 
+    /**
+     * Upgrade a workspace delta from one materialised template version to another: {@link #of}
+     * over both as the workspace validates against them, plus the new version's locks, so the
+     * rewritten delta is one {@link DeltaWriter#writeWorkspace} over {@code toResolved} accepts.
+     * Conflicts are attributed to {@link TemplateResolver#WORKSPACE}; the effective configuration
+     * shows the new version's locks.
+     */
+    public static Upgrade ofWorkspace(Map<String, Object> fromResolved, Map<String, Object> toResolved,
+                                      Map<String, Object> delta, Map<String, Integer> occupancy) {
+        Upgrade u = of(TemplateHierarchy.forValidation(fromResolved), TemplateHierarchy.forValidation(toResolved), delta, occupancy);
+        Resolution res = TemplateResolver.resolveWorkspace(toResolved, u.delta());
+        List<Violation> conflicts = new ArrayList<>();
+        u.conflicts().forEach(c -> conflicts.add(c.at(TemplateResolver.WORKSPACE)));
+        res.violations().stream().filter(x -> !conflicts.contains(x)).forEach(conflicts::add);
+        return new Upgrade(u.delta(), res.effective(), u.notes(), conflicts);
+    }
+
     /** An added element the new version now defines too: the delta's values win, the parent fills the rest. */
     private static void adopt(String p, Map<String, Object> mine, Map<String, Object> theirs, boolean state,
                               List<Note> notes, List<Violation> refused) {
@@ -184,10 +205,10 @@ public record Upgrade(Map<String, Object> delta, Map<String, Object> effective, 
     }
 
     /**
-     * Where an item lands whose state the configuration does not have (an imported status it does
-     * not recognise, or a state that disappeared): the first state, in effective order, with the
-     * item's category and, for an END_STATE, its outcome. Null when there is none; the caller then
-     * refuses the item.
+     * Where an imported item lands whose status the configuration does not recognise: the first
+     * state, in effective order, with the item's category and, for an END_STATE, its outcome. Null
+     * when there is none; the import then refuses the item. An upgrade never falls back: a state
+     * that disappears while items are in it refuses the upgrade instead.
      */
     public static String fallback(Map<String, Object> effective, String category, String outcome) {
         Objects.requireNonNull(category, "category");

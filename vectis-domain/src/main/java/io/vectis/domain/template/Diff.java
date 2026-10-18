@@ -5,6 +5,7 @@ import static io.vectis.domain.template.TemplateJson.obj;
 import static io.vectis.domain.template.TemplateJson.strings;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -40,7 +41,7 @@ public final class Diff {
         }
     }
 
-    /** The delta rendered against its parent, one line per overridden value. */
+    /** The delta rendered against its parent, one line per overridden value, in key-path order (jsonb keeps no member order). */
     public static List<Change> overrides(Map<String, Object> parent, Map<String, Object> delta) {
         List<Change> out = new ArrayList<>();
         for (String s : LevelResolver.KEYED) {
@@ -62,6 +63,7 @@ public final class Diff {
         if (delta.containsKey("stateOrder")) {
             out.add(new Change(Op.CHANGE, "stateOrder", parent.get("stateOrder"), delta.get("stateOrder")));
         }
+        out.sort(Comparator.comparing(Change::path));
         return out;
     }
 

@@ -56,13 +56,13 @@ class DiffTest {
     }
 
     @Test
-    @DisplayName("the review instance's override list: a change, an add, a field-level add and a remove, one line each")
+    @DisplayName("the review instance's override list: a change, an add, a field-level add and a remove, one line each, in key-path order")
     void reviewOverrides() {
         assertEquals(List.of(
-                        "change  states.in-review.name: \"In Review\" -> \"Code Review\"",
-                        "add     states.qa = {\"name\": \"QA\", \"category\": \"IN_PROGRESS\", \"wipLimit\": 3, \"after\": \"in-review\"}",
+                        "remove  itemTypes.bug   (template: {\"name\": \"Bug\"})",
                         "add     states.done.enterFrom = [\"qa\"]",
-                        "remove  itemTypes.bug   (template: {\"name\": \"Bug\"})"),
+                        "change  states.in-review.name: \"In Review\" -> \"Code Review\"",
+                        "add     states.qa = {\"name\": \"QA\", \"category\": \"IN_PROGRESS\", \"wipLimit\": 3, \"after\": \"in-review\"}"),
                 Diff.overrides(SCRUM, REVIEW).stream().map(Object::toString).toList());
     }
 
@@ -74,11 +74,11 @@ class DiffTest {
         Map<String, Object> parent = patch("{\"settings\": {\"defaultItemType\": \"story\"}, \"cadence\": {\"mode\": \"sprint\","
                 + " \"sprintDays\": 14}, \"stateOrder\": [\"backlog\", \"todo\"]}");
         assertEquals(List.of(
-                        new Diff.Change(Diff.Op.CHANGE, "settings.defaultItemType", "story", "task"),
                         new Diff.Change(Diff.Op.UNSET, "cadence.sprintDays", 14L, null),
+                        new Diff.Change(Diff.Op.CHANGE, "settings.defaultItemType", "story", "task"),
                         new Diff.Change(Diff.Op.CHANGE, "stateOrder", List.of("backlog", "todo"), List.of("todo", "backlog"))),
                 Diff.overrides(parent, delta));
-        assertEquals("unset   cadence.sprintDays   (template: 14)", Diff.overrides(parent, delta).get(1).toString());
+        assertEquals("unset   cadence.sprintDays   (template: 14)", Diff.overrides(parent, delta).getFirst().toString());
     }
 
     @Test
@@ -105,5 +105,20 @@ class DiffTest {
     void noChange() {
         assertEquals(List.of(), Diff.projection(eff(SCRUM, REVIEW), eff(SCRUM, REVIEW)));
         assertEquals(List.of(), Diff.overrides(SCRUM, NONE));
+    }
+
+    @Test
+    @DisplayName("the override list ignores member order (jsonb keeps none): a delta and its member-reversed copy list the same lines")
+    void overridesIgnoreMemberOrder() {
+        assertEquals(Diff.overrides(SCRUM, REVIEW), Diff.overrides(SCRUM, Fixtures.reversed(REVIEW)));
+    }
+
+    @Test
+    @DisplayName("a state without a name projects to a name UPDATE in either direction, never a failure")
+    void projectionNullSafeName() {
+        Map<String, Object> named = patch("{\"states\": {\"a\": {\"name\": \"A\"}}, \"stateOrder\": [\"a\"]}");
+        Map<String, Object> unnamed = patch("{\"states\": {\"a\": {}}, \"stateOrder\": [\"a\"]}");
+        assertEquals(List.of("UPDATE a name \"A\" -> null"), Diff.projection(named, unnamed));
+        assertEquals(List.of("UPDATE a name null -> \"A\""), Diff.projection(unnamed, named));
     }
 }

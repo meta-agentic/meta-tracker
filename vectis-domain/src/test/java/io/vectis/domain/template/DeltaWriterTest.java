@@ -140,4 +140,12 @@ class DeltaWriterTest {
         assertEquals(1, ghost.stream().filter(x -> x.message().contains("unknown state 'ghost'")).count(), ghost::toString);
         assertTrue(DeltaWriter.writeWorkspace(scrum, NONE, REFINED, EMPTY).ok());
     }
+
+    @Test
+    @DisplayName("a workspace write reports a violation found by both its resolution and its write rules once")
+    void workspaceWriteDeduplicates() {
+        List<Violation> v = DeltaWriter.writeWorkspace(SHIPPED.res("scrum@1"), NONE, patch("{\"states\": {\"todo\": 5}}"), EMPTY).violations();
+        assertEquals(1, v.stream().filter(x -> x.field().equals("states.todo")).count(), v::toString);
+        assertTrue(has(v, TemplateResolver.WORKSPACE, "states.todo", "must be an object"), v::toString);
+    }
 }
