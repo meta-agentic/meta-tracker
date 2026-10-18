@@ -57,6 +57,11 @@ class UpgradeTest {
         return Upgrade.of(from, to, delta, occupancy);
     }
 
+    /** Whether a note has exactly this field and a message containing the fragment. */
+    static boolean noted(List<Upgrade.Note> notes, String field, String messageFragment) {
+        return notes.stream().anyMatch(n -> n.field().equals(field) && n.message().contains(messageFragment));
+    }
+
     static void clean(Upgrade u) {
         assertEquals(List.of(), u.conflicts(), u::toString);
     }
@@ -113,13 +118,13 @@ class UpgradeTest {
         clean(u);
         assertEquals("Refined", name(u.effective(), "refined"));
         assertEquals(order(eff(SCRUM, REFINED)), order(u.effective()));
-        assertTrue(has(u.notes(), "states.refined: template now defines it too"), u::toString);
+        assertTrue(noted(u.notes(), "states.refined", "template now defines it too"), u::toString);
     }
 
     @Test
     @DisplayName("R6 template removes the anchor (Backlog): refused while it holds items; empty, Refined stays first, anchored before To Do")
     void r6() {
-        assertTrue(has(upgrade(SCRUM, NO_BACKLOG, REFINED, Map.of("states.backlog", 30)).conflicts(), "states.backlog: still used by 30"));
+        assertTrue(has(upgrade(SCRUM, NO_BACKLOG, REFINED, Map.of("states.backlog", 30)).conflicts(), "states.backlog", "still used by 30"));
         Upgrade u = upgrade(SCRUM, NO_BACKLOG, REFINED, EMPTY);
         clean(u);
         assertEquals(List.of("refined", "todo", "in-progress", "in-review", "done", "no-go"), order(u.effective()));
@@ -197,7 +202,7 @@ class UpgradeTest {
     @Test
     @DisplayName("D6 template removes no-go: refused while it holds items; empty, removed; renamed by the instance, kept off the board")
     void d6() {
-        assertTrue(has(upgrade(SCRUM, SCRUM_WITHOUT_NO_GO, NONE, Map.of("states.no-go", 2)).conflicts(), "states.no-go: still used by 2"));
+        assertTrue(has(upgrade(SCRUM, SCRUM_WITHOUT_NO_GO, NONE, Map.of("states.no-go", 2)).conflicts(), "states.no-go", "still used by 2"));
         Upgrade empty = upgrade(SCRUM, SCRUM_WITHOUT_NO_GO, NONE, EMPTY);
         clean(empty);
         assertEquals(List.of("DELETE no-go"), Diff.projection(eff(SCRUM, NONE), empty.effective()));
@@ -228,12 +233,12 @@ class UpgradeTest {
                 + " \"category\": \"END_STATE\", \"outcome\": \"DELIVERED\", \"after\": \"done\"}}}"), EMPTY);
         Upgrade parked = upgrade(SCRUM_WITHOUT_NO_GO, GAINS_NO_GO, patch("{\"states\": {\"no-go\": {\"name\": \"Parked\", "
                 + START + ", \"after\": \"done\"}}}"), EMPTY);
-        assertTrue(has(delivered.conflicts(), "states.no-go: the instance added it as END_STATE (DELIVERED), the template now defines it as END_STATE (DISCONTINUED)"),
+        assertTrue(has(delivered.conflicts(), "states.no-go", "the instance added it as END_STATE (DELIVERED), the template now defines it as END_STATE (DISCONTINUED)"),
                 delivered::toString);
-        assertTrue(has(delivered.notes(), "instance values win over [name, outcome], template fills [onBoard]"), delivered::toString);
-        assertTrue(has(parked.conflicts(), "states.no-go: the instance added it as START_STATE, the template now defines it as END_STATE (DISCONTINUED)"),
+        assertTrue(noted(delivered.notes(), "states.no-go", "instance values win over [name, outcome], template fills [onBoard]"), delivered::toString);
+        assertTrue(has(parked.conflicts(), "states.no-go", "the instance added it as START_STATE, the template now defines it as END_STATE (DISCONTINUED)"),
                 parked::toString);
-        assertTrue(has(parked.notes(), "instance values win over [category, name], template fills [onBoard, outcome]"), parked::toString);
+        assertTrue(noted(parked.notes(), "states.no-go", "instance values win over [category, name], template fills [onBoard, outcome]"), parked::toString);
         assertFalse(delivered.ok());
     }
 
@@ -266,7 +271,7 @@ class UpgradeTest {
         assertEquals("QA", name(u.effective(), "qa"));
         assertEquals(3L, state(u.effective(), "qa").get("wipLimit"));
         assertEquals(List.of("in-review"), state(u.effective(), "qa").get("enterFrom"));
-        assertTrue(has(u.notes(), "states.qa: template now defines it too"), u::toString);
+        assertTrue(noted(u.notes(), "states.qa", "template now defines it too"), u::toString);
     }
 
     @Test
@@ -303,7 +308,7 @@ class UpgradeTest {
         assertEquals("in-progress", state(u.effective(), "in-review").get("after"));
         assertEquals(order(eff(SCRUM, REVIEW)), order(u.effective()));
         assertFalse(u.delta().containsKey("stateOrder"));
-        assertTrue(has(u.notes(), "keeps it as its own"), u::toString);
+        assertTrue(noted(u.notes(), "states.in-review", "keeps it as its own"), u::toString);
     }
 
     @Test
@@ -328,7 +333,7 @@ class UpgradeTest {
     @DisplayName("C13 template removes a state an instance policy still references: upgrade refused")
     void c13() {
         Upgrade u = upgrade(SCRUM, DROP_REVIEW, patch("{\"states\": {\"done\": {\"enterFrom\": [\"in-review\"]}}}"), EMPTY);
-        assertTrue(has(u.conflicts(), "states.done.enterFrom: references unknown state 'in-review'"), u::toString);
+        assertTrue(has(u.conflicts(), "states.done.enterFrom", "references unknown state 'in-review'"), u::toString);
     }
 
     @Test
@@ -337,17 +342,17 @@ class UpgradeTest {
         Map<String, Object> noGoDelivers = next(SCRUM, "{\"states\": {\"no-go\": {\"outcome\": \"DELIVERED\"}}}");
         Map<String, Object> reviewEnds = next(SCRUM, "{\"states\": {\"in-review\": {\"category\": \"END_STATE\", \"outcome\": \"DELIVERED\"}}}");
         assertTrue(has(upgrade(SCRUM, noGoDelivers, NONE, Map.of("states.no-go", 9)).conflicts(),
-                "states.no-go: template changes it from END_STATE (DISCONTINUED) to END_STATE (DELIVERED) while 9 item(s) are in it"));
+                "states.no-go", "template changes it from END_STATE (DISCONTINUED) to END_STATE (DELIVERED) while 9 item(s) are in it"));
         Upgrade empty = upgrade(SCRUM, noGoDelivers, NONE, EMPTY);
         clean(empty);
-        assertTrue(has(empty.notes(), "states.no-go: template changes it from END_STATE (DISCONTINUED) to END_STATE (DELIVERED); it holds no items"));
+        assertTrue(noted(empty.notes(), "states.no-go", "template changes it from END_STATE (DISCONTINUED) to END_STATE (DELIVERED); it holds no items"));
         Upgrade own = upgrade(SCRUM, noGoDelivers, patch("{\"states\": {\"no-go\": {\"outcome\": \"DISCONTINUED\"}}}"), Map.of("states.no-go", 9));
         clean(own);
-        assertTrue(has(own.notes(), "the instance's own category and outcome are kept"));
+        assertTrue(noted(own.notes(), "states.no-go", "the instance's own category and outcome are kept"));
         assertEquals("DISCONTINUED", state(own.effective(), "no-go").get("outcome"));
         assertTrue(has(upgrade(SCRUM, reviewEnds, NONE, Map.of("states.in-review", 4)).conflicts(),
-                "states.in-review: template changes it from IN_PROGRESS to END_STATE (DELIVERED) while 4 item(s)"));
-        assertFalse(has(upgrade(SCRUM, reviewEnds, TOMB_REVIEW, EMPTY).notes(), "in-review"));
+                "states.in-review", "template changes it from IN_PROGRESS to END_STATE (DELIVERED) while 4 item(s)"));
+        assertFalse(noted(upgrade(SCRUM, reviewEnds, TOMB_REVIEW, EMPTY).notes(), "states.in-review", ""));
     }
 
     // ---- item types ----------------------------------------------------
@@ -359,7 +364,7 @@ class UpgradeTest {
         assertTrue(types(upgrade(SCRUM, addSpike, NONE, EMPTY).effective()).containsKey("spike"));
         Upgrade u = upgrade(SCRUM, addSpike, patch("{\"itemTypes\": {\"spike\": {\"name\": \"Research spike\"}}}"), EMPTY);
         assertEquals("Research spike", TemplateJson.obj(types(u.effective()).get("spike")).get("name"));
-        assertTrue(has(u.notes(), "itemTypes.spike: template now defines it too"), u::toString);
+        assertTrue(noted(u.notes(), "itemTypes.spike", "template now defines it too"), u::toString);
     }
 
     @Test
@@ -369,11 +374,11 @@ class UpgradeTest {
         Upgrade unused = upgrade(SCRUM, dropTask, NONE, EMPTY);
         clean(unused);
         assertFalse(types(unused.effective()).containsKey("task"));
-        assertTrue(has(upgrade(SCRUM, dropTask, NONE, Map.of("itemTypes.task", 7)).conflicts(), "itemTypes.task: still used by 7"));
+        assertTrue(has(upgrade(SCRUM, dropTask, NONE, Map.of("itemTypes.task", 7)).conflicts(), "itemTypes.task", "still used by 7"));
         Upgrade renamed = upgrade(SCRUM, dropTask, patch("{\"itemTypes\": {\"task\": {\"name\": \"Chore\"}}}"), Map.of("itemTypes.task", 7));
         clean(renamed);
         assertEquals("Chore", TemplateJson.obj(types(renamed.effective()).get("task")).get("name"));
-        assertTrue(has(renamed.notes(), "itemTypes.task: template removed it; the instance customised it, so it keeps it as its own"));
+        assertTrue(noted(renamed.notes(), "itemTypes.task", "template removed it; the instance customised it, so it keeps it as its own"));
         assertEquals(patch("{\"name\": \"Chore\"}"), TemplateJson.obj(renamed.delta().get("itemTypes")).get("task"));
     }
 
@@ -421,7 +426,7 @@ class UpgradeTest {
     void m8() {
         Map<String, Object> base = TemplateHierarchy.strip(Registry.shipped().res("scrum@1"));
         Map<String, Object> narrowed = TemplateJson.obj(TemplateJson.mergePatch(base, patch("{\"itemTypes\": {\"task\": {\"parents\": [\"story\"]}}}")));
-        assertTrue(has(upgrade(base, narrowed, NONE, Map.of("itemTypes.task.parents.bug", 12)).conflicts(), "no longer allows 'bug'"));
+        assertTrue(has(upgrade(base, narrowed, NONE, Map.of("itemTypes.task.parents.bug", 12)).conflicts(), "itemTypes.task.parents", "no longer allows 'bug'"));
         clean(upgrade(base, narrowed, NONE, EMPTY));
     }
 }

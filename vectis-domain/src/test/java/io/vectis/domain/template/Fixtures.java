@@ -34,6 +34,13 @@ final class Fixtures {
         return TemplateJson.parseObject(json);
     }
 
+    /** The next version of a template, derived from it by a merge patch (templates are authored the same way). */
+    static Map<String, Object> next(Map<String, Object> template, String change) {
+        Map<String, Object> t = TemplateJson.obj(TemplateJson.mergePatch(template, patch(change)));
+        t.put("version", (Long) template.get("version") + 1);
+        return t;
+    }
+
     /** The same document with every object's members in reverse order, as a store that keeps no order may return it. */
     static Map<String, Object> reversed(Map<String, Object> doc) {
         Map<String, Object> out = new LinkedHashMap<>();
