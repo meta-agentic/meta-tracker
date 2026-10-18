@@ -78,6 +78,23 @@ class SpaOneOriginTest {
                 .header("Content-Security-Policy", CSP);
     }
 
+    @Test
+    void missingHashedAssetIsA404NeverCached() {
+        // A rolling update can send a new shell's hash to an old pod; that miss
+        // must not be pinned for a year the way a found asset is.
+        var response = given().when().get("/assets/missing-0a1b2c3d.js")
+            .then()
+                .statusCode(404)
+                .body(not(containsString(SHELL_MARKER)));
+        assertOnlyCacheControl(response, "no-store");
+    }
+
+    @Test
+    void notModifiedKeepsTheFoundAssetPolicy() {
+        assertEquals(IMMUTABLE, AssetCachePolicy.forStatus(304));
+        assertEquals("no-store", AssetCachePolicy.forStatus(500));
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"/api", "/api/unknown", "/api/v1/unknown", "/q", "/q/unknown",
             "/assets/missing-0a1b2c3d.js", "/board/VEC/attachment.pdf"})
