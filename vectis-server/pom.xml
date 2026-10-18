@@ -43,6 +43,14 @@
       <artifactId>rest-assured</artifactId>
       <scope>test</scope>
     </dependency>
+
+    <!-- VEC-79 auth test harness: the OIDC provider in a container. Version from the
+         Quarkus BOM, which already manages the latest release. -->
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
@@ -58,6 +66,35 @@
               <goal>generate-code</goal>
               <goal>generate-code-tests</goal>
             </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <!--
+        VEC-78: the built web client ships inside the server, so the SPA and the
+        API share one origin. `npm run build` in web/ must run first; the image
+        pipeline (native-deploy.yml) does that before `mvn package`. With no
+        web/dist (a plain JVM test run) this copies nothing and the server tests
+        use their own fixture shell. A stale local web/dist ships unless rebuilt
+        or cleaned; CI always builds it fresh.
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-resources-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>web-client</id>
+            <phase>process-resources</phase>
+            <goals>
+              <goal>copy-resources</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${project.build.outputDirectory}/META-INF/resources</outputDirectory>
+              <resources>
+                <resource>
+                  <directory>${project.basedir}/../web/dist</directory>
+                </resource>
+              </resources>
+            </configuration>
           </execution>
         </executions>
       </plugin>
