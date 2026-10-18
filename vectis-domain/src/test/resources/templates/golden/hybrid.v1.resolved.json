@@ -1,0 +1,44 @@
+{
+  "template": "hybrid",
+  "version": 1,
+  "name": "Hybrid",
+  "description": "Sprints deliver; a release gate decides what ships. Phases group epics.",
+  "extends": {"template": "scrum", "version": 1},
+  "states": {
+    "backlog": {"name": "Backlog", "category": "START_STATE"},
+    "todo": {"name": "To Do", "category": "START_STATE"},
+    "in-progress": {"name": "In Progress", "category": "IN_PROGRESS"},
+    "in-review": {"name": "In Review", "category": "IN_PROGRESS"},
+    "release-review": {
+      "name": "Release Review",
+      "category": "IN_PROGRESS",
+      "after": "in-review",
+      "gate": {"approvals": 1}
+    },
+    "done": {
+      "name": "Released",
+      "category": "END_STATE",
+      "outcome": "DELIVERED",
+      "enterFrom": ["release-review"]
+    },
+    "no-go": {
+      "name": "No Go",
+      "category": "END_STATE",
+      "outcome": "DISCONTINUED",
+      "onBoard": false
+    }
+  },
+  "stateOrder": ["backlog", "todo", "in-progress", "in-review", "release-review", "done", "no-go"],
+  "itemTypes": {
+    "task": {"name": "Task", "parents": ["story", "bug"]},
+    "story": {"name": "Story", "parents": ["epic"]},
+    "bug": {"name": "Bug", "parents": ["epic"]},
+    "epic": {"name": "Epic", "parents": ["phase"]},
+    "phase": {"name": "Phase"}
+  },
+  "fields": {
+    "storyPoints": {"name": "Story points", "type": "number", "scale": "fibonacci"}
+  },
+  "settings": {"defaultItemType": "story"},
+  "cadence": {"mode": "sprint", "sprintDays": 14}
+}

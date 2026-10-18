@@ -76,4 +76,12 @@ final class Fixtures {
     static boolean has(List<Violation> violations, String field, String messageFragment) {
         return violations.stream().anyMatch(v -> v.field().equals(field) && v.level() == null && v.message().contains(messageFragment));
     }
+
+    /**
+     * Whether any line contains the fragment, in its {@code toString()} form: for a violation that
+     * is "level: field: message", so a fragment can pin the level a multi-level case attributes it to.
+     */
+    static boolean has(List<?> lines, String fragment) {
+        return lines.stream().anyMatch(l -> l.toString().contains(fragment));
+    }
 }
