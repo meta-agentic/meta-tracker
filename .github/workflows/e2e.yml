@@ -62,17 +62,27 @@ jobs:
           distribution: temurin
           cache: maven
 
-      - name: Build and start Vectis
-        run: |
-          mvn -B -ntp -pl vectis-server -am package -DskipTests
-          nohup java -jar vectis-server/target/quarkus-app/quarkus-run.jar > vectis.log 2>&1 &
-
       - name: Set up Node ${{ env.NODE_VERSION }}
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          cache-dependency-path: e2e/package-lock.json
+          cache-dependency-path: |
+            web/package-lock.json
+            e2e/package-lock.json
+
+      - name: Build the web client
+        # Before the server: the server build ships web/dist when it exists (VEC-78), and
+        # the journey needs the SPA on the server's origin.
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build and start Vectis
+        run: |
+          mvn -B -ntp -pl vectis-server -am package -DskipTests
+          nohup java -jar vectis-server/target/quarkus-app/quarkus-run.jar > vectis.log 2>&1 &
 
       - name: Install Playwright
         working-directory: e2e
