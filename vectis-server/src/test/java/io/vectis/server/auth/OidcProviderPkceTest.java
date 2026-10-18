@@ -24,8 +24,10 @@ import java.security.Signature;
 import java.security.SignatureException;
 import java.security.spec.RSAPublicKeySpec;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -76,27 +78,30 @@ class OidcProviderPkceTest {
     void codeFlowWithPkceYieldsTokensThatVerifyAgainstTheJwks() throws Exception {
         assertEquals(provider.issuer(), discovery.get("issuer").asText());
         String verifier = randomToken();
+        String nonce = randomToken();
 
         // PKCE is enforced, not merely accepted: a code redeemed with another verifier is refused.
-        HttpResponse<String> refused = redeem(authorize(challenge(verifier)), randomToken());
+        HttpResponse<String> refused = redeem(authorize(challenge(verifier), randomToken()), randomToken());
         assertEquals(400, refused.statusCode(), refused.body());
+        assertEquals("invalid_grant", JSON.readTree(refused.body()).path("error").asText(), refused.body());
 
-        HttpResponse<String> granted = redeem(authorize(challenge(verifier)), verifier);
+        HttpResponse<String> granted = redeem(authorize(challenge(verifier), nonce), verifier);
         assertEquals(200, granted.statusCode(), granted.body());
         JsonNode tokens = JSON.readTree(granted.body());
         JsonNode jwks = JSON.readTree(send(HttpClient.newHttpClient(),
             HttpRequest.newBuilder(URI.create(discovery.get("jwks_uri").asText())).build()));
 
         JsonNode id = verified(tokens.get("id_token").asText(), jwks);
-        JsonNode aud = id.get("aud");
-        assertEquals(provider.issuer(), id.get("iss").asText());
-        assertEquals(CLIENT_ID, aud.isArray() ? aud.get(0).asText() : aud.asText());
+        assertIssuedToClient(id);
+        assertTrue(audience(id).contains(CLIENT_ID), "ID token aud " + id.get("aud"));
+        assertEquals(nonce, id.path("nonce").asText());
         assertEquals(USERNAME, id.get("preferred_username").asText());
 
         String access = tokens.get("access_token").asText();
         JsonNode claims = verified(access, jwks);
-        assertEquals(provider.issuer(), claims.get("iss").asText());
-        assertTrue(claims.get("exp").asLong() > Instant.now().getEpochSecond());
+        assertIssuedToClient(claims);
+        // This provider's access tokens name the client in azp, not in aud.
+        assertTrue(claims.has("azp"), "access token has no azp");
 
         // The check has teeth: the access token's claims under the ID token's signature fail.
         String[] a = access.split("\\.");
@@ -104,13 +109,37 @@ class OidcProviderPkceTest {
         assertThrows(SignatureException.class, () -> verified(forged, jwks));
     }
 
-    /** Signs in as the bootstrap user and returns the authorization code from the redirect. */
-    private static String authorize(String challenge) throws Exception {
+    /** The claims both tokens must carry: this issuer, not expired, and the client in azp where set. */
+    private static void assertIssuedToClient(JsonNode claims) {
+        assertEquals(provider.issuer(), claims.path("iss").asText());
+        assertTrue(claims.path("exp").asLong() > Instant.now().getEpochSecond(), "expired: " + claims.get("exp"));
+        if (claims.has("azp")) {
+            assertEquals(CLIENT_ID, claims.get("azp").asText());
+        }
+    }
+
+    /** {@code aud} is a string or an array (RFC 7519 §4.1.3). */
+    private static List<String> audience(JsonNode claims) {
+        JsonNode aud = claims.path("aud");
+        List<String> values = new ArrayList<>();
+        if (aud.isArray()) {
+            aud.forEach(value -> values.add(value.asText()));
+        } else if (aud.isTextual()) {
+            values.add(aud.asText());
+        }
+        return values;
+    }
+
+    /**
+     * Signs in as the bootstrap user and returns the authorization code from the redirect.
+     * The login step scrapes this provider's own login form; another provider needs its own.
+     */
+    private static String authorize(String challenge, String nonce) throws Exception {
         HttpClient browser = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build();
         String state = randomToken();
         URI start = URI.create(discovery.get("authorization_endpoint").asText() + "?" + form(Map.of(
             "response_type", "code", "client_id", CLIENT_ID, "redirect_uri", REDIRECT_URI, "scope", "openid",
-            "state", state, "code_challenge", challenge, "code_challenge_method", "S256")));
+            "state", state, "nonce", nonce, "code_challenge", challenge, "code_challenge_method", "S256")));
         HttpResponse<String> page = browser.send(HttpRequest.newBuilder(start).build(), HttpResponse.BodyHandlers.ofString());
         Matcher action = LOGIN_ACTION.matcher(page.body());
         assertTrue(action.find(), "the provider served no login form");
@@ -144,7 +173,10 @@ class OidcProviderPkceTest {
             .build(), HttpResponse.BodyHandlers.ofString());
     }
 
-    /** RS256 verification against the JWKS key named by the token's {@code kid}; returns the claims. */
+    /**
+     * RS256 verification against the JWKS key named by the token's {@code kid}; returns the claims.
+     * RS256 only: a provider that signs with another algorithm (EdDSA, say) needs it added here.
+     */
     private static JsonNode verified(String jwt, JsonNode jwks) throws Exception {
         String[] part = jwt.split("\\.");
         JsonNode header = JSON.readTree(B64.decode(part[0]));
