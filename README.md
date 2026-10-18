@@ -99,7 +99,7 @@ separate web client:
 | `vectis-persistence` | Outbound adapter: reactive PostgreSQL (Hibernate Reactive / reactive pg-client); migrations own the schema and row-level security. |
 | `vectis-rest` | Inbound adapter: reactive REST resources, real-time (SSE) endpoints, OpenAPI. |
 | `vectis-server` | Composition root — the runnable Quarkus application. |
-| `web/` | The virtualized single-page client (React + a cache-layered store). |
+| `web/` | The virtualized single-page client (React + a cache-layered store), built into `vectis-server` and served on the API's origin. |
 
 The `domain` and `api` modules are framework-free by construction; architectural
 boundaries are enforced by tests so they cannot erode silently.
