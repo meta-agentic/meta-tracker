@@ -1,0 +1,10 @@
+{
+  "template": "acme-platform",
+  "version": 1,
+  "name": "Acme Platform team",
+  "extends": {"template": "acme", "version": 1},
+  "states": {
+    "refined": {"name": "Refined", "category": "START_STATE", "after": "backlog"}
+  },
+  "cadence": {"sprintDays": 7}
+}
