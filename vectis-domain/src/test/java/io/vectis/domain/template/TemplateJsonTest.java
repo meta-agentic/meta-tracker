@@ -73,7 +73,7 @@ class TemplateJsonTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"\"\\u+041\"", "\"\\u-001\"", "\"\\u00g1\"", "\"\\u12\""})
+    @ValueSource(strings = {"\"\\u+041\"", "\"\\u-001\"", "\"\\u00g1\"", "\"\\u12\"", "\"\\u\u0660\u0660\u0664\u0661\"", "\"\\u\uff10\uff10\uff14\uff21\""})
     void refusesAUnicodeEscapeThatIsNotFourHexDigits(String text) {
         assertThrows(IllegalArgumentException.class, () -> TemplateJson.parse(text));
     }
