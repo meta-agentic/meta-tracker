@@ -21,7 +21,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -303,36 +302,50 @@ class TemplateHierarchyTest {
     }
 
     @Test
-    @Disabled("VEC-92: the workflow definition; assert release-review>done[gate:release-review] is the only way to done")
     @DisplayName("M3 (workflow) Hybrid: the release gate is the only way to Released")
     void m3Workflow() {
+        List<String> moves = WorkflowTest.moves(Workflow.definition(r.res("hybrid@1")));
+        assertTrue(moves.contains("release-review>done[gate:release-review]"), moves::toString);
+        assertEquals(1, moves.stream().filter(m -> m.contains(">done")).count(), moves::toString);
     }
 
     @Test
-    @Disabled("VEC-92: the import fallback; assert idea for START_STATE and no-go for END_STATE/DISCONTINUED")
     @DisplayName("M4 (fallback) Stage-gate: an unrecognised status lands in Idea, or in Killed when discontinued")
     void m4Fallback() {
+        Map<String, Object> sg = r.res("stage-gate@1");
+        assertEquals("idea", Upgrade.fallback(sg, "START_STATE", null));
+        assertEquals("no-go", Upgrade.fallback(sg, "END_STATE", "DISCONTINUED"));
     }
 
     @Test
-    @Disabled("VEC-92: the workflow definition; assert the four sequential moves and verify>done[gate:verify] with the sign-off gate")
     @DisplayName("M9 (workflow) waterfall: stages entered strictly in sequence; a sign-off gate guards the way to Released")
     void m9Workflow() {
+        List<String> moves = WorkflowTest.moves(Workflow.definition(waterfall(false).effective()));
+        assertTrue(moves.containsAll(List.of("requirements>design", "design>build", "build>verify", "verify>done")), moves::toString);
+        assertEquals(4, moves.stream().filter(m -> !m.endsWith(">no-go")).count(), moves::toString);
+        assertTrue(WorkflowTest.moves(Workflow.definition(waterfall(true).effective())).contains("verify>done[gate:verify]"));
+    }
+
+    static final String WATERFALL = "\"states\": {\"todo\": null, \"in-progress\": null,"
+            + " \"requirements\": {\"name\": \"Requirements\", \"category\": \"START_STATE\", \"enterFrom\": []},"
+            + " \"design\": {\"name\": \"Design\", \"category\": \"IN_PROGRESS\", \"enterFrom\": [\"requirements\"]},"
+            + " \"build\": {\"name\": \"Build\", \"category\": \"IN_PROGRESS\", \"enterFrom\": [\"design\"]},"
+            + " \"verify\": {\"name\": \"Verify\", \"category\": \"IN_PROGRESS\", \"enterFrom\": [\"build\"]GATE},"
+            + " \"done\": {\"name\": \"Released\", \"enterFrom\": [\"verify\"]}},"
+            + " \"stateOrder\": [\"requirements\", \"design\", \"build\", \"verify\", \"done\", \"no-go\"], \"cadence\": {\"mode\": \"phase\"}";
+
+    /** The waterfall the spike derives from Base in M9: stages entered strictly in sequence, optionally with a locked sign-off gate and gated delivery. */
+    Resolution waterfall(boolean signedOff) {
+        return TemplateHierarchy.derive(r.res("base@1"), derived("waterfall", 1, "base", 1, signedOff
+                ? WATERFALL.replace("GATE", ", \"gate\": {\"approvals\": 1}") + ", \"settings\": {\"gatedDelivery\": true}, \"locks\": [\"states.verify.gate\"]"
+                : WATERFALL.replace("GATE", "")), "waterfall@1");
     }
 
     @Test
     @DisplayName("M9 (resolution) waterfall maps without a new concept: phase cadence, stages entered strictly in sequence; a sign-off gate with gated delivery also resolves")
     void m9() {
-        String seq = "\"states\": {\"todo\": null, \"in-progress\": null,"
-                + " \"requirements\": {\"name\": \"Requirements\", \"category\": \"START_STATE\", \"enterFrom\": []},"
-                + " \"design\": {\"name\": \"Design\", \"category\": \"IN_PROGRESS\", \"enterFrom\": [\"requirements\"]},"
-                + " \"build\": {\"name\": \"Build\", \"category\": \"IN_PROGRESS\", \"enterFrom\": [\"design\"]},"
-                + " \"verify\": {\"name\": \"Verify\", \"category\": \"IN_PROGRESS\", \"enterFrom\": [\"build\"]GATE},"
-                + " \"done\": {\"name\": \"Released\", \"enterFrom\": [\"verify\"]}},"
-                + " \"stateOrder\": [\"requirements\", \"design\", \"build\", \"verify\", \"done\", \"no-go\"], \"cadence\": {\"mode\": \"phase\"}";
-        Resolution waterfall = TemplateHierarchy.derive(r.res("base@1"), derived("waterfall", 1, "base", 1, seq.replace("GATE", "")), "waterfall@1");
-        Resolution signedOff = TemplateHierarchy.derive(r.res("base@1"), derived("waterfall", 1, "base", 1,
-                seq.replace("GATE", ", \"gate\": {\"approvals\": 1}") + ", \"settings\": {\"gatedDelivery\": true}, \"locks\": [\"states.verify.gate\"]"), "waterfall@1");
+        Resolution waterfall = waterfall(false);
+        Resolution signedOff = waterfall(true);
         assertTrue(waterfall.ok(), waterfall::toString);
         assertTrue(signedOff.ok(), signedOff::toString);
         assertEquals("phase", cadence(waterfall.effective()).get("mode"));
