@@ -1,0 +1,20 @@
+{
+  "template": "hybrid",
+  "version": 1,
+  "name": "Hybrid",
+  "description": "Sprints deliver; a release gate decides what ships. Phases group epics.",
+  "extends": {"template": "scrum", "version": 1},
+  "states": {
+    "release-review": {
+      "name": "Release Review",
+      "category": "IN_PROGRESS",
+      "after": "in-review",
+      "gate": {"approvals": 1}
+    },
+    "done": {"name": "Released", "enterFrom": ["release-review"]}
+  },
+  "itemTypes": {
+    "phase": {"name": "Phase"},
+    "epic": {"parents": ["phase"]}
+  }
+}

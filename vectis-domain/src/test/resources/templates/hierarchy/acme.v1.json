@@ -1,0 +1,22 @@
+{
+  "template": "acme",
+  "version": 1,
+  "name": "Acme Scrum",
+  "description": "Organisation level: code review and QA before Done, for every Acme team.",
+  "extends": {"template": "scrum", "version": 1},
+  "states": {
+    "in-review": {"name": "Code Review"},
+    "qa": {
+      "name": "QA",
+      "category": "IN_PROGRESS",
+      "wipLimit": 3,
+      "after": "in-review"
+    },
+    "done": {"enterFrom": ["qa"]}
+  },
+  "itemTypes": {
+    "bug": null,
+    "task": {"parents": ["story"]}
+  },
+  "locks": ["states.done.enterFrom", "states.qa"]
+}
