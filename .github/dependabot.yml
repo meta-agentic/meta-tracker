@@ -6,6 +6,12 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      # init, analyze and upload-sarif must share one version, or CodeQL fails
+      # ("Loaded a configuration file for version X, but running version Y").
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
 
   # The Playwright browser journeys (VEC-79).
   - package-ecosystem: npm
