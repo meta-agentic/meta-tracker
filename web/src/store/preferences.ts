@@ -9,7 +9,8 @@ import { DEFAULT_LOCALE, isSupportedLocale, type Locale } from "../i18n/locales"
  * convenience: the theme has to be known before the first paint, and an async
  * read cannot be. The same reasoning already put `activeBoardId` there.
  *
- * Keys are exported because the pre-paint bootstrap in `index.html` reads the
+ * Keys are exported because the pre-paint bootstrap (`public/theme-boot.js`,
+ * loaded by `index.html`) reads the
  * same localStorage entries before any module has loaded; if one moves, both
  * move.
  */
