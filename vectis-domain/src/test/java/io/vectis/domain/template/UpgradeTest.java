@@ -415,4 +415,13 @@ class UpgradeTest {
             }
         }
     }
+
+    @Test
+    @DisplayName("M8 narrowing an item type's parents is refused at an upgrade while items sit under a parent it drops; allowed when none do")
+    void m8() {
+        Map<String, Object> base = TemplateHierarchy.strip(Registry.shipped().res("scrum@1"));
+        Map<String, Object> narrowed = TemplateJson.obj(TemplateJson.mergePatch(base, patch("{\"itemTypes\": {\"task\": {\"parents\": [\"story\"]}}}")));
+        assertTrue(has(upgrade(base, narrowed, NONE, Map.of("itemTypes.task.parents.bug", 12)).conflicts(), "no longer allows 'bug'"));
+        clean(upgrade(base, narrowed, NONE, EMPTY));
+    }
 }

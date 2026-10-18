@@ -100,4 +100,44 @@ class DeltaWriterTest {
         assertEquals(load("vec45/instance-review.json"), review);
         assertEquals(load("vec45/instance-refined.json"), REFINED);
     }
+
+    // ---- over the template hierarchy (VEC-66) ---------------------------
+
+    static final Registry SHIPPED = Registry.shipped();
+
+    @Test
+    @DisplayName("M8 narrowing an item type's parents is refused at a delta write while items sit under a parent it drops; allowed when none do")
+    void m8() {
+        Map<String, Object> base = TemplateHierarchy.strip(SHIPPED.res("scrum@1"));
+        Map<String, Object> narrowed = patch("{\"itemTypes\": {\"task\": {\"parents\": [\"story\"]}}}");
+        List<Violation> v = DeltaWriter.write(base, NONE, narrowed, Map.of("itemTypes.task.parents.bug", 12)).violations();
+        assertTrue(has(v, "itemTypes.task.parents: no longer allows 'bug' while 12 task item(s) sit under one"), v::toString);
+        assertTrue(DeltaWriter.write(base, NONE, narrowed, EMPTY).ok());
+    }
+
+    @Test
+    @DisplayName("a workspace write refuses a locked key, attributed to the workspace; another field of the same state is free")
+    void lockedKey() {
+        Map<String, Object> stageGate = SHIPPED.res("stage-gate@1");
+        List<Violation> v = DeltaWriter.writeWorkspace(stageGate, NONE,
+                patch("{\"states\": {\"gate-1\": {\"gate\": {\"approvals\": 1}}}}"), EMPTY).violations();
+        assertTrue(v.contains(new Violation("states.gate-1.gate", TemplateResolver.WORKSPACE,
+                "locked by an ancestor template ('states.gate-1.gate')")), v::toString);
+        assertTrue(has(DeltaWriter.writeWorkspace(stageGate, NONE, patch("{\"states\": {\"gate-1\": null}}"), EMPTY).violations(),
+                "states.gate-1: locked by an ancestor template"));
+        Resolution renamed = DeltaWriter.writeWorkspace(stageGate, NONE, patch("{\"states\": {\"gate-1\": {\"name\": \"Go/kill\"}}}"), EMPTY);
+        assertTrue(renamed.ok(), renamed::toString);
+        assertEquals("Go/kill", Fixtures.name(renamed.effective(), "gate-1"));
+    }
+
+    @Test
+    @DisplayName("a workspace write runs the write rules too: an occupied removal or an unknown stateOrder key is refused, once each")
+    void workspaceWriteRules() {
+        Map<String, Object> scrum = SHIPPED.res("scrum@1");
+        List<Violation> v = DeltaWriter.writeWorkspace(scrum, NONE, DROP_BACKLOG, Map.of("states.backlog", 2)).violations();
+        assertEquals(List.of(new Violation("states.backlog", TemplateResolver.WORKSPACE, "still used by 2 item(s); move or retype them first")), v);
+        List<Violation> ghost = DeltaWriter.writeWorkspace(scrum, NONE, patch("{\"stateOrder\": [\"ghost\"]}"), EMPTY).violations();
+        assertEquals(1, ghost.stream().filter(x -> x.message().contains("unknown state 'ghost'")).count(), ghost::toString);
+        assertTrue(DeltaWriter.writeWorkspace(scrum, NONE, REFINED, EMPTY).ok());
+    }
 }
