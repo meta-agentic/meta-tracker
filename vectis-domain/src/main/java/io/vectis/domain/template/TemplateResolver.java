@@ -79,6 +79,18 @@ public final class TemplateResolver {
         if (!LevelResolver.KEY.matcher(key).matches()) {
             v.add(new Violation("template", ref, "key must match " + LevelResolver.KEY.pattern()));
         }
+        Map<String, Object> doc = candidate.document();
+        if (!key.equals(doc.get("template"))) {
+            v.add(new Violation("template", ref, "the document names template " + TemplateJson.compact(doc.get("template"))
+                    + "; it is published as " + ref));
+        }
+        if (!(doc.get("version") instanceof Long n && n == candidate.version())) {
+            v.add(new Violation("version", ref, "the document names version " + TemplateJson.compact(doc.get("version"))
+                    + "; it is published as " + ref));
+        }
+        if (!candidate.extendsWellFormed()) {
+            v.add(new Violation("extends", ref, TemplateHierarchy.EXTENDS_SHAPE));
+        }
         long latest = catalog.latest(key);
         if (candidate.version() != latest + 1) {
             v.add(new Violation("version", ref, key + " is at version " + latest + "; a new version is " + (latest + 1)
@@ -87,7 +99,7 @@ public final class TemplateResolver {
         catalog.versions(key).stream().filter(x -> !x.owner().equals(candidate.owner())).findFirst()
                 .ifPresent(x -> v.add(new Violation("template", ref, "'" + key + "' belongs to " + x.owner())));
         String parent = candidate.parent();
-        if (parent == null && !candidate.owner().equals(SYSTEM)) {
+        if (parent == null && candidate.extendsWellFormed() && !candidate.owner().equals(SYSTEM)) {
             v.add(new Violation("extends", ref, "a tenant template extends a built-in or one of its own templates; roots are built-in"));
         }
         catalog.find(parent == null ? "" : parent)
