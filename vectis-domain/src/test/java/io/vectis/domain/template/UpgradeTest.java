@@ -277,8 +277,11 @@ class UpgradeTest {
     @Test
     @DisplayName("C4/C5/C6 template renames states: an untouched instance inherits, its own rename is kept, its deletion stays")
     void c4c5c6() {
-        assertEquals("Doing", name(upgrade(SCRUM, RENAMES, NONE, EMPTY).effective(), "in-progress"));
+        Upgrade untouched = upgrade(SCRUM, RENAMES, NONE, EMPTY);
+        clean(untouched);
+        assertEquals("Doing", name(untouched.effective(), "in-progress"));
         Upgrade renamed = upgrade(SCRUM, RENAMES, REVIEW, EMPTY);
+        clean(renamed);
         assertEquals("Code Review", name(renamed.effective(), "in-review"));
         assertEquals("Doing", name(renamed.effective(), "in-progress"));
         Upgrade deleted = upgrade(SCRUM, RENAMES, DROP_BACKLOG, EMPTY);
@@ -322,9 +325,12 @@ class UpgradeTest {
     @Test
     @DisplayName("C11/C12 template reorders states: an untouched instance inherits the order; one with its own keeps it, and the upgrade says so")
     void c11c12() {
-        assertEquals(List.of("todo", "backlog", "in-progress", "in-review", "done", "no-go"), order(upgrade(SCRUM, REORDERED, NONE, EMPTY).effective()));
+        Upgrade untouched = upgrade(SCRUM, REORDERED, NONE, EMPTY);
+        clean(untouched);
+        assertEquals(List.of("todo", "backlog", "in-progress", "in-review", "done", "no-go"), order(untouched.effective()));
         Map<String, Object> own = patch("{\"stateOrder\": [\"backlog\", \"todo\", \"in-review\", \"in-progress\", \"done\", \"no-go\"]}");
         Upgrade u = upgrade(SCRUM, REORDERED, own, EMPTY);
+        clean(u);
         assertEquals(order(eff(SCRUM, own)), order(u.effective()));
         assertTrue(u.notes().contains(new Upgrade.Note("stateOrder", "template reordered its states; the instance keeps its own order")), u::toString);
     }
@@ -361,8 +367,11 @@ class UpgradeTest {
     @DisplayName("T1/T2 template adds an item type: inherited; one the instance had already added is adopted, instance name wins")
     void t1t2() {
         Map<String, Object> addSpike = next(SCRUM, "{\"itemTypes\": {\"spike\": {\"name\": \"Spike\"}}}");
-        assertTrue(types(upgrade(SCRUM, addSpike, NONE, EMPTY).effective()).containsKey("spike"));
+        Upgrade inherited = upgrade(SCRUM, addSpike, NONE, EMPTY);
+        clean(inherited);
+        assertTrue(types(inherited.effective()).containsKey("spike"));
         Upgrade u = upgrade(SCRUM, addSpike, patch("{\"itemTypes\": {\"spike\": {\"name\": \"Research spike\"}}}"), EMPTY);
+        clean(u);
         assertEquals("Research spike", TemplateJson.obj(types(u.effective()).get("spike")).get("name"));
         assertTrue(noted(u.notes(), "itemTypes.spike", "template now defines it too"), u::toString);
     }
@@ -410,14 +419,13 @@ class UpgradeTest {
     }
 
     @Test
-    @DisplayName("the upgraded delta, written over the new version, is accepted: an upgrade never produces a delta its own write would refuse")
+    @DisplayName("over a template parent, the upgraded delta is one DeltaWriter.write over the new version accepts")
     void upgradedDeltaIsWritable() {
         for (Map<String, Object> delta : List.of(REFINED, REVIEW, DROP_BACKLOG, TOMB_REVIEW, REORDER)) {
             Upgrade u = upgrade(SCRUM, DROP_REVIEW, delta, EMPTY);
-            if (u.ok()) {
-                assertTrue(DeltaWriter.write(DROP_REVIEW, u.delta(), u.delta(), EMPTY).ok(), u::toString);
-                assertEquals(u.effective(), eff(DROP_REVIEW, u.delta()));
-            }
+            clean(u);
+            assertTrue(DeltaWriter.write(DROP_REVIEW, u.delta(), u.delta(), EMPTY).ok(), u::toString);
+            assertEquals(u.effective(), eff(DROP_REVIEW, u.delta()));
         }
     }
 
@@ -428,5 +436,52 @@ class UpgradeTest {
         Map<String, Object> narrowed = TemplateJson.obj(TemplateJson.mergePatch(base, patch("{\"itemTypes\": {\"task\": {\"parents\": [\"story\"]}}}")));
         assertTrue(has(upgrade(base, narrowed, NONE, Map.of("itemTypes.task.parents.bug", 12)).conflicts(), "itemTypes.task.parents", "no longer allows 'bug'"));
         clean(upgrade(base, narrowed, NONE, EMPTY));
+    }
+
+    @Test
+    @DisplayName("notes are in key order: two customised item types the new version removes give the same notes with members reversed")
+    void notesIgnoreMemberOrder() {
+        Map<String, Object> dropBoth = next(SCRUM, "{\"itemTypes\": {\"task\": null, \"bug\": null}}");
+        Map<String, Object> delta = patch("{\"itemTypes\": {\"task\": {\"name\": \"Chore\"}, \"bug\": {\"name\": \"Defect\"}}}");
+        Upgrade u = upgrade(SCRUM, dropBoth, delta, EMPTY);
+        clean(u);
+        assertEquals(List.of("itemTypes.bug", "itemTypes.task"), u.notes().stream().map(Upgrade.Note::field).toList());
+        assertEquals(u, upgrade(SCRUM, dropBoth, reversed(delta), EMPTY));
+    }
+
+    // ---- workspace upgrades between materialised versions ----------------
+
+    @Test
+    @DisplayName("a workspace upgrade refuses a delta that overrides a key the new version locks, at level workspace; plain upgrade would not")
+    void workspaceUpgradeHonoursLocks() {
+        Registry r = Registry.shipped();
+        Map<String, Object> sg = r.res("stage-gate@1");
+        Map<String, Object> unlocked = TemplateJson.obj(TemplateJson.deepCopy(sg));
+        unlocked.remove("locks");
+        unlocked.remove("deliveryGates");
+        Map<String, Object> delta = patch("{\"states\": {\"gate-1\": {\"gate\": {\"approvals\": 3}}}}");
+        assertTrue(upgrade(unlocked, sg, delta, EMPTY).ok());
+        Upgrade u = Upgrade.ofWorkspace(unlocked, sg, delta, EMPTY);
+        assertFalse(u.ok());
+        assertTrue(has(u.conflicts(), TemplateResolver.WORKSPACE, "states.gate-1.gate", "locked by an ancestor template"), u::toString);
+        assertTrue(u.conflicts().stream().allMatch(c -> TemplateResolver.WORKSPACE.equals(c.level())), u::toString);
+    }
+
+    @Test
+    @DisplayName("a clean workspace upgrade yields a delta writeWorkspace accepts over the new version, with that version's locks shown")
+    void workspaceUpgradeIsWritable() {
+        Registry r = Registry.shipped();
+        Map<String, Object> sg = r.res("stage-gate@1");
+        Map<String, Object> renamed = patch("{\"states\": {\"gate-1\": {\"name\": \"Go/kill\"}}}");
+        Upgrade u = Upgrade.ofWorkspace(sg, sg, renamed, EMPTY);
+        clean(u);
+        assertTrue(DeltaWriter.writeWorkspace(sg, u.delta(), u.delta(), EMPTY).ok());
+        assertEquals(sg.get("locks"), u.effective().get("locks"));
+        Map<String, Object> scrum = r.res("scrum@1");
+        Map<String, Object> noBacklog = next(scrum, "{\"states\": {\"backlog\": null}}");
+        noBacklog.put("stateOrder", order(scrum).stream().filter(k -> !k.equals("backlog")).toList());
+        assertEquals(List.of(new Violation("states.backlog", TemplateResolver.WORKSPACE, "still used by 2 item(s); move or retype them first")),
+                Upgrade.ofWorkspace(scrum, noBacklog, NONE, Map.of("states.backlog", 2)).conflicts());
+        clean(Upgrade.ofWorkspace(scrum, noBacklog, NONE, EMPTY));
     }
 }
