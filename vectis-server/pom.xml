@@ -66,7 +66,8 @@
         API share one origin. `npm run build` in web/ must run first; the image
         pipeline (native-deploy.yml) does that before `mvn package`. With no
         web/dist (a plain JVM test run) this copies nothing and the server tests
-        use their own fixture shell.
+        use their own fixture shell. A stale local web/dist ships unless rebuilt
+        or cleaned; CI always builds it fresh.
       -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
