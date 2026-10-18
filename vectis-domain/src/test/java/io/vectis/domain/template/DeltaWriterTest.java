@@ -52,7 +52,7 @@ class DeltaWriterTest {
     @DisplayName("I6 remove an item type still used by items: rejected")
     void i6() {
         List<Violation> v = DeltaWriter.write(SCRUM, NONE, REVIEW, Map.of("itemTypes.bug", 3)).violations();
-        assertTrue(has(v, "itemTypes.bug: still used by 3"), v::toString);
+        assertTrue(has(v, "itemTypes.bug", "still used by 3"), v::toString);
     }
 
     @Test
@@ -68,7 +68,7 @@ class DeltaWriterTest {
         assertTrue(DeltaWriter.write(SCRUM, DROP_BACKLOG, DROP_BACKLOG, Map.of("states.backlog", 12)).ok());
         assertTrue(DeltaWriter.write(SCRUM, REFINED, NONE, Map.of("states.refined", 0)).ok());
         assertTrue(has(DeltaWriter.write(SCRUM, REFINED, NONE, Map.of("states.refined", 1)).violations(),
-                "states.refined: still used by 1"));
+                "states.refined", "still used by 1"));
     }
 
     @Test
@@ -76,8 +76,8 @@ class DeltaWriterTest {
     void removalsOnlyOnAResolvingDelta() {
         List<Violation> v = DeltaWriter.write(SCRUM, NONE, patch("{\"states\": {\"backlog\": null, \"todo\": 5}}"),
                 Map.of("states.backlog", 12)).violations();
-        assertTrue(has(v, "states.todo: must be an object"), v::toString);
-        assertFalse(has(v, "still used by"), v::toString);
+        assertTrue(has(v, "states.todo", "must be an object"), v::toString);
+        assertTrue(v.stream().noneMatch(x -> x.message().contains("still used by")), v::toString);
     }
 
     @Test
@@ -111,7 +111,7 @@ class DeltaWriterTest {
         Map<String, Object> base = TemplateHierarchy.strip(SHIPPED.res("scrum@1"));
         Map<String, Object> narrowed = patch("{\"itemTypes\": {\"task\": {\"parents\": [\"story\"]}}}");
         List<Violation> v = DeltaWriter.write(base, NONE, narrowed, Map.of("itemTypes.task.parents.bug", 12)).violations();
-        assertTrue(has(v, "itemTypes.task.parents: no longer allows 'bug' while 12 task item(s) sit under one"), v::toString);
+        assertTrue(has(v, "itemTypes.task.parents", "no longer allows 'bug' while 12 task item(s) sit under one"), v::toString);
         assertTrue(DeltaWriter.write(base, NONE, narrowed, EMPTY).ok());
     }
 
@@ -124,7 +124,7 @@ class DeltaWriterTest {
         assertTrue(v.contains(new Violation("states.gate-1.gate", TemplateResolver.WORKSPACE,
                 "locked by an ancestor template ('states.gate-1.gate')")), v::toString);
         assertTrue(has(DeltaWriter.writeWorkspace(stageGate, NONE, patch("{\"states\": {\"gate-1\": null}}"), EMPTY).violations(),
-                "states.gate-1: locked by an ancestor template"));
+                TemplateResolver.WORKSPACE, "states.gate-1", "locked by an ancestor template"));
         Resolution renamed = DeltaWriter.writeWorkspace(stageGate, NONE, patch("{\"states\": {\"gate-1\": {\"name\": \"Go/kill\"}}}"), EMPTY);
         assertTrue(renamed.ok(), renamed::toString);
         assertEquals("Go/kill", Fixtures.name(renamed.effective(), "gate-1"));
