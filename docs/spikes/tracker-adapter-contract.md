@@ -303,3 +303,14 @@ files through the writer, never around the format's gate.
 2. Three concurrent edits to one item, from the client, from an agent over MCP and from the
    writer, resolve by the same `version` check and the same retry-or-refuse rule, with the
    loser visible as a conflict record and never silently overwritten.
+
+## 10 · Decisions taken (2026-10-21, PO)
+
+1. **Projection ratified.** The files stay authoritative; Vectis is a rebuildable index, and "tracker of record" names the face.
+2. **The format's writer is promoted to the public framework** and runs beside the service as a writer sidecar. Until it lands, file-backed workspaces stay read-only.
+3. **First write-back scope accepted as an increment**: status, sprint and estimate first; title and body next. Nothing in the scope is final; it evolves.
+4. **Conflicts are data hazards and get the canonical solutions, consistently.** Concurrent writers create read-after-write, write-after-write and write-after-read hazards exactly as overlapping instructions do, and the canonical answers (versioning, version checks as interlocks, a serialised commit order, forwarding of pending state to readers, replay of a command against the new base) apply the same way at every writer: the client, the agent surface and the writer itself. Consequence: a both-changed field is detected by version and resolved by refuse-and-replay, never by priority; the "canonical-wins" shortcut of section 2 is withdrawn, and every writer command takes a base precondition.
+5. **Intervals accepted as proposed**, to be tuned on data.
+6. **`SyncConnector` retired as a separate seam.** `BacklogSource` stays; a bidirectional connector is a source with an optional `sink()`, selected by id. The single-active resolution and the no-op fallback go.
+7. **No agent surface until the API is authenticated and stable.** It must not be a way around the authenticated API; the in-process placement remains the shape for when the surface is ratified.
+8. **No renumbering repair for now.** Prevention and detection already exist: the serialised committed counter is made the id policy of every space, this repository's `.vault` copy included, and the format's gate refuses a duplicate on every push. A duplicate can then only enter through a merge of two histories that each passed the gate alone; the repair is a documented manual step, and a tool is built only if that step is ever needed twice.
