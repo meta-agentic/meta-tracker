@@ -17,6 +17,6 @@ Planned records, not yet written:
 - Client store & virtualization.
 - Extension / plugin loading; findings in [`docs/spikes/plugin-loading.md`](../spikes/plugin-loading.md).
 - Multi-tenant isolation & feature gating; drafted in [`docs/spikes/tenant-isolation.md`](../spikes/tenant-isolation.md).
-- Integration & MCP contract.
+- Integration & MCP contract; drafted in [`docs/spikes/tracker-adapter-contract.md`](../spikes/tracker-adapter-contract.md).
 - Query language (open decision OD1).
 - Reporting engine (open decision OD2).
