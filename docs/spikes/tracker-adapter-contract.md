@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Concluded — decisions proposed for the PO; to be lifted into the planned *Integration & MCP contract* record |
+| **Status** | Concluded — decisions taken by the PO on 2026-10-21 and recorded in [ADR-VEC-04](../adr/ADR-VEC-04-integration-contract-and-agent-surface.md) (Proposed) |
 | **Type** | Spike (architect, Extensibility & Data tier), VEC-99 under epic VEC-47. Continues the read-side spike VEC-53 and the read side delivered by VEC-57 |
 | **Requirement** | [ADR-VEC-01](../adr/ADR-VEC-01-product-requirements-and-features.md) **R-INT-2** (bidirectional mapping), **R-INT-3** (agents through the same guardrails), **R-INT-4** (extension interface), **R-CORE-2** (identity), **R-CORE-4** (SSE), **R-CORE-6** (re-keying); **R-SEC-1/2** as constraints |
 | **Inputs** | The SPI as merged (`BacklogSource`, `BacklogSnapshot`, `SourceItem`, `StatusCategory`, `Outcome`), `vectis-connector-vault`, the V3 event write path, the `.vault/` convention ([`.vault/README.md`](../../.vault/README.md)), and a six-lane literature and product survey dated 2026-10-21 (derived-index and GitOps systems, in-repository issue trackers, bidirectional sync products and reconciliation theory, change detection, connector protocols, MCP) |
