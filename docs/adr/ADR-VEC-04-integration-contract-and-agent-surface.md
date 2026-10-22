@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Proposed (PO review pending; the eight underlying decisions were taken by the PO on 2026-10-21) |
+| **Status** | Accepted (2026-10-22, by the PO; the eight underlying decisions were taken by the PO on 2026-10-21) |
 | **Date** | 2026-10-21 |
 | **Deciders** | Product Owner |
 | **Requirement** | [ADR-VEC-01](./ADR-VEC-01-product-requirements-and-features.md) **R-INT-2** (bidirectional mapping), **R-INT-3** (agents through the same guardrails as the UI), **R-INT-4** (extension interface); **R-CORE-2** (identity), **R-CORE-4** (SSE), **R-CORE-6** (re-keying); **R-SEC-1/2** as constraints |
