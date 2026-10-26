@@ -23,6 +23,12 @@
       <groupId>io.vectis</groupId>
       <artifactId>vectis-core</artifactId>
     </dependency>
+    <!-- VEC-101: the server runs on its database. Brings the reactive PostgreSQL
+         pool, the Flyway migrations and the JDBC datasource Flyway needs. -->
+    <dependency>
+      <groupId>io.vectis</groupId>
+      <artifactId>vectis-persistence</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>io.quarkus</groupId>
@@ -55,6 +61,12 @@
     <dependency>
       <groupId>org.testcontainers</groupId>
       <artifactId>testcontainers-junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- VEC-101: a real PostgreSQL for the readiness-with-the-database-down test. -->
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-postgresql</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>
