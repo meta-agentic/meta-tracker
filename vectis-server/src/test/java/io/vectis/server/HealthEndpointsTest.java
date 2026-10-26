@@ -1,7 +1,6 @@
 package io.vectis.server;
 
 import io.quarkus.test.junit.QuarkusTest;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -14,7 +13,8 @@ import static org.hamcrest.Matchers.startsWith;
 /**
  * VEC-88: the three probes {@code deploy/k8s/base} calls answer 200 with the
  * standard SmallRye JSON, and the SPA history fallback never turns them into
- * the shell, even for a browser's {@code Accept: text/html}. They are public:
+ * the shell, even for a browser's {@code Accept: text/html}. The database is off in this
+ * test (see {@code application.properties}); {@link DatabaseHealthTest} covers it on. They are public:
  * the server has no authentication yet, and VEC-35 keeps these paths open.
  */
 @QuarkusTest
@@ -48,21 +48,5 @@ class HealthEndpointsTest {
             .then()
                 .statusCode(200)
                 .contentType(not(startsWith("text/html")));
-    }
-
-    @Test
-    void failingReadinessAnswers503WhileLivenessStays200() {
-        ToggledReadiness.DEPENDENCY_UP.set(false);
-        try {
-            given().accept("application/json").when().get("/q/health/ready")
-                .then().statusCode(503).body("status", equalTo("DOWN"));
-            given().accept("application/json").when().get("/q/health/live")
-                .then().statusCode(200).body("status", equalTo("UP"));
-            given().accept("application/json").when().get("/q/health/started")
-                .then().statusCode(200);
-        } finally {
-            ToggledReadiness.DEPENDENCY_UP.set(true);
-        }
-        given().accept("application/json").when().get("/q/health/ready").then().statusCode(200);
     }
 }
