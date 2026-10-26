@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Proposed |
+| **Status** | Accepted (2026-10-26, by the PO), with the [amendment of the same date](#amendment-2026-10-26-decisions-taken-with-the-po): D3, D4, D8 and D9 are amended and prerequisite U2 is reversed. The findings and the rest of the decision stand |
 | **Type** | ADR from spike VEC-77 (Core IAM tier); the evidence is the prototype in [`docs/spikes/session-model/`](../spikes/session-model/) |
 | **Sprint** | VEC-S5 |
 | **Requirement** | [ADR-VEC-01](./ADR-VEC-01-product-requirements-and-features.md) **R-SEC-1** (multi-tenant OIDC with federated IdPs; client-managed Authorization Code + PKCE; the backend is a pure resource server) and **R-SEC-2** (tenant isolation fails closed) |
@@ -103,6 +103,18 @@ by script, the tenant resolved fail-closed, and bearer access kept for agents an
    shares one encryption key from a Kubernetes Secret (≥ 32 characters), with split token cookies
    (`q_session`, `q_session_at`, `q_session_rt`). Rotating the key signs every user out once.
    That is accepted, since Quarkus holds one key.
+
+## Amendment 2026-10-26: decisions taken with the PO
+
+The decisions below were taken one at a time on 2026-10-26. They change four of the original decisions and one provider prerequisite, because the provider has moved since the spike: it now hosts its own sign-in page, it has keyless client authentication, and its end-session logout is planned. Where this section and the original text differ, **this section governs**. The findings F1 to F12 remain the evidence for what the provider did when they were measured.
+
+1. **D3 amended: the provider's hosted sign-in page.** Vectis serves no password page. A caller with no session is sent through the code flow, and the provider answers `/authorize` without a session by sending the browser to its own `/signin`, which collects the credential and returns a code to the exact registered redirect URI. The minimal Vectis `/signin`, its strict-CSP page and the gate workaround for F1 are dropped. Vectis's gate still sends an unauthenticated caller to its protected entry point `/auth/start`, which starts the code flow. This needs the provider's page live on the identity origin before sign-in can be checked end to end.
+2. **D4 re-read.** The same-site rule existed so that the cross-origin credential `POST` could set the provider's `SameSite=Strict` session cookie (F1). With the hosted page the credential is typed on the provider's own origin in a top-level navigation, so the rule is no longer required by the flow. Custom domains remain advisable for cookies and branding, but the deployment is not forced under one registrable domain.
+3. **D9 amended: the provider is the authority, cookies are the transport.** Vectis keeps no server-side session. The encrypted `HttpOnly; Secure` cookies only carry the tokens. Vectis refreshes through the provider, so a revoke or an expiry at the provider ends the Vectis session within about one access-token lifetime (5 minutes). The absolute cap of D8 stays tied to the provider's login session. Instant revocation of a single session waits for the provider's end-session endpoint; a session store behind a port may be added later if a need appears. The shared encryption key comes from the platform's secret store (Secret Manager on Cloud Run, a Kubernetes Secret for self-hosters), never from a default.
+4. **U2 reversed: the BFF authenticates with `private_key_jwt` and DPoP.** The server proves itself with a signed assertion from its own key, kept in the secret store; there is no shared client secret and the provider keeps sender-constraint on for every client. The ADR's interim position, a client secret plus the deployment-wide opt-out (`TESSERA_REQUIRE_SENDER_CONSTRAINT=false`), is **not** adopted. It depends on the provider's keyless client authentication (delivered) and its client-authentication hardening (planned).
+5. **D8 amended: sign-out waits for the provider's end-session.** Sign-out is built when the provider publishes RP-initiated logout: Vectis ends its cookie session, revokes the refresh token, and redirects through the provider's `end_session_endpoint`. There is no interim two-step page call. The provider item is filed in the identity space; sign-in work may ship before sign-out and sequencing is a planning decision.
+
+Consequences for the backlog: the sign-in story (VEC-35) loses the Vectis sign-in page and gains DPoP and `private_key_jwt`, so it is re-estimated; its sign-out part is sequenced after the provider's end-session. The rest of the decision, D1, D2, D5, D6 and D7 and the Rules, is unchanged.
 
 ## Rules
 
