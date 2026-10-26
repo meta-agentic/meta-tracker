@@ -44,6 +44,22 @@ jobs:
     name: browser sign-in (Playwright)
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # The server runs on its database (VEC-101): it migrates at start and does not boot
+    # without one. Same image and VECTIS_DB_* contract as jvm-test.yml.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: vectis
+          POSTGRES_PASSWORD: vectis
+          POSTGRES_DB: vectis
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U vectis"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -80,6 +96,12 @@ jobs:
           npm run build
 
       - name: Build and start Vectis
+        env:
+          VECTIS_DB_HOST: localhost
+          VECTIS_DB_PORT: '5432'
+          VECTIS_DB_NAME: vectis
+          VECTIS_DB_USER: vectis
+          VECTIS_DB_PASSWORD: vectis
         run: |
           mvn -B -ntp -pl vectis-server -am package -DskipTests
           nohup java -jar vectis-server/target/quarkus-app/quarkus-run.jar > vectis.log 2>&1 &

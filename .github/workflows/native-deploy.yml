@@ -202,6 +202,14 @@ jobs:
           cp "$runner" deploy/docker/app/application
 
       - name: Smoke-test one origin on the native runner
+        # The runner migrates the database at start and reports it on /q/health/ready
+        # (VEC-101), so it gets the same VECTIS_DB_* contract as the build above.
+        env:
+          VECTIS_DB_HOST: localhost
+          VECTIS_DB_PORT: '5432'
+          VECTIS_DB_NAME: vectis
+          VECTIS_DB_USER: vectis
+          VECTIS_DB_PASSWORD: vectis
         # The JVM tests pin the routing and headers against a fixture shell;
         # this proves the native binary carries the real web/dist and serves it
         # beside the API (VEC-78), and answers the three health probes (VEC-88).
