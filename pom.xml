@@ -39,9 +39,9 @@
     <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
     <quarkus.platform.version>3.40.1.1</quarkus.platform.version>
 
-    <compiler-plugin.version>3.15.0</compiler-plugin.version>
-    <surefire-plugin.version>3.5.5</surefire-plugin.version>
-    <failsafe-plugin.version>3.5.5</failsafe-plugin.version>
+    <compiler-plugin.version>3.16.0</compiler-plugin.version>
+    <surefire-plugin.version>3.6.1</surefire-plugin.version>
+    <failsafe-plugin.version>3.6.1</failsafe-plugin.version>
     <resources-plugin.version>3.5.0</resources-plugin.version>
 
     <skipITs>true</skipITs>
