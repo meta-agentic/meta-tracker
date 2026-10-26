@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Proposed (PO review pending) |
+| **Status** | Accepted (2026-10-26, by the PO). Requirements and their numbers are unchanged since 2026-07-04; the [status update](#status-update-2026-10-26) records what later decisions and code have realised |
 | **Date** | 2026-07-04 |
 | **Deciders** | Product Owner |
 | **Scope** | Community edition requirements & feature model; interface and reporting direction |
@@ -135,6 +135,46 @@ restating their own.
 Community edition (this repository) carries everything above. Enterprise
 operational tooling is out of tree and out of scope here — see
 [Editions](../../README.md#editions).
+
+## Status update (2026-10-26)
+
+Accepted as written: the requirement numbers are stable and backlog items keep citing them. This section records what has happened since the record was proposed. It changes no requirement; where a later accepted ADR supersedes a mechanism clause, the later ADR says so.
+
+### What realises the requirements today
+
+| Requirement | Realised by | State |
+|---|---|---|
+| R-CORE-1 reactive end to end | Reactive persistence slice (VEC-41); readiness on the reactive pool (VEC-101) | In code |
+| R-CORE-2 time-ordered identity | Time-ordered primary-key performance matrix (VEC-9) | Evaluated; the 100,000-write target is not yet re-measured on the persistence slice |
+| R-CORE-3 workflows are data, enforced server-side | [ADR-VEC-03](./ADR-VEC-03-workflow-and-template-model.md) (Accepted); the template resolver, hierarchy, locks, delivery gates and write path in `vectis-domain` (VEC-90, VEC-91, VEC-92) | Domain in code; persistence of templates (VEC-68) is next |
+| R-CORE-4 SSE propagation | Real-time transport spike (VEC-46) and the event write path (VEC-73) | Write path in code; transport decision record still Proposed |
+| R-CORE-5 template to instance | ADR-VEC-03 (the N-level hierarchy generalises the two-level model) and the template-instance spike (VEC-45) | Decided and in the domain model; workspaces reference a template once VEC-68 lands |
+| R-UX-4, R-UX-5 virtualization, instant navigation | Dual-axis profiling (VEC-21), store layering (VEC-20), tree explorer (VEC-22), ledger and roadmap canvas (VEC-23) | Spikes and first screens delivered |
+| R-UX-7 theming and localization | Localization and theme provider framework (VEC-34) | Delivered |
+| R-INT-1 streaming import | Vault import, read side (VEC-57) | Partial: read side only |
+| R-INT-2, R-INT-3 mapping and agent surface | [ADR-VEC-04](./ADR-VEC-04-integration-contract-and-agent-surface.md) (Accepted 2026-10-22): the tracker adapter contract, write-back through the format's writer, the agent surface under the same guardrails | Decided; adapters not yet built |
+| R-INT-4 extension interface | Plugin-loading architecture (VEC-13), [`docs/spikes/plugin-loading.md`](../spikes/plugin-loading.md) | Decided in the spike; no plugin shipped yet |
+| R-SEC-1 OIDC, PKCE | [ADR-VEC-02](./ADR-VEC-02-identity-and-auth.md) (Proposed): a browser session through the backend replaces the "client-managed, pure resource server" mechanism; the intent is unchanged | Decision pending acceptance |
+| R-SEC-2 fail-closed tenant isolation | Tenant-isolation blueprint (VEC-14); row-level security policies are a separate item (VEC-80) | Blueprint only; not yet enforced in the schema |
+| R-UX-1, R-UX-2, R-UX-3, R-UX-6, R-REP-1 to R-REP-7, R-CORE-6 | Nothing yet | Not started |
+
+### Open decisions, as of today
+
+| # | Status |
+|---|---|
+| **OD1** query language | Open. Needs its spike and follow-on ADR. |
+| **OD2** report computation model | Open. Needs its spike and follow-on ADR. |
+| **OD3** widget and plugin coupling | Resolved in principle by the plugin-loading spike (VEC-13). The widget contract is specified when the first dashboard widget is built. |
+| **OD4** time tracking in or out of Community scope | Open. A PO decision. |
+| **OD5** saved-search, report and dashboard permission model | Folded into ADR-VEC-02, as planned. Open until that ADR is accepted. |
+
+### Follow-on ADRs: what exists
+
+Workflow and template model: ADR-VEC-03, Accepted. Integration and agent surface: ADR-VEC-04, Accepted. Identity and auth: ADR-VEC-02, Proposed. Still to be written: real-time transport (spike VEC-46), client store and virtualization, extension loading, multi-tenant isolation and feature gating, query language (OD1), reporting engine (OD2).
+
+### Deployment
+
+The requirements do not fix a deployment target. The Community edition runs as a container; for now the project's own instance is planned on Cloud Run (VEC-102), and the Kubernetes manifests under `deploy/` stay as reference material for self-hosters until the cost and need of a cluster are assessed (VEC-103).
 
 ## Open decisions
 
