@@ -32,6 +32,12 @@
       <groupId>io.quarkus</groupId>
       <artifactId>quarkus-rest-jackson</artifactId>
     </dependency>
+    <!-- VEC-88: /q/health/{started,ready,live}, the probes deploy/k8s/base calls.
+         Version from the Quarkus BOM. -->
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-smallrye-health</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>io.quarkus</groupId>

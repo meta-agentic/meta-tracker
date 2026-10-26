@@ -204,7 +204,7 @@ jobs:
       - name: Smoke-test one origin on the native runner
         # The JVM tests pin the routing and headers against a fixture shell;
         # this proves the native binary carries the real web/dist and serves it
-        # beside the API (VEC-78).
+        # beside the API (VEC-78), and answers the three health probes (VEC-88).
         run: |
           set -euo pipefail
           ./deploy/docker/app/application -Dquarkus.http.port=8080 > runner.log 2>&1 &
@@ -223,6 +223,11 @@ jobs:
           check "GET /api/unknown status" 404 "$(code /api/unknown)"
           check "GET $asset status" 200 "$(code "$asset")"
           check "GET $asset cache" "public, max-age=31536000, immutable" "$(header "$asset" cache-control)"
+          # VEC-88: the probes deploy/k8s/base calls, never answered with the shell.
+          for probe in started ready live; do
+            check "GET /q/health/$probe status" 200 "$(code /q/health/$probe)"
+            check "GET /q/health/$probe is JSON, not the shell" 0 "$(curl -s -H 'Accept: text/html' http://localhost:8080/q/health/$probe | grep -c 'id="root"')"
+          done
 
       - name: Upload staged runner
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
