@@ -169,6 +169,23 @@ class TemplateMigrationTest {
     }
 
     @Test
+    void aPublishedBuiltInWhoseStoredResolutionDiffersFailsTheSeedingAndWritesNothing() throws SQLException {
+        try (Connection c = inAppSchema(); Statement st = c.createStatement()) {
+            // Only a test may get past the immutability trigger, inside a transaction it rolls back.
+            st.execute("alter table workflow_template_version disable trigger workflow_template_version_immutable");
+            st.executeUpdate("""
+                    update workflow_template_version v set resolved = '{}'::jsonb
+                      from workflow_template t
+                     where t.id = v.template_id and t.tenant_id is null and t.key = 'kanban' and v.version = 1
+                    """);
+            IllegalStateException e = assertThrows(IllegalStateException.class, () -> BuiltInTemplates.seed(c));
+            assertTrue(e.getMessage().contains("kanban@1") && e.getMessage().contains("resolution"), e.getMessage());
+            assertEquals("4", rows(c, BUILT_IN_VERSIONS).getFirst().getFirst());
+            c.rollback();
+        }
+    }
+
+    @Test
     void existingWorkspacesArePinnedToScrumOneAndTheirColumnsKeyedByName() throws SQLException {
         seedV3("""
                 insert into workspace (id, key, name) values
