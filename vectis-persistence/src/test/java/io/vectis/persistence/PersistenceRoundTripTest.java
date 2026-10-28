@@ -29,6 +29,8 @@ import org.junit.jupiter.api.Test;
 @QuarkusTest
 class PersistenceRoundTripTest {
 
+    private static final TemplateRef SCRUM = TemplateRef.parse("scrum@1");
+
     private static final AtomicInteger KEY_SEQ = new AtomicInteger();
 
     @Inject WorkspaceRepository workspaces;
@@ -39,15 +41,16 @@ class PersistenceRoundTripTest {
     /** Workspace keys are globally unique, so each test mints its own. */
     private Workspace newWorkspace() {
         String suffix = Integer.toString(KEY_SEQ.incrementAndGet());
-        return workspaces.insert(Workspace.create("WS" + suffix, "Workspace " + suffix))
+        return workspaces.provision(Workspace.create("WS" + suffix, "Workspace " + suffix), null, SCRUM, null)
+                .map(ProvisionedWorkspace::workspace)
                 .await().indefinitely();
     }
 
     private Board newBoard(Workspace ws) {
         Board board = Board.create(ws.id(), "Delivery", List.of(
-                BoardColumn.create("Backlog", 0),
-                BoardColumn.create("In Progress", 1),
-                BoardColumn.create("Done", 2)));
+                BoardColumn.create("backlog", "Backlog", 0),
+                BoardColumn.create("in-progress", "In Progress", 1),
+                BoardColumn.create("done", "Done", 2)));
         return boards.insert(board).await().indefinitely();
     }
 

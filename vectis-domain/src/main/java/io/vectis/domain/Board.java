@@ -28,6 +28,10 @@ public record Board(UUID id, UUID workspaceId, String name, List<BoardColumn> co
         if (distinctPositions != columns.size()) {
             throw new IllegalArgumentException("board columns must have distinct positions: " + columns);
         }
+        long distinctKeys = columns.stream().map(BoardColumn::key).distinct().count();
+        if (distinctKeys != columns.size()) {
+            throw new IllegalArgumentException("board columns must have distinct keys: " + columns);
+        }
     }
 
     public static Board create(UUID workspaceId, String name, List<BoardColumn> columns) {

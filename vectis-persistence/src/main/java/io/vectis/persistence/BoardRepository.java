@@ -4,6 +4,7 @@ import io.smallrye.mutiny.Uni;
 import io.vectis.domain.Board;
 import io.vectis.domain.BoardColumn;
 import io.vertx.mutiny.sqlclient.Pool;
+import io.vertx.mutiny.sqlclient.SqlClient;
 import io.vertx.mutiny.sqlclient.Tuple;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.util.ArrayList;
@@ -29,22 +30,28 @@ public class BoardRepository {
      * commit or fail together.
      */
     public Uni<Board> insert(Board board) {
-        return pool.withTransaction(conn -> conn.preparedQuery(
-                        "insert into board (id, workspace_id, name) values ($1, $2, $3)")
+        return pool.withTransaction(conn -> insert(conn, board));
+    }
+
+    /** Inserts the board and its columns on {@code conn}, inside the caller's transaction. */
+    static Uni<Board> insert(SqlClient conn, Board board) {
+        return conn.preparedQuery("insert into board (id, workspace_id, name) values ($1, $2, $3)")
                 .execute(Tuple.of(board.id(), board.workspaceId(), board.name()))
                 .chain(ignored -> {
                     List<Tuple> columns = board.orderedColumns().stream()
-                            .map(c -> Tuple.of(c.id(), board.id(), c.name(), c.position()))
+                            .map(c -> Tuple.of(c.id(), board.id(), c.key(), c.name(), c.position(), c.onBoard()))
                             .toList();
                     if (columns.isEmpty()) {
                         return Uni.createFrom().voidItem();
                     }
-                    return conn.preparedQuery(
-                                    "insert into board_column (id, board_id, name, ordinal) values ($1, $2, $3, $4)")
+                    return conn.preparedQuery("""
+                                    insert into board_column (id, board_id, key, name, ordinal, on_board)
+                                    values ($1, $2, $3, $4, $5, $6)
+                                    """)
                             .executeBatch(columns)
                             .replaceWithVoid();
                 })
-                .replaceWith(board));
+                .replaceWith(board);
     }
 
     /** A board with its columns already in display order, or empty if unknown. */
@@ -54,8 +61,10 @@ public class BoardRepository {
                                b.workspace_id as workspace_id,
                                b.name         as board_name,
                                c.id           as column_id,
+                               c.key          as column_key,
                                c.name         as column_name,
-                               c.ordinal      as column_ordinal
+                               c.ordinal      as column_ordinal,
+                               c.on_board     as column_on_board
                           from board b
                           left join board_column c on c.board_id = b.id
                          where b.id = $1
@@ -74,8 +83,9 @@ public class BoardRepository {
                         name = row.getString("board_name");
                         UUID columnId = row.getUUID("column_id");
                         if (columnId != null) { // left join: a column-less board yields one null row
-                            columns.add(new BoardColumn(
-                                    columnId, row.getString("column_name"), row.getInteger("column_ordinal")));
+                            columns.add(new BoardColumn(columnId, row.getString("column_key"),
+                                    row.getString("column_name"), row.getInteger("column_ordinal"),
+                                    row.getBoolean("column_on_board")));
                         }
                     }
                     return Optional.of(new Board(id, workspaceId, name, columns));

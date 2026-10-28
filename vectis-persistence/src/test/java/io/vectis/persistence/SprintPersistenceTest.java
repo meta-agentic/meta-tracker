@@ -27,6 +27,8 @@ import org.junit.jupiter.api.Test;
 @QuarkusTest
 class SprintPersistenceTest {
 
+    private static final TemplateRef SCRUM = TemplateRef.parse("scrum@1");
+
     private static final AtomicInteger KEY_SEQ = new AtomicInteger();
 
     @Inject WorkspaceRepository workspaces;
@@ -36,15 +38,16 @@ class SprintPersistenceTest {
 
     private Workspace newWorkspace() {
         String suffix = Integer.toString(KEY_SEQ.incrementAndGet());
-        return workspaces.insert(Workspace.create("SP" + suffix, "Workspace " + suffix))
+        return workspaces.provision(Workspace.create("SP" + suffix, "Workspace " + suffix), null, SCRUM, null)
+                .map(ProvisionedWorkspace::workspace)
                 .await().indefinitely();
     }
 
     private Board newBoard(Workspace ws) {
         Board board = Board.create(ws.id(), "Delivery", List.of(
-                BoardColumn.create("Backlog", 0),
-                BoardColumn.create("In Progress", 1),
-                BoardColumn.create("Done", 2)));
+                BoardColumn.create("backlog", "Backlog", 0),
+                BoardColumn.create("in-progress", "In Progress", 1),
+                BoardColumn.create("done", "Done", 2)));
         return boards.insert(board).await().indefinitely();
     }
 
