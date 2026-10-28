@@ -72,7 +72,7 @@ What the import does, and does not:
 - It only reads: nothing is written to `.vault/`. An item deleted from the vault is not deleted from the board, and a card moved on the board is moved back by the next import.
 - There is no sign-in yet (VEC-35), so do not switch the import on for a server that others can reach.
 
-Native image: the connector parses front-matter with SnakeYAML. Whether that parser works inside the native executable is not verified: the import has been run on the JVM only, and nothing in CI runs the native executable against a vault. The import is off unless `vectis.import.vault.root` is set, so the native image the pipeline builds does not use it.
+Native image: the connector parses front-matter with SnakeYAML. Whether that parser works inside the native executable is not verified: the import has been run on the JVM only, and nothing in CI runs the native executable against a vault. The import is off unless `vectis.import.vault.root` is set, so the native image the pipeline builds does not use it, but its code is compiled into the image, and the first native build with it failed on `TimeOrderedId`, whose `SecureRandom` was initialized at build time; `vectis-domain` now declares that class run-time initialized in `META-INF/native-image`.
 
 ### Principles
 
