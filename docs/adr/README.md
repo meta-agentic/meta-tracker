@@ -10,6 +10,7 @@ A decision usually starts as a spike document in [`docs/spikes/`](../spikes/) wr
 | [ADR-VEC-02](./ADR-VEC-02-identity-and-auth.md) | Identity & auth: the browser session model | Accepted (2026-10-26), amended |
 | [ADR-VEC-03](./ADR-VEC-03-workflow-and-template-model.md) | Workflow and template model | Accepted (2026-10-07) |
 | [ADR-VEC-04](./ADR-VEC-04-integration-contract-and-agent-surface.md) | Integration contract: backlog projection, write-back through the format's writer, agent surface | Accepted (2026-10-22) |
+| [ADR-VEC-05](./ADR-VEC-05-api-v1-conventions.md) | The `/api/v1` conventions: one problem shape, status codes, keys in paths, revisions as ETags | Proposed (2026-10-28) |
 
 Planned records, not yet written:
 
