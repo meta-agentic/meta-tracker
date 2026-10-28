@@ -35,6 +35,8 @@ import org.junit.jupiter.api.Test;
 @QuarkusTest
 class SprintConstraintTest {
 
+    private static final TemplateRef SCRUM = TemplateRef.parse("scrum@1");
+
     private static final AtomicInteger KEY_SEQ = new AtomicInteger();
 
     @Inject WorkspaceRepository workspaces;
@@ -46,14 +48,15 @@ class SprintConstraintTest {
     /** A distinct key prefix: workspace keys are globally unique across the suite. */
     private Workspace newWorkspace() {
         String suffix = Integer.toString(KEY_SEQ.incrementAndGet());
-        return workspaces.insert(Workspace.create("SC" + suffix, "Workspace " + suffix))
+        return workspaces.provision(Workspace.create("SC" + suffix, "Workspace " + suffix), null, SCRUM, null)
+                .map(ProvisionedWorkspace::workspace)
                 .await().indefinitely();
     }
 
     private Board newBoard(Workspace ws) {
         return boards.insert(Board.create(ws.id(), "Delivery", List.of(
-                        BoardColumn.create("Backlog", 0),
-                        BoardColumn.create("Done", 1))))
+                        BoardColumn.create("backlog", "Backlog", 0),
+                        BoardColumn.create("done", "Done", 1))))
                 .await().indefinitely();
     }
 
