@@ -1,4 +1,4 @@
-export { ApiError, isRetryable, type ApiErrorKind } from "./errors";
+export { ApiError, isRetryable, type ApiErrorKind, type Problem } from "./errors";
 export {
   DEFAULT_BASE_URL,
   DEFAULT_TIMEOUT_MS,
@@ -11,6 +11,7 @@ export {
   createWorkspaceApiClient,
   createWorkspaceApiClientFromEnv,
   fetchWorkspaceSnapshot,
+  ITEM_PAGE_SIZE,
   type ClientOptions,
   type WorkspaceApiClient,
 } from "./client";
@@ -24,7 +25,9 @@ export type {
   WireBoard,
   WireBoardColumn,
   WireItem,
+  WireItemPage,
   WireJsonValue,
+  WireTemplateRef,
   WireWorkspace,
 } from "./wire";
 export {

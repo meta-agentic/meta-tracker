@@ -10,17 +10,55 @@ import {
 const base = { workspace: workspaceFixture, boards: [boardFixture] };
 
 describe("toWorkspaceSnapshot", () => {
-  it("orders board columns by position and projects position to order", () => {
+  it("keys each column by its column key, in ordinal order, with the ordinal as its order", () => {
     const { boards } = toWorkspaceSnapshot({ ...base, items: [] });
 
     expect(boards).toHaveLength(1);
-    expect(boards[0].columns.map((c) => c.id)).toEqual(["col-todo", "col-doing"]);
-    expect(boards[0].columns.map((c) => c.order)).toEqual([0, 1]);
+    expect(boards[0].columns).toEqual([
+      { id: "todo", name: "To Do", order: 0 },
+      { id: "doing", name: "In Progress", order: 1 },
+    ]);
   });
 
-  it("takes the board key from the workspace, which is what mints item keys", () => {
-    const { boards } = toWorkspaceSnapshot({ ...base, items: [] });
-    expect(boards[0].key).toBe("VEC");
+  it("keys a board by its own key, and a second board by its own", () => {
+    const second = { ...boardFixture, key: "VEC-2", name: "Platform" };
+    const { boards } = toWorkspaceSnapshot({ ...base, boards: [boardFixture, second], items: [] });
+    expect(boards.map((b) => [b.id, b.key, b.name])).toEqual([
+      ["VEC", "VEC", "Delivery"],
+      ["VEC-2", "VEC-2", "Platform"],
+    ]);
+  });
+
+  it("places an item in the column and on the board its keys name", () => {
+    const second = { ...boardFixture, key: "VEC-2", name: "Platform" };
+    const { issues } = toWorkspaceSnapshot({
+      ...base,
+      boards: [boardFixture, second],
+      items: [
+        itemFixture({ key: "VEC-7", column: "doing" }),
+        itemFixture({ key: "VEC-8", board: "VEC-2", column: "todo" }),
+      ],
+    });
+
+    expect(issues.map((i) => [i.id, i.boardId, i.columnId])).toEqual([
+      ["VEC-7", "VEC", "doing"],
+      ["VEC-8", "VEC-2", "todo"],
+    ]);
+  });
+
+  it("leaves a column that is not on the board off it, and keeps its items as issues", () => {
+    const withBacklog = {
+      ...boardFixture,
+      columns: [...boardFixture.columns, { key: "backlog", name: "Backlog", ordinal: 2, onBoard: false }],
+    };
+    const { boards, issues } = toWorkspaceSnapshot({
+      ...base,
+      boards: [withBacklog],
+      items: [itemFixture({ key: "VEC-9", column: "backlog" })],
+    });
+
+    expect(boards[0].columns.map((c) => c.id)).toEqual(["todo", "doing"]);
+    expect(issues.map((i) => [i.id, i.columnId])).toEqual([["VEC-9", "backlog"]]);
   });
 
   it("lifts items marked as epics out of the issue list", () => {
@@ -30,9 +68,9 @@ describe("toWorkspaceSnapshot", () => {
     });
 
     expect(epics).toEqual([
-      { id: "epic-1", key: "VEC-1", title: "Client shell", color: "#123456" },
+      { id: "VEC-1", key: "VEC-1", title: "Client shell", color: "#123456" },
     ]);
-    expect(issues.map((i) => i.id)).toEqual(["item-1"]);
+    expect(issues.map((i) => i.id)).toEqual(["VEC-2"]);
   });
 
   it("falls back to a stable colour for an epic that stores none", () => {
@@ -48,56 +86,57 @@ describe("toWorkspaceSnapshot", () => {
     const { issues } = toWorkspaceSnapshot({
       ...base,
       items: [
-        itemFixture({ id: "c", key: "VEC-5", rank: "z" }),
-        itemFixture({ id: "a", key: "VEC-3", rank: "b" }),
-        itemFixture({ id: "b", key: "VEC-4", rank: "n" }),
-        itemFixture({ id: "d", key: "VEC-6", rank: "b", columnId: "col-doing" }),
+        // Newest first, as the server sends them: response order is not rank order.
+        itemFixture({ key: "VEC-6", rank: "b", column: "doing" }),
+        itemFixture({ key: "VEC-5", rank: "z" }),
+        itemFixture({ key: "VEC-4", rank: "n" }),
+        itemFixture({ key: "VEC-3", rank: "b" }),
       ],
     });
 
     const byId = new Map(issues.map((i) => [i.id, i]));
-    expect(byId.get("a")?.order).toBe(0);
-    expect(byId.get("b")?.order).toBe(1);
-    expect(byId.get("c")?.order).toBe(2);
+    expect(byId.get("VEC-3")?.order).toBe(0);
+    expect(byId.get("VEC-4")?.order).toBe(1);
+    expect(byId.get("VEC-5")?.order).toBe(2);
     // A different column restarts the dense index.
-    expect(byId.get("d")?.order).toBe(0);
+    expect(byId.get("VEC-6")?.order).toBe(0);
   });
 
   it("breaks a rank tie on the key, not on the response order", () => {
     const forwards = toWorkspaceSnapshot({
       ...base,
       items: [
-        itemFixture({ id: "x", key: "VEC-9", rank: "m" }),
-        itemFixture({ id: "y", key: "VEC-8", rank: "m" }),
+        itemFixture({ key: "VEC-9", rank: "m" }),
+        itemFixture({ key: "VEC-8", rank: "m" }),
       ],
     });
     const backwards = toWorkspaceSnapshot({
       ...base,
       items: [
-        itemFixture({ id: "y", key: "VEC-8", rank: "m" }),
-        itemFixture({ id: "x", key: "VEC-9", rank: "m" }),
+        itemFixture({ key: "VEC-8", rank: "m" }),
+        itemFixture({ key: "VEC-9", rank: "m" }),
       ],
     });
 
     const order = (s: typeof forwards) =>
       new Map(s.issues.map((i) => [i.id, i.order]));
-    expect(order(forwards).get("y")).toBe(0);
+    expect(order(forwards).get("VEC-8")).toBe(0);
     expect(order(forwards)).toEqual(order(backwards));
   });
 
-  it("links an issue to its parent epic and drops a dangling parent", () => {
+  it("links an issue to its parent epic by key and drops a dangling parent", () => {
     const { issues } = toWorkspaceSnapshot({
       ...base,
       items: [
         epicItemFixture,
-        itemFixture({ id: "linked", key: "VEC-3", fields: { parentId: "epic-1" } }),
-        itemFixture({ id: "orphan", key: "VEC-4", fields: { parentId: "epic-404" } }),
+        itemFixture({ key: "VEC-3", fields: { parentId: "VEC-1" } }),
+        itemFixture({ key: "VEC-4", fields: { parentId: "VEC-404" } }),
       ],
     });
 
     const byId = new Map(issues.map((i) => [i.id, i]));
-    expect(byId.get("linked")?.epicId).toBe("epic-1");
-    expect(byId.get("orphan")?.epicId).toBeNull();
+    expect(byId.get("VEC-3")?.epicId).toBe("VEC-1");
+    expect(byId.get("VEC-4")?.epicId).toBeNull();
   });
 
   it("reads schedule and estimate out of the open field document", () => {
@@ -188,7 +227,7 @@ describe("toWorkspaceSnapshot", () => {
   it("drops an item whose board the payload does not carry", () => {
     const { issues } = toWorkspaceSnapshot({
       ...base,
-      items: [itemFixture({ id: "elsewhere", boardId: "board-absent" })],
+      items: [itemFixture({ key: "VEC-3", board: "ABSENT" })],
     });
 
     expect(issues).toHaveLength(0);
