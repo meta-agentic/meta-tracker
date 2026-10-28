@@ -35,7 +35,14 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public final class TimeOrderedId {
 
-    private static final SecureRandom RANDOM = new SecureRandom();
+    /**
+     * The generator is created on the first identifier, not with the class: a native image would
+     * otherwise carry a {@code SecureRandom} and its seed built at image-build time, which
+     * native-image refuses.
+     */
+    private static final class Entropy {
+        static final SecureRandom RANDOM = new SecureRandom();
+    }
 
     /** {@code rand_a} is 12 bits, so the counter saturates at 4095. */
     private static final int COUNTER_MAX = 0xFFF;
@@ -70,7 +77,7 @@ public final class TimeOrderedId {
 
             if (now > prevMillis) {
                 // New millisecond: reseed the counter in the low half of its range.
-                counter = RANDOM.nextInt(COUNTER_MAX >>> 1);
+                counter = Entropy.RANDOM.nextInt(COUNTER_MAX >>> 1);
                 millis = now;
             } else {
                 // Same millisecond (or a clock that stepped backwards): keep climbing.
@@ -95,7 +102,7 @@ public final class TimeOrderedId {
                 | (0x7L << 12)                          // version 7
                 | (counter & 0xFFFL);                   // rand_a as monotonic counter
 
-        long lsb = RANDOM.nextLong();
+        long lsb = Entropy.RANDOM.nextLong();
         lsb &= 0x3FFF_FFFF_FFFF_FFFFL;                  // clear the two variant bits
         lsb |= 0x8000_0000_0000_0000L;                  // RFC 9562 variant b10
 
