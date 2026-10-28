@@ -12,6 +12,7 @@ import {
   createGate,
   createRecordedTransport,
   itemFixture,
+  itemPage,
   snapshotRecording,
   workspaceFixture,
   type Recording,
@@ -67,8 +68,8 @@ describe("useWorkspaceSync", () => {
     expect(Object.keys(store.getState().boardsById)).toHaveLength(0);
 
     await waitFor(() => expect(view.result.current.status).toBe("ready"));
-    expect(Object.keys(store.getState().boardsById)).toEqual(["board-1"]);
-    expect(store.getState().activeBoardId).toBe("board-1");
+    expect(Object.keys(store.getState().boardsById)).toEqual(["VEC"]);
+    expect(store.getState().activeBoardId).toBe("VEC");
     expect(view.result.current.error).toBeNull();
   });
 
@@ -77,7 +78,7 @@ describe("useWorkspaceSync", () => {
     const cache = new MemoryCache();
     await warmCache(cache, snapshotOf());
 
-    const fresh = [itemFixture(), itemFixture({ id: "item-2", key: "VEC-3", rank: "n" })];
+    const fresh = [itemFixture(), itemFixture({ key: "VEC-3", rank: "n" })];
     // Held open so the in-flight state is observed rather than raced.
     const gate = createGate();
     const { store, view } = renderSync(cache, {
@@ -88,12 +89,12 @@ describe("useWorkspaceSync", () => {
     // The cache read lands before the network answers, and the status says so:
     // there is already something on screen.
     await waitFor(() => expect(view.result.current.status).toBe("revalidating"));
-    expect(Object.keys(store.getState().issuesById)).toEqual(["item-1"]);
+    expect(Object.keys(store.getState().issuesById)).toEqual(["VEC-2"]);
 
     gate.release();
 
     await waitFor(() => expect(view.result.current.status).toBe("ready"));
-    expect(Object.keys(store.getState().issuesById)).toEqual(["item-1", "item-2"]);
+    expect(Object.keys(store.getState().issuesById)).toEqual(["VEC-2", "VEC-3"]);
   });
 
   it("leaves an active board that still exists alone, so no React key changes", async () => {
@@ -105,7 +106,7 @@ describe("useWorkspaceSync", () => {
     // Read after the cache lands, which is where the active board comes from.
     await waitFor(() => expect(store.getState().hydrated).toBe(true));
     const before = store.getState().activeBoardId;
-    expect(before).toBe("board-1");
+    expect(before).toBe("VEC");
 
     await waitFor(() => expect(view.result.current.status).toBe("ready"));
     expect(store.getState().activeBoardId).toBe(before);
@@ -119,7 +120,7 @@ describe("useWorkspaceSync", () => {
     const { store, view } = renderSync(cache, snapshotRecording());
     await waitFor(() => expect(view.result.current.status).toBe("ready"));
 
-    expect(store.getState().activeBoardId).toBe("board-1");
+    expect(store.getState().activeBoardId).toBe("VEC");
   });
 
   // AC6
@@ -134,8 +135,8 @@ describe("useWorkspaceSync", () => {
 
     await waitFor(() => expect(view.result.current.status).toBe("stale"));
     // The board is still there. A failed refresh does not blank it.
-    expect(Object.keys(store.getState().boardsById)).toEqual(["board-1"]);
-    expect(Object.keys(store.getState().issuesById)).toEqual(["item-1"]);
+    expect(Object.keys(store.getState().boardsById)).toEqual(["VEC"]);
+    expect(Object.keys(store.getState().issuesById)).toEqual(["VEC-2"]);
     expect(view.result.current.error?.kind).toBe("network");
     expect(view.result.current.canRetry).toBe(true);
   });
@@ -169,7 +170,7 @@ describe("useWorkspaceSync", () => {
 
     await waitFor(() => expect(view.result.current.status).toBe("ready"));
     expect(view.result.current.error).toBeNull();
-    expect(Object.keys(store.getState().boardsById)).toEqual(["board-1"]);
+    expect(Object.keys(store.getState().boardsById)).toEqual(["VEC"]);
   });
 
   it("offers no retry for a misconfiguration, which repeating cannot fix", async () => {
@@ -193,7 +194,7 @@ describe("useWorkspaceSync", () => {
       routes: {
         "/workspaces/VEC": { body: workspaceFixture },
         "/boards": { body: [{ ...boardFixture, columns: "none" }] },
-        "/items": { body: [] },
+        "/items": { body: itemPage([]) },
       },
     });
 

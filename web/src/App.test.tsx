@@ -13,8 +13,10 @@ import {
   epicItemFixture,
   createRecordedTransport,
   itemFixture,
+  itemPage,
   snapshotRecording,
   workspaceFixture,
+  workspaceNotFound,
   type Recording,
 } from "./test/recordedTransport";
 import { giveElementSize } from "./test/layout";
@@ -32,14 +34,14 @@ const config = readApiConfig({ VITE_VECTIS_WORKSPACE_KEY: "VEC" });
  * substituted. The cache is reached through a throwaway store over the same
  * IndexedDB, which is the store's own public way to seed and clear it.
  */
-function mount(recording: Recording) {
+function mount(recording: Recording, pageSize?: number) {
   const recorded = createRecordedTransport(recording);
   const view = render(
     <AppProviders>
       <App
         sync={{
           createClient: () =>
-            createWorkspaceApiClient({ config, transport: recorded.transport }),
+            createWorkspaceApiClient({ config, transport: recorded.transport, pageSize }),
         }}
       />
     </AppProviders>,
@@ -61,7 +63,7 @@ async function warmCache() {
       items: [itemFixture()],
     }),
   );
-  seed.getState().setActiveBoard(boardFixture.id);
+  seed.getState().setActiveBoard(boardFixture.key);
   await new Promise((resolve) => setTimeout(resolve, 300));
 }
 
@@ -124,7 +126,7 @@ describe("App", () => {
     mount({
       ...snapshotRecording([
         itemFixture(),
-        itemFixture({ id: "item-2", key: "VEC-3", rank: "n", title: "Second card" }),
+        itemFixture({ key: "VEC-3", rank: "n", title: "Second card" }),
       ]),
       gate: gate.promise,
     });
@@ -189,6 +191,42 @@ describe("App", () => {
     expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
   });
 
+  // VEC-107 AC2
+  it("shows the server's problem for an unknown workspace on the Boards tab, without crashing", async () => {
+    const notFound = workspaceNotFound("VEC");
+    mount({ routes: { "/workspaces/VEC": notFound, "/boards": notFound, "/items": notFound } });
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("The workspace could not be loaded.");
+    expect(alert).toHaveTextContent("404 Not Found: workspace VEC does not exist");
+    expect(alert).not.toHaveTextContent("This board could not be shown");
+    expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+    // The shell survives: the tabs still work.
+    expect(screen.getByRole("banner")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Timeline profiler" }));
+    expect(screen.getByRole("button", { name: "Run dual-axis profile" })).toBeInTheDocument();
+  });
+
+  // VEC-107 AC4
+  it("renders the items of every page on the Boards tab", async () => {
+    mount(
+      {
+        routes: {
+          "/boards": { body: [boardFixture] },
+          "/workspaces/VEC": { body: workspaceFixture },
+          "/items?limit=1": { body: itemPage([itemFixture({ key: "VEC-3", title: "Newest card", column: "doing" })], "p2") },
+          "/items?limit=1&cursor=p2": { body: itemPage([itemFixture()]) },
+        },
+      },
+      1,
+    );
+
+    const doing = (await screen.findByRole("heading", { name: "In Progress" })).closest("section")!;
+    const todo = screen.getByRole("heading", { name: "To Do" }).closest("section")!;
+    expect(within(doing).getByText("Newest card")).toBeInTheDocument();
+    await waitFor(() => expect(within(todo).getByText("Wire the client")).toBeInTheDocument());
+  });
+
   // AC3
   it("renders the timeline profiler with no server and no workspace data", async () => {
     mount({ routes: {}, networkError: new TypeError("Failed to fetch") });
@@ -207,7 +245,7 @@ describe("board cards and the item detail panel", () => {
     itemFixture({
       fields: {
         type: "story",
-        parentId: "epic-1",
+        parentId: "VEC-1",
         storyPoints: 3,
         labels: ["web", "design"],
         description: "Render the board from the store.",
@@ -215,7 +253,6 @@ describe("board cards and the item detail panel", () => {
       },
     }),
     itemFixture({
-      id: "item-2",
       key: "VEC-3",
       rank: "n",
       title: "Second card",
@@ -317,19 +354,19 @@ describe("board cards and the item detail panel", () => {
     expect(controls[controls.length - 1]).toHaveFocus();
   });
 
-  it("renders a board whose column ids are object prototype members", async () => {
+  it("renders a board whose column keys are object prototype members", async () => {
     const protoBoard = {
       ...boardFixture,
       columns: [
-        { id: "constructor", name: "Constructor", position: 0 },
-        { id: "__proto__", name: "Proto", position: 1 },
-        { id: "toString", name: "Empty", position: 2 },
+        { key: "constructor", name: "Constructor", ordinal: 0, onBoard: true },
+        { key: "__proto__", name: "Proto", ordinal: 1, onBoard: true },
+        { key: "toString", name: "Empty", ordinal: 2, onBoard: true },
       ],
     };
     mount({
       routes: {
         "/boards": { body: [protoBoard] },
-        "/items": { body: [itemFixture({ columnId: "__proto__" })] },
+        "/items": { body: itemPage([itemFixture({ column: "__proto__" })]) },
         "/workspaces/VEC": { body: workspaceFixture },
       },
     });
@@ -354,8 +391,8 @@ describe("board cards and the item detail panel", () => {
     // A value no decoder anticipated, reaching the board through the store.
     act(() => {
       const { issuesById } = workspaceStore.getState();
-      const broken = { ...issuesById["item-1"], labels: undefined as unknown as string[] };
-      workspaceStore.setState({ issuesById: { ...issuesById, "item-1": broken } });
+      const broken = { ...issuesById["VEC-2"], labels: undefined as unknown as string[] };
+      workspaceStore.setState({ issuesById: { ...issuesById, "VEC-2": broken } });
     });
 
     const alert = await screen.findByRole("alert");
@@ -372,7 +409,7 @@ describe("board cards and the item detail panel", () => {
     mount(
       snapshotRecording([
         itemFixture({ fields: { type: "constructor", storyPoints: 1 } }),
-        itemFixture({ id: "item-2", key: "VEC-3", rank: "n", title: "Second card", fields: { type: "__proto__" } }),
+        itemFixture({ key: "VEC-3", rank: "n", title: "Second card", fields: { type: "__proto__" } }),
       ]),
     );
 
@@ -387,7 +424,7 @@ describe("board cards and the item detail panel", () => {
     mount({
       routes: {
         "/boards": { body: [] },
-        "/items": { body: [] },
+        "/items": { body: itemPage([]) },
         "/workspaces/VEC": { body: workspaceFixture },
       },
     });
@@ -404,7 +441,7 @@ describe("roadmap tab", () => {
       snapshotRecording([
         epicItemFixture,
         itemFixture({
-          fields: { parentId: "epic-1", startDate: "2025-03-03", dueDate: "2025-03-10" },
+          fields: { parentId: "VEC-1", startDate: "2025-03-03", dueDate: "2025-03-10" },
         }),
       ]),
     );
@@ -420,7 +457,7 @@ describe("roadmap tab", () => {
     expect(workspaceStore.getState().activeTab).toBe("roadmap");
 
     // The expansion is the backlog tree's own persisted set, not a copy.
-    expect(workspaceStore.getState().treeExpanded).toEqual(["epic-1"]);
+    expect(workspaceStore.getState().treeExpanded).toEqual(["VEC-1"]);
   });
 });
 
@@ -431,8 +468,8 @@ describe("backlog tab", () => {
     mount({
       ...snapshotRecording([
         epicItemFixture,
-        itemFixture({ fields: { parentId: "epic-1" } }),
-        itemFixture({ id: "item-2", key: "VEC-3", rank: "n", title: "No epic yet" }),
+        itemFixture({ fields: { parentId: "VEC-1" } }),
+        itemFixture({ key: "VEC-3", rank: "n", title: "No epic yet" }),
       ]),
     });
     await screen.findByText("Wire the client");
@@ -455,7 +492,7 @@ describe("backlog tab", () => {
     mount(
       snapshotRecording([
         epicItemFixture,
-        itemFixture({ fields: { parentId: "epic-1", description: "Render the board from the store." } }),
+        itemFixture({ fields: { parentId: "VEC-1", description: "Render the board from the store." } }),
       ]),
     );
     await screen.findByText("Wire the client");
@@ -490,8 +527,8 @@ describe("backlog tab", () => {
     mount(
       snapshotRecording([
         epicItemFixture,
-        itemFixture({ fields: { parentId: "epic-1" } }),
-        itemFixture({ id: "item-2", key: "VEC-3", rank: "n", title: "No epic yet" }),
+        itemFixture({ fields: { parentId: "VEC-1" } }),
+        itemFixture({ key: "VEC-3", rank: "n", title: "No epic yet" }),
       ]),
     );
     await screen.findByText("Wire the client");
@@ -516,14 +553,13 @@ describe("backlog tab", () => {
   describe("after a single collapse near the end has held the viewport", () => {
     // Two epics: a small one first, then one with thirty stories that runs to
     // the end of the list, so collapsing it from near the end needs the spacer.
-    const bigEpic = { ...epicItemFixture, id: "epic-2", key: "VEC-5", rank: "b", title: "Big epic" };
+    const bigEpic = { ...epicItemFixture, key: "VEC-5", rank: "b", title: "Big epic" };
     const stories = Array.from({ length: 30 }, (_, n) =>
       itemFixture({
-        id: `story-${n}`,
         key: `VEC-${100 + n}`,
         rank: `z${String(n).padStart(3, "0")}`,
         title: `Story ${n}`,
-        fields: { parentId: "epic-2" },
+        fields: { parentId: "VEC-5" },
       }),
     );
 
@@ -531,7 +567,7 @@ describe("backlog tab", () => {
       mount(
         snapshotRecording([
           epicItemFixture,
-          itemFixture({ fields: { parentId: "epic-1" } }),
+          itemFixture({ fields: { parentId: "VEC-1" } }),
           bigEpic,
           ...stories,
         ]),
@@ -547,7 +583,7 @@ describe("backlog tab", () => {
       fireEvent.keyDown(tree, { key: "Home" });
       fireEvent.keyDown(tree, { key: "ArrowLeft" });
       fireEvent.keyDown(tree, { key: "ArrowDown" });
-      expect(tree).toHaveAttribute("aria-activedescendant", "backlog-row-epic-2");
+      expect(tree).toHaveAttribute("aria-activedescendant", "backlog-row-VEC-5");
       act(() => {
         tree.scrollTop = 700;
         fireEvent.scroll(tree);

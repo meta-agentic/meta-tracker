@@ -1,5 +1,5 @@
 import type { Transport } from "../api/http";
-import type { WireBoard, WireItem, WireWorkspace } from "../api/wire";
+import type { WireBoard, WireItem, WireItemPage, WireWorkspace } from "../api/wire";
 
 /**
  * A recorded transport: a fixed map of path to response, replayed in place of
@@ -18,10 +18,15 @@ export interface RecordedResponse {
   body?: unknown;
   /** Returned verbatim, for testing a non-JSON body. */
   rawBody?: string;
+  /** Defaults to `application/json`. */
+  contentType?: string;
 }
 
 export interface Recording {
-  /** Path suffixes, matched by `endsWith`, so the base URL stays irrelevant. */
+  /**
+   * Path suffixes, matched by `endsWith`, so the base URL stays irrelevant. A
+   * route without a `?` ignores the query string; one with a `?` must match it.
+   */
   routes: Record<string, RecordedResponse>;
   /** Thrown instead of answering — a connection that never landed. */
   networkError?: Error;
@@ -75,7 +80,13 @@ export function createRecordedTransport(initial: Recording): RecordedTransport {
 
     if (recording.networkError) return Promise.reject(recording.networkError);
 
-    const match = Object.entries(recording.routes).find(([path]) => url.endsWith(path));
+    const bare = url.split("?")[0];
+    const routes = Object.entries(recording.routes);
+    // A route naming its query wins over the bare path, so a recording can hold
+    // a first page and the pages behind it side by side.
+    const match =
+      routes.find(([path]) => path.includes("?") && url.endsWith(path)) ??
+      routes.find(([path]) => !path.includes("?") && bare.endsWith(path));
     if (!match) {
       return Promise.resolve(
         new Response("", { status: 404, statusText: "Not Found" }),
@@ -89,7 +100,7 @@ export function createRecordedTransport(initial: Recording): RecordedTransport {
       new Response(body, {
         status: recorded.status ?? 200,
         statusText: recorded.statusText ?? "OK",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": recorded.contentType ?? "application/json" },
       }),
     );
   };
@@ -103,47 +114,63 @@ export function createRecordedTransport(initial: Recording): RecordedTransport {
   };
 }
 
-/** A workspace matching `io.vectis.domain.Workspace`. */
+/** `GET /workspaces/VEC`, as `WorkspacesResource` answers it. */
 export const workspaceFixture: WireWorkspace = {
-  id: "0192f3a0-0000-7000-8000-000000000001",
   key: "VEC",
   name: "Vectis",
+  template: { key: "scrum", version: 1 },
 };
 
+/** The workspace's first board, which takes the workspace key. Columns out of ordinal order. */
 export const boardFixture: WireBoard = {
-  id: "board-1",
-  workspaceId: workspaceFixture.id,
+  key: "VEC",
   name: "Delivery",
   columns: [
-    { id: "col-doing", name: "In Progress", position: 1 },
-    { id: "col-todo", name: "To Do", position: 0 },
+    { key: "doing", name: "In Progress", ordinal: 1, onBoard: true },
+    { key: "todo", name: "To Do", ordinal: 0, onBoard: true },
   ],
 };
 
 export const epicItemFixture: WireItem = {
-  id: "epic-1",
-  workspaceId: workspaceFixture.id,
-  boardId: boardFixture.id,
-  columnId: "col-todo",
   key: "VEC-1",
   title: "Client shell",
+  board: boardFixture.key,
+  column: "todo",
   rank: "a",
   fields: { type: "epic", color: "#123456" },
-  sprintId: null,
+  version: 1,
 };
 
 export function itemFixture(overrides: Partial<WireItem> = {}): WireItem {
   return {
-    id: "item-1",
-    workspaceId: workspaceFixture.id,
-    boardId: boardFixture.id,
-    columnId: "col-todo",
     key: "VEC-2",
     title: "Wire the client",
+    board: boardFixture.key,
+    column: "todo",
     rank: "m",
     fields: {},
-    sprintId: null,
+    version: 1,
     ...overrides,
+  };
+}
+
+/** One page of items, the last unless `next` is given. */
+export function itemPage(items: WireItem[], next: string | null = null): WireItemPage {
+  return { items, next };
+}
+
+/** The problem+json answer the server gives for an unknown workspace (ADR-VEC-05). */
+export function workspaceNotFound(key: string): RecordedResponse {
+  return {
+    status: 404,
+    statusText: "Not Found",
+    contentType: "application/problem+json",
+    body: {
+      type: "about:blank",
+      title: "Not Found",
+      status: 404,
+      detail: `workspace ${key} does not exist`,
+    },
   };
 }
 
@@ -152,7 +179,7 @@ export function snapshotRecording(items: WireItem[] = [itemFixture()]): Recordin
   return {
     routes: {
       "/boards": { body: [boardFixture] },
-      "/items": { body: items },
+      "/items": { body: itemPage(items) },
       "/workspaces/VEC": { body: workspaceFixture },
     },
   };

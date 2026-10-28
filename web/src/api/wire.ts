@@ -1,13 +1,14 @@
-import { ApiError } from "./errors";
+import { ApiError, type Problem } from "./errors";
 
 /**
  * The transport shapes, and the narrowing that turns an untrusted `unknown`
  * body into them.
  *
- * These mirror the server aggregates in `vectis-domain` — `Workspace`, `Board`,
- * `BoardColumn`, `Item` — field for field, including the parts of the model that
- * the client's own normalized shape does not have (`rank`, `fields`,
- * `sprintId`). They are deliberately *not* the store's types: keeping the wire
+ * These mirror the `/api/v1` read views of `WorkspacesResource` (VEC-94) field
+ * for field, including the parts the client's own normalized shape does not
+ * have (`rank`, `fields`, `version`). Following ADR-VEC-05 §3 they carry keys,
+ * never ids: a workspace, a board, a column (within its board) and an item are
+ * each named by their key. They are deliberately *not* the store's types: keeping the wire
  * shape separate is what lets `src/store/types.ts` stay a client concern, and
  * what confines a future contract change to this file plus `adapter.ts`.
  *
@@ -26,42 +27,55 @@ export type WireJsonValue =
   | WireJsonValue[]
   | { [key: string]: WireJsonValue };
 
-/** Mirrors `io.vectis.domain.Workspace`. */
+/** `{key, version}` of the template a workspace is pinned to. */
+export interface WireTemplateRef {
+  key: string;
+  version: number;
+}
+
+/** `GET /workspaces/{key}`: `WorkspacesResource.WorkspaceView`. */
 export interface WireWorkspace {
-  id: string;
   key: string;
   name: string;
+  template: WireTemplateRef;
 }
 
-/** Mirrors `io.vectis.domain.BoardColumn`. */
+/** A column of `WorkspacesResource.BoardView`. Its key is unique within its board only. */
 export interface WireBoardColumn {
-  id: string;
+  key: string;
   name: string;
   /** Dense display index. Not an ordering key for the items inside the column. */
-  position: number;
+  ordinal: number;
+  /** False for a column the workflow keeps off the board (a backlog, an archive). */
+  onBoard: boolean;
 }
 
-/** Mirrors `io.vectis.domain.Board`. */
+/** `GET /workspaces/{key}/boards`, one entry: `WorkspacesResource.BoardView`. */
 export interface WireBoard {
-  id: string;
-  workspaceId: string;
+  key: string;
   name: string;
   columns: WireBoardColumn[];
 }
 
-/** Mirrors `io.vectis.domain.Item`. */
+/** One item of a page: `WorkspacesResource.ItemView`. Board and column are keys. */
 export interface WireItem {
-  id: string;
-  workspaceId: string;
-  boardId: string;
-  columnId: string;
+  /** Unique within the workspace. */
   key: string;
   title: string;
+  board: string;
+  column: string;
   /** Sparse lexicographic rank — the ordering key within a column. */
   rank: string;
   /** The open document: everything the relational columns do not model. */
   fields: Record<string, WireJsonValue>;
-  sprintId: string | null;
+  /** The revision a later write takes back as `If-Match`. */
+  version: number;
+}
+
+/** `GET /workspaces/{key}/items`: newest first, `next` null on the last page. */
+export interface WireItemPage {
+  items: WireItem[];
+  next: string | null;
 }
 
 function fail(path: string, expected: string, actual: unknown): never {
@@ -114,6 +128,12 @@ function asInteger(record: Record<string, unknown>, key: string, path: string): 
   return value;
 }
 
+function asBoolean(record: Record<string, unknown>, key: string, path: string): boolean {
+  const value = record[key];
+  if (typeof value !== "boolean") fail(`${path}.${key}`, "a boolean", value);
+  return value;
+}
+
 /**
  * `fields` is open by contract, so it is checked for JSON-ness rather than for a
  * schema. An absent document is read as an empty one: the server models it as
@@ -158,27 +178,31 @@ function assertJsonValue(value: unknown, path: string): void {
 
 export function decodeWorkspace(value: unknown, path = "workspace"): WireWorkspace {
   const record = asRecord(value, path);
+  const template = asRecord(record.template, `${path}.template`);
   return {
-    id: asString(record, "id", path),
     key: asString(record, "key", path),
     name: asString(record, "name", path),
+    template: {
+      key: asString(template, "key", `${path}.template`),
+      version: asInteger(template, "version", `${path}.template`),
+    },
   };
 }
 
 export function decodeBoardColumn(value: unknown, path: string): WireBoardColumn {
   const record = asRecord(value, path);
   return {
-    id: asString(record, "id", path),
+    key: asString(record, "key", path),
     name: asString(record, "name", path),
-    position: asInteger(record, "position", path),
+    ordinal: asInteger(record, "ordinal", path),
+    onBoard: asBoolean(record, "onBoard", path),
   };
 }
 
 export function decodeBoard(value: unknown, path = "board"): WireBoard {
   const record = asRecord(value, path);
   return {
-    id: asString(record, "id", path),
-    workspaceId: asString(record, "workspaceId", path),
+    key: asString(record, "key", path),
     name: asString(record, "name", path),
     columns: asArray(record.columns, `${path}.columns`).map((column, i) =>
       decodeBoardColumn(column, `${path}.columns[${i}]`),
@@ -189,15 +213,13 @@ export function decodeBoard(value: unknown, path = "board"): WireBoard {
 export function decodeItem(value: unknown, path = "item"): WireItem {
   const record = asRecord(value, path);
   return {
-    id: asString(record, "id", path),
-    workspaceId: asString(record, "workspaceId", path),
-    boardId: asString(record, "boardId", path),
-    columnId: asString(record, "columnId", path),
     key: asString(record, "key", path),
     title: asString(record, "title", path),
+    board: asString(record, "board", path),
+    column: asString(record, "column", path),
     rank: asString(record, "rank", path),
     fields: asFields(record, "fields", path),
-    sprintId: asNullableString(record, "sprintId", path),
+    version: asInteger(record, "version", path),
   };
 }
 
@@ -205,6 +227,34 @@ export function decodeBoards(value: unknown, path = "boards"): WireBoard[] {
   return asArray(value, path).map((board, i) => decodeBoard(board, `${path}[${i}]`));
 }
 
-export function decodeItems(value: unknown, path = "items"): WireItem[] {
-  return asArray(value, path).map((item, i) => decodeItem(item, `${path}[${i}]`));
+/** `next` must be present: an absent one is a server that forgot it, not a last page. */
+export function decodeItemPage(value: unknown, path = "items"): WireItemPage {
+  const record = asRecord(value, path);
+  if (!("next" in record)) fail(`${path}.next`, "a string or null", undefined);
+  return {
+    items: asArray(record.items, `${path}.items`).map((item, i) =>
+      decodeItem(item, `${path}.items[${i}]`),
+    ),
+    next: asNullableString(record, "next", path),
+  };
+}
+
+/**
+ * An RFC 9457 body (ADR-VEC-05), or null when the body is not one. Lenient on
+ * purpose: it reads an error that is already being reported, and a malformed
+ * problem must leave the plain status error standing rather than replace it.
+ */
+export function readProblem(value: unknown): Problem | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const { type, title, status, detail } = record;
+  if (typeof title !== "string" || typeof status !== "number" || !Number.isInteger(status)) {
+    return null;
+  }
+  return {
+    type: typeof type === "string" ? type : "about:blank",
+    title,
+    status,
+    detail: typeof detail === "string" ? detail : null,
+  };
 }

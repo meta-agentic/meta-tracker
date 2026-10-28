@@ -19,58 +19,25 @@ URL is the relative path `/api/v1`, which names no host, so no environment is
 baked into the bundle. Authentication is VEC-35: every header is built in one
 function in `http.ts`, so it arrives there without a call site changing.
 
-## Contract assumptions — verify against VEC-10
+## The contract: VEC-94 under ADR-VEC-05
 
-**This module was written against a contract that does not exist yet.** VEC-10
-owns the endpoint definitions and has not landed; `vectis-server` exposes no
-read endpoints at all. The wire types are therefore *derived* from the server
-aggregates in `vectis-domain` — `Workspace`, `Board`, `BoardColumn`, `Item` —
-which any provisioning endpoint has to serialize, rather than taken from a
-published specification.
+`client.ts` reads the three VEC-94 resources under `/api/v1`, and `wire.ts` decodes them field for field:
 
-VEC-42 is not realized until this list has been checked against the endpoints
-VEC-10 actually publishes. A consumer built against an assumed provider is not
-realized, whatever its own tests say — so treat this as the work remaining, not
-as documentation of work done.
+- `GET /workspaces/{key}`: `{key, name, template: {key, version}}`.
+- `GET /workspaces/{key}/boards`: `[{key, name, columns: [{key, name, ordinal, onBoard}]}]`.
+- `GET /workspaces/{key}/items?limit=&cursor=`: `{items: [{key, title, board, column, rank, fields, version}], next}`, newest first. `listItems` follows `next` until it is null, 200 items a page (the server's maximum); a cursor handed out twice is a format error rather than an endless loop.
 
-Each item below names the single place a disagreement is fixed.
+No body carries an id (ADR-VEC-05 §3), so the store's ids are keys: a board's id is its key, an item's id is its key, and a column's id is its key, which is unique within its board, the only scope the store looks a column up in. A column with `onBoard: false` is left off the board; its items stay issues and show in the backlog.
 
-- [ ] **Ordering: `Item.rank` → `Issue.order`.** The domain orders within a
-      column by a sparse lexicographic string so a drag updates one row;
-      `store/selectors.ts` sorts on a dense integer. `assignOrders` in
-      `adapter.ts` sorts by rank per column and projects to indices, tie-breaking
-      on `key` so the result does not depend on response order. Verify the server
-      really exposes `rank`, and that it does not also expose a dense position
-      that should be preferred.
+Every error is `application/problem+json` (RFC 9457). `http.ts` reads it into `ApiError.problem` (`type`, `title`, `status`, `detail`) and makes the problem's own sentence the error message, which is what the error state shows. A body that is not a problem leaves the plain status error standing. A 404, such as an unknown workspace, is not retryable, so the error state offers no dead retry.
 
-- [ ] **Epics: there is no Epic record.** The domain has exactly one work-unit
-      type, so hierarchy lives in the open `fields` document. An item carrying
-      `fields.type === "epic"` is lifted out of the issue list into `Epic`, and
-      every other item points at one through `fields.parentId`. A parent that is
-      not an epic in the same payload is dropped to `null`. The two field names
-      and the marker value are `FIELD.type`, `FIELD.parentId` and `EPIC_TYPE` in
-      `adapter.ts`. Verify against whatever VEC-10 says about parent/child, and
-      in particular whether epics arrive on a separate endpoint instead.
+What the contract leaves open is the `fields` document, and the adapter's reading of it remains an assumption, each fixed in one place in `adapter.ts`:
 
-- [ ] **The long tail: schedule and estimate.** `startDate`, `dueDate` and
-      `storyPoints` are not relational columns on `Item`. They are read out of
-      `fields` and are `null` when absent or malformed, never guessed. The keys
-      are `FIELD.startDate`, `FIELD.dueDate` and `FIELD.storyPoints` in
-      `adapter.ts`. Verify the names and the date encoding.
+- **Ordering.** `assignOrders` sorts each column by `rank` and projects to the dense `Issue.order` the selectors sort on, tie-breaking on `key` so the result does not depend on the newest-first response order.
+- **Epics.** There is no Epic record. An item with `fields.type === "epic"` (`FIELD.type`, `EPIC_TYPE`) becomes an `Epic`, and every other item points at one by key through `fields.parentId` (`FIELD.parentId`). A parent that is not an epic in the same payload is dropped to `null`.
+- **The long tail.** `startDate`, `dueDate`, `storyPoints`, the item type, `labels`, `priority`, `description`, and the links `dependencies` and `relates` (item keys) are read out of `fields`. A list keeps only its distinct non-empty strings; an absent or malformed value is empty or `null`, never guessed.
 
-- [ ] **The long tail: what the board card and detail panel show.** The item type (`FIELD.type`, the same key that marks an epic), `labels`, `priority`, `description`, and the item links `dependencies` and `relates` are read out of `fields` as well. `labels` follows the list of strings the persistence round-trip test stores; the two link keys hold item keys, following the backlog item format this repository dogfoods. A list keeps only its non-empty string entries, and an absent or malformed value is empty or `null`, never guessed. Verify the names, and whether links arrive as keys, as ids, or on an endpoint of their own.
-
-One prerequisite that is assumed rather than derived, and so belongs on the same
-checklist: the **endpoint paths and their envelopes**. `client.ts` addresses
-`/workspaces/{key}`, `/workspaces/{key}/boards` and `/workspaces/{key}/items`,
-each returning a bare object or array with no pagination envelope. Nothing in
-the domain fixes those, and a paginated item collection would change
-`fetchWorkspaceSnapshot` rather than the adapter.
-
-Two further assumptions are small but real: `Board` has no key of its own, so the
-adapter takes the workspace key (item keys are minted from that prefix); and an
-item naming a board the response did not carry is dropped, because admitting it
-would put an unreachable id into `boardIssueIds`.
+An item naming a board the response did not carry is dropped, because admitting it would put an unreachable id into `boardIssueIds`.
 
 ## Testing
 

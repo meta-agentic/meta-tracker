@@ -14,7 +14,10 @@ import type { WireBoard, WireItem, WireJsonValue, WireWorkspace } from "./wire";
  * The server model and the client model are not the same model, and this is the
  * only place that knows it. The store keeps a denormalized, render-ready shape;
  * the domain keeps an indexable relational core plus an open `fields` document.
- * Three differences have to be reconciled here:
+ * The API names everything by key (ADR-VEC-05 §3), so the store's ids are keys:
+ * a board's id is its key, an item's id is its key, and a column's id is its
+ * key, which is unique within its board, the only scope the store looks a
+ * column up in. Three further differences have to be reconciled here:
  *
  *  1. **Ordering.** `Item.rank` is a sparse lexicographic string so a drag
  *     updates one row. `Issue.order` is a dense integer because
@@ -23,15 +26,15 @@ import type { WireBoard, WireItem, WireJsonValue, WireWorkspace } from "./wire";
  *  2. **Epics.** `vectis-domain` has no `Epic` record — there is exactly one
  *     work-unit type, `Item`, and hierarchy therefore lives in `fields`. An item
  *     carrying `fields.type === "epic"` is lifted out of the issue list into
- *     `Epic`; every other item points at one through `fields.parentId`.
+ *     `Epic`; every other item points at one by key through `fields.parentId`.
  *  3. **The long tail.** Schedule dates, story points, type, labels, priority,
  *     description and item links are not relational columns on `Item`; they
  *     are read out of `fields` and are null (or empty) when absent or
  *     malformed, never guessed.
  *
  * Every assumption above is a field name, and every field name is a constant
- * below. When VEC-10 publishes the endpoint contract, a disagreement is a
- * one-line edit here rather than a hunt through the client.
+ * below, so a disagreement with an importer is a one-line edit here rather
+ * than a hunt through the client.
  */
 
 /** `Item.fields` keys this adapter reads. Nothing else in the client knows them. */
@@ -113,20 +116,25 @@ function isEpic(item: WireItem): boolean {
   return readString(item.fields, FIELD.type) === EPIC_TYPE;
 }
 
+/**
+ * The columns the board shows, in ordinal order. A column kept off the board
+ * keeps its items: they are issues like any other and appear in the backlog,
+ * they just have no column on the board to render in.
+ */
 function toColumns(board: WireBoard): Column[] {
   return board.columns
-    .slice()
-    .sort((a, b) => a.position - b.position)
+    .filter((column) => column.onBoard)
+    .sort((a, b) => a.ordinal - b.ordinal)
     .map((column) => ({
-      id: column.id,
+      id: column.key,
       name: column.name,
-      order: column.position,
+      order: column.ordinal,
     }));
 }
 
 function toEpic(item: WireItem): Epic {
   return {
-    id: item.id,
+    id: item.key,
     key: item.key,
     title: item.title,
     color: readString(item.fields, FIELD.color) ?? stableColor(item.key),
@@ -137,13 +145,13 @@ function toEpic(item: WireItem): Epic {
  * Dense `order` per column, derived from `rank`.
  *
  * The key is the tiebreak, not the position in the response: two items sharing a
- * rank must still land in a stable order, and array position is whatever the
- * server's query happened to return.
+ * rank must still land in a stable order, and the response is newest first,
+ * which says nothing about where an item sits in its column.
  */
 function assignOrders(items: WireItem[]): Map<ID, number> {
   const byColumn = new Map<string, WireItem[]>();
   for (const item of items) {
-    const bucket = `${item.boardId}\u0000${item.columnId}`;
+    const bucket = `${item.board}\u0000${item.column}`;
     const existing = byColumn.get(bucket);
     if (existing) existing.push(item);
     else byColumn.set(bucket, [item]);
@@ -153,7 +161,7 @@ function assignOrders(items: WireItem[]): Map<ID, number> {
   for (const bucket of byColumn.values()) {
     bucket
       .sort((a, b) => (a.rank === b.rank ? compare(a.key, b.key) : compare(a.rank, b.rank)))
-      .forEach((item, index) => orders.set(item.id, index));
+      .forEach((item, index) => orders.set(item.key, index));
   }
   return orders;
 }
@@ -172,10 +180,8 @@ export function toWorkspaceSnapshot(payload: WireWorkspacePayload): WorkspaceSna
   const { workspace, boards: wireBoards, items } = payload;
 
   const boards: Board[] = wireBoards.map((board) => ({
-    id: board.id,
-    // The domain holds no per-board key: item keys are minted from the
-    // workspace prefix, so every board in a workspace shares it.
-    key: workspace.key,
+    id: board.key,
+    key: board.key,
     name: board.name,
     columns: toColumns(board),
   }));
@@ -183,7 +189,7 @@ export function toWorkspaceSnapshot(payload: WireWorkspacePayload): WorkspaceSna
   const boardIds = new Set(boards.map((board) => board.id));
   // An item on a board this response did not carry has nowhere to render, and
   // admitting it would put an unreachable id into `boardIssueIds`.
-  const placeable = items.filter((item) => boardIds.has(item.boardId));
+  const placeable = items.filter((item) => boardIds.has(item.board));
 
   const epicItems = placeable.filter(isEpic);
   const epics: Epic[] = epicItems.map(toEpic);
@@ -195,16 +201,16 @@ export function toWorkspaceSnapshot(payload: WireWorkspacePayload): WorkspaceSna
   const issues: Issue[] = issueItems.map((item) => {
     const parentId = readString(item.fields, FIELD.parentId);
     return {
-      id: item.id,
+      id: item.key,
       key: item.key,
-      boardId: item.boardId,
+      boardId: item.board,
       // A parent that is not an epic in this payload is dropped rather than
       // carried: the board colours by epic, and a dangling id would colour
       // nothing while reading as present.
       epicId: parentId !== null && epicIds.has(parentId) ? parentId : null,
-      columnId: item.columnId,
+      columnId: item.column,
       title: item.title,
-      order: orders.get(item.id) ?? 0,
+      order: orders.get(item.key) ?? 0,
       startDate: readString(item.fields, FIELD.startDate),
       dueDate: readString(item.fields, FIELD.dueDate),
       storyPoints: readNumber(item.fields, FIELD.storyPoints),
