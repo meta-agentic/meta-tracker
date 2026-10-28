@@ -8,7 +8,10 @@ import io.vertx.mutiny.sqlclient.SqlClient;
 import io.vertx.mutiny.sqlclient.Tuple;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -89,6 +92,45 @@ public class BoardRepository {
                         }
                     }
                     return Optional.of(new Board(id, workspaceId, name, columns));
+                });
+    }
+
+    /** A workspace's boards in the order they were created, each with its key and its columns in display order. */
+    public Uni<List<KeyedBoard>> findByWorkspace(UUID workspaceId) {
+        return pool.preparedQuery("""
+                        select b.id       as board_id,
+                               b.key      as board_key,
+                               b.name     as board_name,
+                               c.id       as column_id,
+                               c.key      as column_key,
+                               c.name     as column_name,
+                               c.ordinal  as column_ordinal,
+                               c.on_board as column_on_board
+                          from board b
+                          left join board_column c on c.board_id = b.id
+                         where b.workspace_id = $1
+                         order by b.id, c.ordinal
+                        """)
+                .execute(Tuple.of(workspaceId))
+                .map(rows -> {
+                    Map<UUID, String> keys = new HashMap<>();
+                    Map<UUID, String> names = new LinkedHashMap<>();
+                    Map<UUID, List<BoardColumn>> columns = new HashMap<>();
+                    for (var row : rows) {
+                        UUID boardId = row.getUUID("board_id");
+                        keys.putIfAbsent(boardId, row.getString("board_key"));
+                        names.putIfAbsent(boardId, row.getString("board_name"));
+                        List<BoardColumn> own = columns.computeIfAbsent(boardId, id -> new ArrayList<>());
+                        if (row.getUUID("column_id") != null) { // left join: a column-less board yields one null row
+                            own.add(new BoardColumn(row.getUUID("column_id"), row.getString("column_key"),
+                                    row.getString("column_name"), row.getInteger("column_ordinal"),
+                                    row.getBoolean("column_on_board")));
+                        }
+                    }
+                    List<KeyedBoard> out = new ArrayList<>(names.size());
+                    names.forEach((id, name) -> out.add(
+                            new KeyedBoard(keys.get(id), new Board(id, workspaceId, name, columns.get(id)))));
+                    return List.copyOf(out);
                 });
     }
 
