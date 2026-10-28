@@ -275,6 +275,28 @@ class ProvisionTest {
         }
     }
 
+    @Test
+    void theProvisionedBoardTakesTheWorkspaceKeyAndALaterBoardTheFirstFreeOne() {
+        Workspace ws = newWorkspace();
+        workspaces.provision(ws, null, TemplateRef.parse("scrum@1"), null).await().indefinitely();
+        Board second = boards.insert(Board.create(ws.id(), "Second", List.of(BoardColumn.create("todo", "To Do", 0))))
+                .await().indefinitely();
+        boards.insert(Board.create(ws.id(), "Third", List.of(BoardColumn.create("todo", "To Do", 0))))
+                .await().indefinitely();
+        pool.preparedQuery("delete from board where id = $1").execute(Tuple.of(second.id())).await().indefinitely();
+        boards.insert(Board.create(ws.id(), "Fourth", List.of(BoardColumn.create("todo", "To Do", 0))))
+                .await().indefinitely();
+
+        List<KeyedBoard> stored = boards.findByWorkspace(ws.id()).await().indefinitely();
+        assertEquals(List.of(ws.key(), ws.key() + "-3", ws.key() + "-2"), stored.stream().map(KeyedBoard::key).toList());
+        assertEquals(List.of(ws.name(), "Third", "Fourth"), stored.stream().map(b -> b.board().name()).toList());
+
+        RuntimeException twice = assertThrows(RuntimeException.class, () -> pool
+                .preparedQuery("insert into board (id, workspace_id, name, key) values ($1, $2, 'Again', $3)")
+                .execute(Tuple.of(TimeOrderedId.next(), ws.id(), ws.key())).await().indefinitely());
+        assertTrue(twice.getMessage().contains("board_workspace_key_key"), twice.getMessage());
+    }
+
     private void assertNoTrace(Workspace ws) {
         assertEquals(0, count("select count(*) from workspace where key = $1", ws.key()));
         assertEquals(0, count("select count(*) from board where workspace_id = $1", ws.id()));

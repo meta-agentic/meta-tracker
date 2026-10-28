@@ -233,6 +233,26 @@ class TemplateMigrationTest {
     }
 
     @Test
+    void existingBoardsAreKeyedAfterTheirWorkspaceInCreationOrder() throws SQLException {
+        seedV3("""
+                insert into workspace (id, key, name) values ('%1$s01', 'OLD', 'Old'), ('%1$s02', 'OLDER', 'Older');
+                insert into board (id, workspace_id, name) values
+                    ('%2$s13', '%1$s01', 'Third'), ('%2$s11', '%1$s01', 'First'),
+                    ('%2$s14', '%1$s02', 'Only'), ('%2$s12', '%1$s01', 'Second');
+                """.formatted(WS, BOARD));
+
+        flyway(MigrationVersion.LATEST).migrate();
+
+        try (Connection c = inProbeSchema()) {
+            assertEquals(List.of(
+                            List.of("First", "OLD"), List.of("Second", "OLD-2"), List.of("Third", "OLD-3"),
+                            List.of("Only", "OLDER")),
+                    rows(c, "select name, key from board order by id"));
+            c.rollback();
+        }
+    }
+
+    @Test
     void aColumnThatMapsToNoStateFailsTheMigrationNamingItsWorkspaceAndColumn() throws SQLException {
         seedV3("""
                 insert into workspace (id, key, name) values ('%1$s01', 'OLD', 'Old'), ('%1$s02', 'ODD', 'Odd');

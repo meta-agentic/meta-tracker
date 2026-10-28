@@ -136,6 +136,37 @@ public class WorkspaceRepository {
                 });
     }
 
+    private static final String SUMMARY = """
+            select w.id, w.key, w.name, t.key as template_key, w.template_version
+              from workspace w
+              join workflow_template t on t.id = w.template_id
+            """;
+
+    /** Every workspace with the template version it is pinned to, newest first as {@link #listNewestFirst()}. */
+    public Uni<List<WorkspaceSummary>> listSummariesNewestFirst() {
+        return pool.query(SUMMARY + " order by w.id desc")
+                .execute()
+                .map(rows -> {
+                    List<WorkspaceSummary> out = new ArrayList<>(rows.size());
+                    rows.forEach(row -> out.add(summary(row)));
+                    return List.copyOf(out);
+                });
+    }
+
+    /** The workspace with this key and the template version it is pinned to, or empty. */
+    public Uni<Optional<WorkspaceSummary>> findSummary(String key) {
+        return pool.preparedQuery(SUMMARY + " where w.key = $1")
+                .execute(Tuple.of(key))
+                .map(rows -> rows.rowCount() == 0
+                        ? Optional.<WorkspaceSummary>empty()
+                        : Optional.of(summary(rows.iterator().next())));
+    }
+
+    private static WorkspaceSummary summary(Row row) {
+        return new WorkspaceSummary(row.getUUID("id"), row.getString("key"), row.getString("name"),
+                new TemplateRef(row.getString("template_key"), row.getInteger("template_version")));
+    }
+
     private static Workspace map(Row row) {
         return new Workspace(row.getUUID("id"), row.getString("key"), row.getString("name"));
     }

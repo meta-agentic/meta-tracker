@@ -353,6 +353,34 @@ public class ItemRepository {
                 .map(ItemRepository::mapAll);
     }
 
+    /**
+     * A page of a workspace's items with their board and column keys, newest first: by id, which is
+     * time-ordered, so the primary key serves the order. {@code boardId} and {@code columnKey}
+     * narrow it when not null; {@code before} continues after the last item of the previous page.
+     */
+    public Uni<List<PlacedItem>> pageNewestFirst(UUID workspaceId, UUID boardId, String columnKey, UUID before,
+                                                 int limit) {
+        return pool.preparedQuery("select " + qualified("i") + """
+                        , b.key as board_key, c.key as column_key
+                          from item i
+                          join board b on b.id = i.board_id
+                          join board_column c on c.id = i.column_id
+                         where i.workspace_id = $1
+                           and ($2::uuid is null or i.board_id = $2)
+                           and ($3::text is null or c.key = $3)
+                           and ($4::uuid is null or i.id < $4)
+                         order by i.id desc
+                         limit $5
+                        """)
+                .execute(Tuple.of(workspaceId, boardId, columnKey, before, limit))
+                .map(rows -> {
+                    List<PlacedItem> out = new ArrayList<>(rows.size());
+                    rows.forEach(row -> out.add(new PlacedItem(map(row), row.getString("board_key"),
+                            row.getString("column_key"))));
+                    return List.copyOf(out);
+                });
+    }
+
     /** Items whose open field set contains the given fragment (a GIN containment hit). */
     public Uni<List<Item>> findByFieldsContaining(UUID workspaceId, Map<String, Object> fragment) {
         return pool.preparedQuery("select " + SELECT_COLUMNS + """
