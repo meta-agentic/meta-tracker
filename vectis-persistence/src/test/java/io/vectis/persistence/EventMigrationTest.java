@@ -22,7 +22,7 @@ import org.junit.jupiter.api.Test;
  * rest of the suite (migrating an empty database at start) cannot show.
  *
  * <p>It runs in a schema of its own: migrate it to the version before, write rows the way the
- * previous schema allowed, then migrate it to the latest and check what the existing rows
+ * previous schema allowed, then migrate it through V3 and check what the existing rows
  * became. The schema is dropped afterwards; the application's own schema is not touched.
  */
 @QuarkusTest
@@ -79,7 +79,8 @@ class EventMigrationTest {
                 c.commit();
             }
 
-            flyway(MigrationVersion.LATEST).migrate();
+            // V3 is the migration under test; V4.2 would refuse the probe's unkeyed column "C".
+            flyway(MigrationVersion.fromVersion("3")).migrate();
 
             try (Connection c = inProbeSchema(); Statement st = c.createStatement()) {
                 try (ResultSet rs = st.executeQuery("select version from item")) {

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Marks vectis-persistence as a bean archive, so the composition root indexes it: Quarkus finds
+  Flyway Java migrations (db.migration.V4_1__Built_in_templates, which publishes the built-in
+  templates) only in the index, and without it the server would run V4.2 with no scrum@1 to pin
+  existing workspaces to. It also makes the repositories injectable in the server.
+-->
+<beans xmlns="https://jakarta.ee/xml/ns/jakartaee"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="https://jakarta.ee/xml/ns/jakartaee https://jakarta.ee/xml/ns/jakartaee/beans_4_0.xsd"
+       bean-discovery-mode="annotated"
+       version="4.0">
+</beans>
