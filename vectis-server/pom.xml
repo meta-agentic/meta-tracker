@@ -30,6 +30,13 @@
       <artifactId>vectis-persistence</artifactId>
     </dependency>
 
+    <!-- VEC-54: the backlog source behind POST /api/v1/imports/vault. A community connector,
+         plain Java against the SPI; the server is the composition root that wires it to the
+         persisted model. Brings snakeyaml, which the Quarkus platform already manages. -->
+    <dependency>
+      <groupId>io.vectis</groupId>
+      <artifactId>vectis-connector-vault</artifactId>
+    </dependency>
     <dependency>
       <groupId>io.quarkus</groupId>
       <artifactId>quarkus-rest</artifactId>
