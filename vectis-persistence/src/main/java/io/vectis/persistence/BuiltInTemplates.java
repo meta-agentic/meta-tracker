@@ -28,8 +28,9 @@ import java.util.function.Function;
  * <p>Built-in versions exist only as reviewed files and are inserted only by migrations
  * (ADR-VEC-03 §6), so this runs inside a Flyway migration on its JDBC connection, never on a
  * request path. It is idempotent: a version already stored is skipped, provided the file still
- * says what was stored. A published version is immutable, so a file that changed under an
- * existing version number fails the migration instead of being silently ignored.
+ * says what was stored and still resolves to what was stored. A published version is immutable,
+ * so a file, or a resolution, that changed under an existing version number fails the migration
+ * instead of being silently ignored.
  */
 public final class BuiltInTemplates {
 
@@ -83,19 +84,24 @@ public final class BuiltInTemplates {
             String key = (String) doc.get("template");
             int version = Math.toIntExact((Long) doc.get("version"));
             UUID templateId = templateId(c, key);
-            Boolean unchanged = storedEquals(c, templateId, version, texts.get(ref));
-            if (unchanged != null) {
-                if (!unchanged) {
-                    throw new IllegalStateException("built-in " + ref + " is published and its file has changed;"
-                            + " published versions are immutable, so the change is a new version file");
-                }
-                continue;
-            }
             Resolution r = TemplateResolver.resolve(chain(doc, byRef), null);
             if (!r.ok()) {
                 throw new IllegalStateException("built-in " + ref + " does not resolve: " + r.violations());
             }
-            insertVersion(c, templateId, version, doc, texts.get(ref), TemplateJson.compact(r.effective()));
+            String resolved = TemplateJson.compact(r.effective());
+            Stored stored = stored(c, templateId, version, texts.get(ref), resolved);
+            if (stored == Stored.DOCUMENT_CHANGED) {
+                throw new IllegalStateException("built-in " + ref + " is published and its file has changed;"
+                        + " published versions are immutable, so the change is a new version file");
+            }
+            if (stored == Stored.RESOLUTION_CHANGED) {
+                throw new IllegalStateException("built-in " + ref + " is published with a resolution that differs"
+                        + " from what its files resolve to now; a published resolution never changes silently");
+            }
+            if (stored == Stored.SAME) {
+                continue;
+            }
+            insertVersion(c, templateId, version, doc, texts.get(ref), resolved);
             inserted++;
         }
         return inserted;
@@ -138,15 +144,25 @@ public final class BuiltInTemplates {
         }
     }
 
-    /** Whether the stored version's document equals {@code text} as JSON; null when it is not stored. */
-    private static Boolean storedEquals(Connection c, UUID templateId, int version, String text) throws SQLException {
-        try (PreparedStatement st = c.prepareStatement(
-                "select document = ?::jsonb from workflow_template_version where template_id = ? and version = ?")) {
-            st.setString(1, text);
-            st.setObject(2, templateId);
-            st.setInt(3, version);
+    private enum Stored { ABSENT, SAME, DOCUMENT_CHANGED, RESOLUTION_CHANGED }
+
+    /** How the stored version, if any, compares as JSON with the file's {@code document} and its {@code resolved}. */
+    private static Stored stored(Connection c, UUID templateId, int version, String document, String resolved)
+            throws SQLException {
+        try (PreparedStatement st = c.prepareStatement("""
+                select document = ?::jsonb, resolved = ?::jsonb
+                  from workflow_template_version where template_id = ? and version = ?
+                """)) {
+            st.setString(1, document);
+            st.setString(2, resolved);
+            st.setObject(3, templateId);
+            st.setInt(4, version);
             try (ResultSet rs = st.executeQuery()) {
-                return rs.next() ? rs.getBoolean(1) : null;
+                if (!rs.next()) {
+                    return Stored.ABSENT;
+                }
+                return !rs.getBoolean(1) ? Stored.DOCUMENT_CHANGED
+                        : !rs.getBoolean(2) ? Stored.RESOLUTION_CHANGED : Stored.SAME;
             }
         }
     }
