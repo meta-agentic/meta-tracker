@@ -14,10 +14,10 @@
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.14.22",
-    "i18next": "^26.5.10",
+    "i18next": "^26.5.11",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-i18next": "^17.1.8",
+    "react-i18next": "^17.1.9",
     "zustand": "^5.0.16"
   },
   "devDependencies": {
