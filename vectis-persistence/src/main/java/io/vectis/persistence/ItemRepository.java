@@ -2,6 +2,7 @@ package io.vectis.persistence;
 
 import io.smallrye.mutiny.Uni;
 import io.vectis.domain.Item;
+import io.vectis.domain.TimeOrderedId;
 import io.vectis.persistence.WorkspaceEventLog.Change;
 import io.vertx.core.json.JsonObject;
 import io.vertx.mutiny.sqlclient.Pool;
@@ -10,6 +11,7 @@ import io.vertx.mutiny.sqlclient.RowSet;
 import io.vertx.mutiny.sqlclient.Tuple;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -136,6 +138,82 @@ public class ItemRepository {
                     }
                     return scope.connection().preparedQuery(INSERT).executeBatch(batch)
                             .replaceWith(Change.of(items.size(), ItemEvents.bulk()));
+                }));
+    }
+
+    /**
+     * Writes an imported backlog into one board, creating the items it does not hold and updating
+     * the ones whose column, title or fields differ, in one transaction under the workspace lock:
+     * an upsert on {@code (workspace_id, key)}, so running it again with the same items writes
+     * nothing, and an item that changed in the source changes its own row alone, one version up.
+     * Rank is written when an item is created and kept afterwards. Items the import does not
+     * name are left as they are.
+     *
+     * <p>One {@code resync} event with reason {@code bulk} follows a run that wrote anything, and
+     * none a run that wrote nothing. A column key that is not on the board is a
+     * {@link PlacementException} and nothing is written; so is a key named twice
+     * ({@link IllegalArgumentException}), which a single statement could not apply.
+     */
+    public Uni<ImportResult> upsertAll(UUID boardId, List<ImportedItem> items, String origin) {
+        if (items.stream().map(ImportedItem::key).distinct().count() != items.size()) {
+            return Uni.createFrom().failure(new IllegalArgumentException("an import names an item key twice"));
+        }
+        return log.writeToBoard(boardId, origin, scope -> scope.connection()
+                .preparedQuery("select key, id from board_column where board_id = $1")
+                .execute(Tuple.of(boardId))
+                .chain(columns -> {
+                    Map<String, UUID> columnIds = new HashMap<>();
+                    columns.forEach(row -> columnIds.put(row.getString("key"), row.getUUID("id")));
+                    int n = items.size();
+                    UUID[] ids = new UUID[n];
+                    UUID[] columnOf = new UUID[n];
+                    String[] keys = new String[n];
+                    String[] titles = new String[n];
+                    String[] ranks = new String[n];
+                    String[] fields = new String[n];
+                    for (int i = 0; i < n; i++) {
+                        ImportedItem item = items.get(i);
+                        columnOf[i] = columnIds.get(item.columnKey());
+                        if (columnOf[i] == null) {
+                            return Uni.createFrom().failure(new PlacementException("column " + item.columnKey()
+                                    + " is not on board " + boardId));
+                        }
+                        ids[i] = TimeOrderedId.next();
+                        keys[i] = item.key();
+                        titles[i] = item.title();
+                        ranks[i] = item.rank();
+                        fields[i] = new JsonObject(item.fields()).encode();
+                    }
+                    return scope.connection().preparedQuery("""
+                                    insert into item (id, workspace_id, board_id, column_id, key, title, rank, fields)
+                                    select x.id, $1, $2, x.column_id, x.key, x.title, x.rank, x.fields::jsonb
+                                      from unnest($3::uuid[], $4::uuid[], $5::text[], $6::text[], $7::text[], $8::text[])
+                                           as x (id, column_id, key, title, rank, fields)
+                                    on conflict (workspace_id, key) do update
+                                       set board_id = excluded.board_id, column_id = excluded.column_id,
+                                           title = excluded.title, fields = excluded.fields,
+                                           version = item.version + 1, updated_at = now()
+                                     where (item.board_id, item.column_id, item.title, item.fields)
+                                           is distinct from (excluded.board_id, excluded.column_id, excluded.title, excluded.fields)
+                                    returning (xmax = 0) as created
+                                    """)
+                            .execute(Tuple.from(new Object[] {
+                                scope.workspaceId(), boardId, ids, columnOf, keys, titles, ranks, fields}))
+                            .map(rows -> {
+                                int created = 0;
+                                int updated = 0;
+                                for (Row row : rows) {
+                                    if (row.getBoolean("created")) {
+                                        created++;
+                                    } else {
+                                        updated++;
+                                    }
+                                }
+                                var result = new ImportResult(created, updated, n - created - updated);
+                                return created + updated == 0
+                                        ? Change.of(result)
+                                        : Change.of(result, ItemEvents.bulk());
+                            });
                 }));
     }
 
@@ -351,6 +429,34 @@ public class ItemRepository {
                         """)
                 .execute(Tuple.of(boardId, sprintId))
                 .map(ItemRepository::mapAll);
+    }
+
+    /**
+     * A page of a workspace's items with their board and column keys, newest first: by id, which is
+     * time-ordered, so the primary key serves the order. {@code boardId} and {@code columnKey}
+     * narrow it when not null; {@code before} continues after the last item of the previous page.
+     */
+    public Uni<List<PlacedItem>> pageNewestFirst(UUID workspaceId, UUID boardId, String columnKey, UUID before,
+                                                 int limit) {
+        return pool.preparedQuery("select " + qualified("i") + """
+                        , b.key as board_key, c.key as column_key
+                          from item i
+                          join board b on b.id = i.board_id
+                          join board_column c on c.id = i.column_id
+                         where i.workspace_id = $1
+                           and ($2::uuid is null or i.board_id = $2)
+                           and ($3::text is null or c.key = $3)
+                           and ($4::uuid is null or i.id < $4)
+                         order by i.id desc
+                         limit $5
+                        """)
+                .execute(Tuple.of(workspaceId, boardId, columnKey, before, limit))
+                .map(rows -> {
+                    List<PlacedItem> out = new ArrayList<>(rows.size());
+                    rows.forEach(row -> out.add(new PlacedItem(map(row), row.getString("board_key"),
+                            row.getString("column_key"))));
+                    return List.copyOf(out);
+                });
     }
 
     /** Items whose open field set contains the given fragment (a GIN containment hit). */

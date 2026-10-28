@@ -7,6 +7,10 @@ name: E2E
 # VEC-35 must remove the marker. A separate harness check must pass outright, so a
 # provider or server that never started cannot hide behind the expected failure.
 #
+# The boards journey (VEC-107, e2e/tests/boards.spec.ts) runs on the same server: the web
+# client is built for the E2E workspace and e2e/seed/boards.sql stores that workspace once
+# the server has migrated the database.
+#
 # The provider image is the one OidcProviderContainer pins; bump both together.
 
 on:
@@ -91,6 +95,8 @@ jobs:
         # Before the server: the server build ships web/dist when it exists (VEC-78), and
         # the journey needs the SPA on the server's origin.
         working-directory: web
+        env:
+          VITE_VECTIS_WORKSPACE_KEY: E2E
         run: |
           npm ci
           npm run build
@@ -120,7 +126,13 @@ jobs:
             echo "::error::$url did not answer within 60 s"; docker logs oidc; cat vectis.log; exit 1
           done
 
-      - name: Sign-in journey
+      - name: Seed the boards journey
+        # After the server is up: Flyway creates the schema and the built-in templates at boot.
+        env:
+          PGPASSWORD: vectis
+        run: psql -v ON_ERROR_STOP=1 -h localhost -U vectis -d vectis -f e2e/seed/boards.sql
+
+      - name: Browser journeys
         working-directory: e2e
         run: npx playwright test
 

@@ -1,4 +1,5 @@
-import { ApiError } from "./errors";
+import { ApiError, type Problem } from "./errors";
+import { readProblem } from "./wire";
 
 /**
  * The single place every request leaves the client.
@@ -26,7 +27,18 @@ export interface HttpClient {
 function buildHeaders(): HeadersInit {
   // VEC-35 adds the Authorization header here. Nothing else in the client
   // constructs headers, so that stays a one-line change.
-  return { Accept: "application/json" };
+  return { Accept: "application/json, application/problem+json" };
+}
+
+/** The problem+json body of a failed response, or null when it carries none. */
+async function problemOf(response: Response): Promise<Problem | null> {
+  const type = response.headers.get("content-type") ?? "";
+  if (!type.toLowerCase().startsWith("application/problem+json")) return null;
+  try {
+    return readProblem(await response.json());
+  } catch {
+    return null;
+  }
 }
 
 function defaultTransport(url: string, init: RequestInit): Promise<Response> {
@@ -101,11 +113,17 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
       }
 
       if (!response.ok) {
-        throw new ApiError(
-          "http",
-          `GET ${url} returned ${response.status} ${response.statusText}`.trimEnd(),
-          { status: response.status },
-        );
+        const problem = await problemOf(response);
+        // The problem's own sentence when there is one: it says what is wrong
+        // ("workspace X does not exist"), where the status line only says that
+        // something is.
+        const message = problem
+          ? `${problem.status} ${problem.title}${problem.detail ? `: ${problem.detail}` : ""}`
+          : `GET ${url} returned ${response.status} ${response.statusText}`.trimEnd();
+        throw new ApiError("http", message, {
+          status: response.status,
+          problem: problem ?? undefined,
+        });
       }
 
       try {

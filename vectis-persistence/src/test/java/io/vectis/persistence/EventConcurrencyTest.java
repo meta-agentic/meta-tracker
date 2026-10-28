@@ -45,6 +45,8 @@ import org.junit.jupiter.api.Timeout;
 @Timeout(120) // a deadlock or a lost wake-up fails the test instead of hanging the build
 class EventConcurrencyTest {
 
+    private static final TemplateRef SCRUM = TemplateRef.parse("scrum@1");
+
     private static final AtomicInteger KEY_SEQ = new AtomicInteger();
     private static final int ITEMS = 8;
     private static final int WRITES = 240;
@@ -59,11 +61,12 @@ class EventConcurrencyTest {
 
     private Fixture fixture() {
         String suffix = Integer.toString(KEY_SEQ.incrementAndGet());
-        Workspace ws = workspaces.insert(Workspace.create("EC" + suffix, "Workspace " + suffix)).await().indefinitely();
+        Workspace ws = workspaces.provision(Workspace.create("EC" + suffix, "Workspace " + suffix), null, SCRUM, null)
+                .map(ProvisionedWorkspace::workspace).await().indefinitely();
         Board board = boards.insert(Board.create(ws.id(), "Delivery", List.of(
-                        BoardColumn.create("Backlog", 0),
-                        BoardColumn.create("In Progress", 1),
-                        BoardColumn.create("Done", 2))))
+                        BoardColumn.create("backlog", "Backlog", 0),
+                        BoardColumn.create("in-progress", "In Progress", 1),
+                        BoardColumn.create("done", "Done", 2))))
                 .await().indefinitely();
         Sprint sprint = sprints.insert(Sprint.create(board.id(), "Sprint 1")).await().indefinitely();
         List<Item> created = new ArrayList<>();
