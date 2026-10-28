@@ -94,6 +94,33 @@ public class WorkspaceRepository {
                         : Optional.of(map(rows.iterator().next())));
     }
 
+    /** The pinned template, follow mode, delta and revision of the workspace with this key, or empty. */
+    public Uni<Optional<WorkspaceConfiguration>> findConfiguration(String key) {
+        return pool.preparedQuery("""
+                        select w.id, w.template_version, w.follow, w.config_delta::text as delta, w.config_revision,
+                               t.key as template_key, t.tenant_id,
+                               (select max(version) from workflow_template_version where template_id = t.id) as latest_version
+                          from workspace w
+                          join workflow_template t on t.id = w.template_id
+                         where w.key = $1
+                        """)
+                .execute(Tuple.of(key))
+                .map(rows -> {
+                    if (rows.rowCount() == 0) {
+                        return Optional.<WorkspaceConfiguration>empty();
+                    }
+                    Row row = rows.iterator().next();
+                    return Optional.of(new WorkspaceConfiguration(
+                            row.getUUID("id"),
+                            new TemplateRef(row.getString("template_key"), row.getInteger("template_version")),
+                            row.getUUID("tenant_id"),
+                            row.getInteger("latest_version"),
+                            row.getString("follow"),
+                            TemplateJson.parseObject(row.getString("delta")),
+                            row.getLong("config_revision")));
+                });
+    }
+
     /**
      * All workspaces, newest first. Ordering by the primary key is deliberate rather
      * than lazy: UUIDv7 is time-ordered, so this is a chronological sort served by the
