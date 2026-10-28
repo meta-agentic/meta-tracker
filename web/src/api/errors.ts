@@ -15,20 +15,35 @@ export type ApiErrorKind =
   /** A 2xx response arrived whose body is not the shape the contract promises. */
   | "format";
 
+/**
+ * The RFC 9457 `application/problem+json` body every `/api/v1` error carries
+ * (ADR-VEC-05). `detail` is the server's sentence about this occurrence, such as
+ * which workspace does not exist.
+ */
+export interface Problem {
+  type: string;
+  title: string;
+  status: number;
+  detail: string | null;
+}
+
 export class ApiError extends Error {
   readonly kind: ApiErrorKind;
   /** Present only for `kind: "http"`. */
   readonly status?: number;
+  /** Present when a `kind: "http"` response carried a problem+json body. */
+  readonly problem?: Problem;
 
   constructor(
     kind: ApiErrorKind,
     message: string,
-    options: { status?: number; cause?: unknown } = {},
+    options: { status?: number; problem?: Problem; cause?: unknown } = {},
   ) {
     super(message, { cause: options.cause });
     this.name = "ApiError";
     this.kind = kind;
     this.status = options.status;
+    this.problem = options.problem;
   }
 }
 
