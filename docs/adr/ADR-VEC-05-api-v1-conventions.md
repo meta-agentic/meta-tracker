@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Proposed (2026-10-28), awaiting the PO's approval |
+| **Status** | Accepted (2026-10-28), approved by the PO as written |
 | **Date** | 2026-10-28 |
 | **Deciders** | Product Owner |
 | **Requirement** | [ADR-VEC-01](./ADR-VEC-01-product-requirements-and-features.md) R-CORE-5 (template → instance); [ADR-VEC-03](./ADR-VEC-03-workflow-and-template-model.md), whose resolver reports the violations this record carries |
