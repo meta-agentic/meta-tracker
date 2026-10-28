@@ -5,7 +5,6 @@ import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
 import io.vectis.connector.vault.VaultBacklogSource;
 import io.vectis.domain.Workspace;
-import io.vectis.domain.template.TemplateJson;
 import io.vectis.extension.spi.BacklogSnapshot;
 import io.vectis.extension.spi.BacklogSourceException;
 import io.vectis.persistence.BoardRepository;
@@ -28,12 +27,8 @@ import java.util.Map;
 @ApplicationScoped
 public class VaultImport {
 
-    /** The workspace is provisioned from Scrum with Refined, the vault's own start state, after Backlog. */
+    /** The workspace is provisioned from the plain Scrum template. */
     static final TemplateRef TEMPLATE = TemplateRef.parse("scrum@1");
-
-    static final Map<String, Object> REFINED = TemplateJson.parseObject("""
-            {"states": {"refined": {"name": "Refined", "category": "START_STATE", "after": "backlog"}}}
-            """);
 
     /** The writer tag the import's events carry. */
     static final String ORIGIN = "vault-import";
@@ -99,7 +94,7 @@ public class VaultImport {
      * loser finds the winner's workspace, which is the one it wanted.
      */
     private Uni<Provisioned> provision(String key) {
-        return workspaces.provision(Workspace.create(key, config.workspaceName()), null, TEMPLATE, REFINED)
+        return workspaces.provision(Workspace.create(key, config.workspaceName()), null, TEMPLATE, null)
                 .map(p -> new Provisioned(p.workspace(), true))
                 .onFailure().recoverWithUni(failure -> workspaces.findByKey(key)
                         .map(found -> new Provisioned(found.orElseThrow(() -> new RuntimeException(failure)), false)));

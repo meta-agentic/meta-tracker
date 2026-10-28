@@ -67,8 +67,24 @@ class ImportedItemsTest {
 
         Map<String, String> columns = new LinkedHashMap<>();
         items.forEach((key, item) -> columns.put(key, item.columnKey()));
-        assertEquals(Map.of("VEC-1", "backlog", "VEC-2", "refined", "VEC-3", "todo", "VEC-4", "in-progress",
+        assertEquals(Map.of("VEC-1", "backlog", "VEC-2", "backlog", "VEC-3", "todo", "VEC-4", "in-progress",
                 "VEC-5", "in-review", "VEC-6", "done", "VEC-7", "no-go", "VEC-8", "no-go"), columns);
+    }
+
+    @Test
+    void aRefinedItemIsInBacklogWithARefinedLabelAndNoOtherItemHasOne() throws IOException {
+        item("raw", 20, "REFINED", "labels:\n- edition-community\n");
+        item("raw", 21, "REFINED", "labels:\n- refined\n");
+        item("raw", 22, "TO DO", "");
+        item("raw", 23, "PLANNED", "");
+
+        Map<String, ImportedItem> items = imported();
+
+        assertEquals(List.of("edition-community", "refined"), items.get("VEC-20").fields().get("labels"));
+        assertEquals(List.of("refined"), items.get("VEC-21").fields().get("labels"), "once");
+        assertFalse(items.get("VEC-22").fields().containsKey("labels"));
+        assertFalse(items.get("VEC-23").fields().containsKey("labels"));
+        assertEquals("backlog", items.get("VEC-20").columnKey());
     }
 
     @Test

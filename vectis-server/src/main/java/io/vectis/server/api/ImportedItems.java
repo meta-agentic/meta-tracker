@@ -15,6 +15,9 @@ import java.util.Map;
  */
 final class ImportedItems {
 
+    /** The label an item whose status is {@code REFINED} carries, in the Backlog column with the rest. */
+    static final String REFINED_LABEL = "refined";
+
     private static final int RANK_WIDTH = 8;
 
     private ImportedItems() {
@@ -31,10 +34,19 @@ final class ImportedItems {
             double points = item.storyPoints();
             fields.put("storyPoints", points == Math.rint(points) ? (Object) (long) points : (Object) points);
         }
-        put(fields, "labels", item.labels());
+        put(fields, "labels", labels(item));
         put(fields, "dependencies", item.links().get(SourceItem.DEPENDS_ON));
         put(fields, "relates", item.links().get(SourceItem.RELATES_TO));
         return new ImportedItem(item.key(), item.title(), ColumnPlacement.columnKey(item), rank(item.key()), fields);
+    }
+
+    /** The source's labels, and {@link #REFINED_LABEL} for a {@code REFINED} item, once. */
+    private static List<String> labels(SourceItem item) {
+        var labels = new ArrayList<>(item.labels());
+        if (item.status().strip().equalsIgnoreCase("REFINED") && !labels.contains(REFINED_LABEL)) {
+            labels.add(REFINED_LABEL);
+        }
+        return labels;
     }
 
     /** The key's number, zero-padded, so that VEC-9 sorts before VEC-10. */

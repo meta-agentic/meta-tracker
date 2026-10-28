@@ -63,12 +63,12 @@ One command brings up a throwaway PostgreSQL in Docker, builds the web client an
 scripts/run-local.sh
 ```
 
-Open <http://localhost:8080>: the Boards tab shows the project's real backlog, one card per item, in the column its status maps to (`TO DO` in Backlog, `REFINED` in Refined, `PLANNED` in To Do, `IN PROGRESS`, `IN REVIEW`, `DONE`, and `NO GO` kept off the board). Ctrl-C stops the server. The database keeps its data between runs, so running the command again imports again and changes nothing unless a file under `.vault/` changed; `docker rm -f vectis-local-db` removes it. `VECTIS_PORT` and `VECTIS_DB_PORT` move the ports.
+Open <http://localhost:8080>: the Boards tab shows the project's real backlog, one card per item, in the column its status maps to (`TO DO` and `REFINED` in Backlog, where a `refined` label tells the refined items apart, `PLANNED` in To Do, then `IN PROGRESS`, `IN REVIEW`, `DONE`, and `NO GO` kept off the board). Ctrl-C stops the server. The database keeps its data between runs, so running the command again imports again and changes nothing unless a file under `.vault/` changed; `docker rm -f vectis-local-db` removes it. `VECTIS_PORT` and `VECTIS_DB_PORT` move the ports.
 
 What the import does, and does not:
 
 - `POST /api/v1/imports/vault` reads the vault the server is configured with (`vectis.import.vault.root`, environment `VECTIS_IMPORT_VAULT_ROOT`; `vectis.import.vault.space`, default `vec`) through the vault connector. A request never names a path. With no root configured the endpoint answers 404, so a deployment that does not ask for the import does not have it.
-- It provisions the workspace `VEC` from the Scrum template with the Refined state after Backlog if it does not exist, and upserts the items by key. Running it again changes nothing; an edited file updates that item and no other.
+- It provisions the workspace `VEC` from the plain Scrum template if it does not exist, and upserts the items by key. Running it again changes nothing; an edited file updates that item and no other.
 - It only reads: nothing is written to `.vault/`. An item deleted from the vault is not deleted from the board, and a card moved on the board is moved back by the next import.
 - There is no sign-in yet (VEC-35), so do not switch the import on for a server that others can reach.
 

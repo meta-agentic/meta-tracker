@@ -6,6 +6,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.startsWith;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -52,9 +53,9 @@ class VaultImportApiTest {
     private static final Path VAULT = ImportTestProfile.VAULT;
     private static final Pattern STATUS = Pattern.compile("(?m)^status:\\s*(.+?)\\s*$");
 
-    /** The column each vault status belongs in on the Scrum board with Refined after Backlog. */
+    /** The column each vault status belongs in on the Scrum board; REFINED is Backlog with a label. */
     private static final Map<String, String> COLUMN = Map.of(
-            "TO DO", "backlog", "REFINED", "refined", "PLANNED", "todo", "IN PROGRESS", "in-progress",
+            "TO DO", "backlog", "REFINED", "backlog", "PLANNED", "todo", "IN PROGRESS", "in-progress",
             "IN REVIEW", "in-review", "DONE", "done", "NO GO", "no-go");
 
     @BeforeEach
@@ -68,7 +69,7 @@ class VaultImportApiTest {
     // --- AC1: every item once, in the column its status maps to ----------------------------------
 
     @Test
-    void importProvisionsTheWorkspaceFromScrumWithRefinedAndShowsEveryItemOnceInItsColumn() throws IOException {
+    void importProvisionsTheWorkspaceFromScrumAndShowsEveryItemOnceInItsColumn() throws IOException {
         Map<String, String> expected = expectedColumns();
         assertTrue(expected.size() >= 10, "the repository's backlog is the fixture: " + expected.size());
 
@@ -83,10 +84,11 @@ class VaultImportApiTest {
                 .body("template.key", equalTo("scrum")).body("template.version", equalTo(1));
         given().get("/api/v1/workspaces/VEC/boards").then().statusCode(200)
                 .body("[0].columns.key", equalTo(
-                        List.of("backlog", "refined", "todo", "in-progress", "in-review", "done", "no-go")));
+                        List.of("backlog", "todo", "in-progress", "in-review", "done", "no-go")));
         Map<String, String> shown = shownColumns();
         assertEquals(expected, shown, "every item once, in its column");
-        assertTrue(shown.containsValue("refined") && shown.containsValue("done") && shown.containsValue("backlog"));
+        assertTrue(shown.containsValue("done") && shown.containsValue("backlog"));
+        assertEquals(refinedKeys(), labelled("refined"), "exactly the REFINED items carry the label");
     }
 
     // --- AC2: idempotent, and an edit updates its item and nothing else --------------------------
@@ -141,6 +143,33 @@ class VaultImportApiTest {
         post("vault").then().statusCode(200).body("updated", equalTo(1));
 
         assertEquals(COLUMN.get(now), shownColumns().get(key));
+    }
+
+    @Test
+    void anItemMadeRefinedStaysInBacklogAndOnlyItsLabelsChange() throws IOException {
+        Path file = anItemFile();
+        String key = file.getFileName().toString().replace(".md", "");
+        Files.writeString(file, Files.readString(file).replaceFirst("(?m)^status: .*$", "status: TO DO"));
+        post("vault").then().statusCode(200);
+        Map<String, Object> before = byKey(items()).get(key);
+        assertEquals("backlog", before.get("column"));
+        assertFalse(labels(before).contains("refined"));
+        Files.writeString(file, Files.readString(file).replaceFirst("(?m)^status: .*$", "status: REFINED"));
+
+        post("vault").then().statusCode(200).body("updated", equalTo(1)).body("unchanged", equalTo(items().size() - 1));
+
+        Map<String, Object> after = byKey(items()).get(key);
+        assertEquals("backlog", after.get("column"));
+        assertTrue(labels(after).contains("refined"));
+        assertEquals(2, ((Number) after.get("version")).intValue());
+        Map<String, Object> was = new TreeMap<>(fields(before));
+        Map<String, Object> now = new TreeMap<>(fields(after));
+        for (String changed : List.of("labels", "status")) {
+            was.remove(changed);
+            now.remove(changed);
+        }
+        assertEquals(was, now, "nothing but the label and the verbatim status");
+        post("vault").then().statusCode(200).body("updated", equalTo(0));
     }
 
     @Test
@@ -208,15 +237,49 @@ class VaultImportApiTest {
         return given().post("/api/v1/imports/" + source);
     }
 
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> fields(Map<String, Object> item) {
+        return (Map<String, Object>) item.get("fields");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<String> labels(Map<String, Object> item) {
+        Object labels = fields(item).get("labels");
+        return labels == null ? List.of() : (List<String>) labels;
+    }
+
+    private static java.util.Set<String> labelled(String label) {
+        var out = new java.util.TreeSet<String>();
+        items().stream().filter(item -> labels(item).contains(label)).forEach(item -> out.add((String) item.get("key")));
+        return out;
+    }
+
+    /** The items whose status line says REFINED. */
+    private static java.util.Set<String> refinedKeys() throws IOException {
+        var out = new java.util.TreeSet<String>();
+        expectedStatuses().forEach((key, status) -> {
+            if (status.equals("REFINED")) {
+                out.add(key);
+            }
+        });
+        return out;
+    }
+
     /** Key to column, from the vault files: the directory is not consulted, the status line is. */
     private static Map<String, String> expectedColumns() throws IOException {
+        var out = new TreeMap<String, String>();
+        expectedStatuses().forEach((key, status) -> out.put(key, COLUMN.get(status)));
+        return out;
+    }
+
+    private static Map<String, String> expectedStatuses() throws IOException {
         var out = new TreeMap<String, String>();
         for (String tier : List.of("raw", "wiki", "output")) {
             try (Stream<Path> files = Files.list(VAULT.resolve("vec").resolve(tier))) {
                 for (Path file : files.filter(f -> f.getFileName().toString().matches("VEC-\\d+\\.md")).toList()) {
                     Matcher status = STATUS.matcher(Files.readString(file));
                     assertTrue(status.find(), file.toString());
-                    out.put(file.getFileName().toString().replace(".md", ""), COLUMN.get(status.group(1)));
+                    out.put(file.getFileName().toString().replace(".md", ""), status.group(1));
                 }
             }
         }
