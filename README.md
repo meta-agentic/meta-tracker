@@ -55,6 +55,25 @@ work, rejected proposals and the reasoning behind each — lives in
 is kept in a tracker you cannot see. An issue tracker whose own backlog is
 private would be a poor advertisement for itself.
 
+### Run Vectis on its own backlog
+
+One command brings up a throwaway PostgreSQL in Docker, builds the web client and the server, starts the server with the vault import switched on, imports this repository's own `.vault/vec` and leaves the server running. It needs Docker, JDK 25, Maven and Node.
+
+```sh
+scripts/run-local.sh
+```
+
+Open <http://localhost:8080>: the Boards tab shows the project's real backlog, one card per item, in the column its status maps to (`TO DO` in Backlog, `REFINED` in Refined, `PLANNED` in To Do, `IN PROGRESS`, `IN REVIEW`, `DONE`, and `NO GO` kept off the board). Ctrl-C stops the server. The database keeps its data between runs, so running the command again imports again and changes nothing unless a file under `.vault/` changed; `docker rm -f vectis-local-db` removes it. `VECTIS_PORT` and `VECTIS_DB_PORT` move the ports.
+
+What the import does, and does not:
+
+- `POST /api/v1/imports/vault` reads the vault the server is configured with (`vectis.import.vault.root`, environment `VECTIS_IMPORT_VAULT_ROOT`; `vectis.import.vault.space`, default `vec`) through the vault connector. A request never names a path. With no root configured the endpoint answers 404, so a deployment that does not ask for the import does not have it.
+- It provisions the workspace `VEC` from the Scrum template with the Refined state after Backlog if it does not exist, and upserts the items by key. Running it again changes nothing; an edited file updates that item and no other.
+- It only reads: nothing is written to `.vault/`. An item deleted from the vault is not deleted from the board, and a card moved on the board is moved back by the next import.
+- There is no sign-in yet (VEC-35), so do not switch the import on for a server that others can reach.
+
+Native image: the connector parses front-matter with SnakeYAML. Whether that parser works inside the native executable is not verified: the import has been run on the JVM only, and nothing in CI runs the native executable against a vault. The import is off unless `vectis.import.vault.root` is set, so the native image the pipeline builds does not use it.
+
 ### Principles
 
 - **Reactive, non-blocking core.** Every request path is asynchronous end to end

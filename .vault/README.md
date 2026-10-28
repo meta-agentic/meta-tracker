@@ -79,7 +79,4 @@ decision of any consequence is recorded before the work starts — is
 the finished work, the open questions, and the reasoning behind both, so you can disagree
 with a decision knowing exactly what it was and why it was taken.
 
-If you take the project somewhere else, this directory is yours to run: keep the
-convention, change it, or drop it. Nothing in the application reads these files — the
-build, the tests and the runtime are completely independent of `.vault/`. It is
-documentation that happens to be structured.
+If you take the project somewhere else, this directory is yours to run: keep the convention, change it, or drop it. The application reads these files only when you switch its import on: Vectis can show this backlog on its own board (`POST /api/v1/imports/vault`, see the [README](../README.md#run-vectis-on-its-own-backlog)), and the import never writes to them. The runtime does not need `.vault/`. It is documentation that happens to be structured.
