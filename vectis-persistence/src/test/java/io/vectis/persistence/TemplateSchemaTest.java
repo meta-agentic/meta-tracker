@@ -134,4 +134,95 @@ class TemplateSchemaTest {
             assertTrue(malformed.getMessage().contains("board_column_key_check"), malformed.getMessage());
         });
     }
+
+    private static SQLException refused(Statement st, String sql) {
+        return assertThrows(SQLException.class, () -> st.executeUpdate(sql));
+    }
+
+    private static void assertViolates(SQLException e, String sqlState, String constraint) {
+        assertEquals(sqlState, e.getSQLState(), e.getMessage());
+        assertTrue(e.getMessage().contains(constraint), e.getMessage());
+    }
+
+    /** A tenant template with no version yet, to add version rows to. */
+    private static UUID tenantTemplate(Statement st) throws SQLException {
+        UUID id = TimeOrderedId.next();
+        st.executeUpdate("insert into workflow_template (id, tenant_id, key) values ('%s', '%s', 'probe')"
+                .formatted(id, UUID.randomUUID()));
+        return id;
+    }
+
+    private static final String VERSION = """
+            insert into workflow_template_version
+                   (template_id, version, parent_id, parent_version, document, resolved, resolver_version, cause)
+            values ('%s', %d, %s, %s, '{}', '{}', 1, '{"kind": "authored"}')
+            """;
+
+    private static final String SCRUM_ID = "(select id from workflow_template where tenant_id is null and key = 'scrum')";
+
+    @Test
+    void aTemplateKeyFollowsTheKeyPattern() throws SQLException {
+        inRolledBackTransaction(st -> assertViolates(refused(st,
+                        "insert into workflow_template (id, tenant_id, key) values ('%s', '%s', 'Acme Corp')"
+                                .formatted(TimeOrderedId.next(), UUID.randomUUID())),
+                "23514", "workflow_template_key_check"));
+    }
+
+    @Test
+    void aVersionExtendsAPublishedVersion() throws SQLException {
+        inRolledBackTransaction(st -> {
+            UUID id = tenantTemplate(st);
+            assertViolates(refused(st, VERSION.formatted(id, 1, SCRUM_ID, "2")),
+                    "23503", "workflow_template_version_parent_id_parent_version_fkey");
+        });
+    }
+
+    @Test
+    void aParentIsNamedByBothItsTemplateAndItsVersionOrNeither() throws SQLException {
+        inRolledBackTransaction(st -> {
+            UUID id = tenantTemplate(st);
+            st.execute("savepoint s");
+            assertViolates(refused(st, VERSION.formatted(id, 1, SCRUM_ID, "null")),
+                    "23514", "workflow_template_version_check");
+            st.execute("rollback to savepoint s");
+            assertViolates(refused(st, VERSION.formatted(id, 1, "null", "1")),
+                    "23514", "workflow_template_version_check");
+        });
+    }
+
+    @Test
+    void aTemplateHasOneRowPerVersion() throws SQLException {
+        inRolledBackTransaction(st -> {
+            UUID id = tenantTemplate(st);
+            st.executeUpdate(VERSION.formatted(id, 1, SCRUM_ID, "1"));
+            assertViolates(refused(st, VERSION.formatted(id, 1, SCRUM_ID, "1")),
+                    "23505", "workflow_template_version_pkey");
+        });
+    }
+
+    private static final String WORKSPACE = """
+            insert into workspace (id, key, name, template_id, template_version, config_delta, follow)
+            values ('%s', 'CONSTR', 'Probe', %s, %d, '%s'::jsonb, '%s')
+            """;
+
+    @Test
+    void aWorkspaceIsPinnedToAPublishedVersion() throws SQLException {
+        inRolledBackTransaction(st -> assertViolates(refused(st,
+                        WORKSPACE.formatted(TimeOrderedId.next(), SCRUM_ID, 2, "{}", "manual")),
+                "23503", "workspace_template_fk"));
+    }
+
+    @Test
+    void aWorkspaceDeltaIsAnObject() throws SQLException {
+        inRolledBackTransaction(st -> assertViolates(refused(st,
+                        WORKSPACE.formatted(TimeOrderedId.next(), SCRUM_ID, 1, "[]", "manual")),
+                "23514", "workspace_config_delta_object"));
+    }
+
+    @Test
+    void aWorkspaceFollowsManuallyOrAutomatically() throws SQLException {
+        inRolledBackTransaction(st -> assertViolates(refused(st,
+                        WORKSPACE.formatted(TimeOrderedId.next(), SCRUM_ID, 1, "{}", "sometimes")),
+                "23514", "workspace_follow_check"));
+    }
 }

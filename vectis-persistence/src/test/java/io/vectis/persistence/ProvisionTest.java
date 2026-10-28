@@ -161,6 +161,41 @@ class ProvisionTest {
         assertNoTrace(ws);
     }
 
+    /**
+     * Provisioning is one transaction: a failure after the workspace and the board are written, on
+     * the column insert, leaves no row of either. A trigger installed for this test only fails the
+     * column insert of the probe workspace's board, which is named after it.
+     */
+    @Test
+    void aFailureAfterTheWorkspaceIsWrittenLeavesNothingBehind() {
+        Workspace ws = Workspace.create("PVROLLBACK", "Rollback probe");
+        pool.query("""
+                create function provision_probe_fail() returns trigger language plpgsql as $$
+                begin
+                    if exists (select 1 from board b join workspace w on w.id = b.workspace_id
+                                where b.id = new.board_id and w.key = 'PVROLLBACK') then
+                        raise exception 'probe: column insert refused';
+                    end if;
+                    return new;
+                end;
+                $$;
+                create trigger provision_probe_fail before insert on board_column
+                    for each row execute function provision_probe_fail();
+                """).execute().await().indefinitely();
+        try {
+            RuntimeException e = assertThrows(RuntimeException.class,
+                    () -> workspaces.provision(ws, null, TemplateRef.parse("scrum@1"), null).await().indefinitely());
+            assertTrue(e.getMessage().contains("probe: column insert refused"), e::getMessage);
+            assertNoTrace(ws);
+            assertEquals(0, count("select count(*) from board where name = $1", ws.name()));
+        } finally {
+            pool.query("drop trigger provision_probe_fail on board_column; drop function provision_probe_fail()")
+                    .execute().await().indefinitely();
+        }
+        assertEquals(ws, workspaces.provision(ws, null, TemplateRef.parse("scrum@1"), null).await().indefinitely()
+                .workspace(), "the same workspace provisions once the failure is gone");
+    }
+
     @Test
     void anUnknownTemplateIsRefusedAndNothingIsWritten() {
         Workspace ws = newWorkspace();
