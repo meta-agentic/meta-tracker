@@ -5,9 +5,10 @@ import { boardColumns, selectActiveBoard } from "../store/selectors";
 import { dict } from "../store/dict";
 import { rememberBoardColumnCount } from "../store/boardShape";
 import { useNumberFormat } from "../i18n/format";
+import { filterIssues, isFilterActive, useBoardFilter } from "../store/boardFilter";
 import type { ID, Issue } from "../store/types";
 import { IssueCard } from "./IssueCard";
-import { BoardIcon } from "./icons";
+import { BoardIcon, SearchIcon } from "./icons";
 import { EmptyState } from "./states";
 
 /** Cards rendered per column before the rest collapse into a "+N more" line. */
@@ -37,16 +38,28 @@ export function BoardView({ onOpenIssue, only }: BoardViewProps) {
   const epicsById = useWorkspaceStore((s) => s.epicsById);
   const boardIssueIds = useWorkspaceStore((s) => s.boardIssueIds);
 
-  const columns = useMemo(() => {
-    if (!board) return dict<Issue[]>();
-    const all = boardColumns(issuesById, boardIssueIds, board.id);
-    if (!only) return all;
+  const [filter] = useBoardFilter();
+  const filtering = isFilterActive(filter);
+
+  // `only` narrows to the sprint; the filter narrows what is left. Both are
+  // applied here, in the columns, so a card the filter hides is not "off the
+  // board": the Sprint tab's notes count by column and board alone.
+  const { columns, before, after } = useMemo(() => {
     const kept = dict<Issue[]>();
-    for (const [columnId, issues] of Object.entries(all)) {
-      kept[columnId] = issues.filter((issue) => only.has(issue.id));
+    let total = 0;
+    let shown = 0;
+    if (board) {
+      const all = boardColumns(issuesById, boardIssueIds, board.id);
+      for (const [columnId, issues] of Object.entries(all)) {
+        const scoped = only ? issues.filter((issue) => only.has(issue.id)) : issues;
+        const matching = filterIssues(scoped, epicsById, filter);
+        kept[columnId] = matching;
+        total += scoped.length;
+        shown += matching.length;
+      }
     }
-    return kept;
-  }, [board, issuesById, boardIssueIds, only]);
+    return { columns: kept, before: total, after: shown };
+  }, [board, issuesById, epicsById, boardIssueIds, only, filter]);
 
   const columnCount = board?.columns.length ?? 0;
   useEffect(() => rememberBoardColumnCount(columnCount), [columnCount]);
@@ -59,6 +72,17 @@ export function BoardView({ onOpenIssue, only }: BoardViewProps) {
         icon={<BoardIcon size={22} />}
         title={t("board.noColumns.title")}
         body={t("board.noColumns.body")}
+      />
+    );
+  }
+
+  // Items exist but the filter hides them all: not the same as an empty board.
+  if (filtering && before > 0 && after === 0) {
+    return (
+      <EmptyState
+        icon={<SearchIcon size={22} />}
+        title={t("filter.noMatch.title")}
+        body={t("filter.noMatch.body")}
       />
     );
   }

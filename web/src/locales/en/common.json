@@ -144,5 +144,20 @@
   "sprint.otherBoard.title": "This sprint's items are on another board",
   "sprint.otherBoard.body": "Pick the board they are on, above, to see them.",
   "sprint.offBoard_one": "{{items}} item is in a column that is not shown on the board.",
-  "sprint.offBoard_other": "{{items}} items are in columns that are not shown on the board."
+  "sprint.offBoard_other": "{{items}} items are in columns that are not shown on the board.",
+
+  "filter.label": "Filter items",
+  "filter.text": "Filter by key, title, epic or label",
+  "filter.facet.epic": "Epic",
+  "filter.facet.label": "Label",
+  "filter.facet.kind": "Kind",
+  "filter.facet.priority": "Priority",
+  "filter.noValues": "No values",
+  "filter.clear": "Clear filter",
+  "filter.count.board_one": "{{matching}} of {{total}} item on this board",
+  "filter.count.board_other": "{{matching}} of {{total}} items on this board",
+  "filter.count.sprint_one": "{{matching}} of {{total}} item in this sprint on this board",
+  "filter.count.sprint_other": "{{matching}} of {{total}} items in this sprint on this board",
+  "filter.noMatch.title": "No items match the filter",
+  "filter.noMatch.body": "Change the filter or clear it to see everything again."
 }

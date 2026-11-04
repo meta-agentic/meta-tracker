@@ -148,5 +148,22 @@
   "sprint.otherBoard.body": "Scegliere sopra la bacheca in cui si trovano per vederli.",
   "sprint.offBoard_one": "{{items}} elemento è in una colonna non mostrata sulla bacheca.",
   "sprint.offBoard_many": "{{items}} elementi sono in colonne non mostrate sulla bacheca.",
-  "sprint.offBoard_other": "{{items}} elementi sono in colonne non mostrate sulla bacheca."
+  "sprint.offBoard_other": "{{items}} elementi sono in colonne non mostrate sulla bacheca.",
+
+  "filter.label": "Filtra gli elementi",
+  "filter.text": "Filtra per chiave, titolo, epica o etichetta",
+  "filter.facet.epic": "Epica",
+  "filter.facet.label": "Etichetta",
+  "filter.facet.kind": "Tipo",
+  "filter.facet.priority": "Priorità",
+  "filter.noValues": "Nessun valore",
+  "filter.clear": "Azzera il filtro",
+  "filter.count.board_one": "{{matching}} di {{total}} elemento su questa bacheca",
+  "filter.count.board_many": "{{matching}} di {{total}} elementi su questa bacheca",
+  "filter.count.board_other": "{{matching}} di {{total}} elementi su questa bacheca",
+  "filter.count.sprint_one": "{{matching}} di {{total}} elemento in questo sprint su questa bacheca",
+  "filter.count.sprint_many": "{{matching}} di {{total}} elementi in questo sprint su questa bacheca",
+  "filter.count.sprint_other": "{{matching}} di {{total}} elementi in questo sprint su questa bacheca",
+  "filter.noMatch.title": "Nessun elemento corrisponde al filtro",
+  "filter.noMatch.body": "Cambia il filtro o azzeralo per rivedere tutto."
 }

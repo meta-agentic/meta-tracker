@@ -217,3 +217,12 @@ export function ListIcon(props: IconProps) {
     </Icon>
   );
 }
+
+export function SearchIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="7" cy="7" r="4" />
+      <path d="m10 10 3.5 3.5" />
+    </Icon>
+  );
+}
