@@ -6,6 +6,7 @@ import { useDateFormat, useNumberFormat } from "../i18n/format";
 import type { ID, Issue } from "../store/types";
 import { EpicChip, TypeBadge } from "./IssueCard";
 import { CloseIcon, LinkIcon } from "./icons";
+import { Markdown } from "./Markdown";
 
 export interface IssueDetailProps {
   issueId: ID;
@@ -242,8 +243,7 @@ export function IssueDetail({ issueId, onClose, onNavigate }: IssueDetailProps) 
           <section className="vec-sheet__section" aria-labelledby={`${titleId}-description`}>
             <h3 id={`${titleId}-description`}>{t("detail.description")}</h3>
             {issue.description ? (
-              // Plain text with its line breaks kept. Never parsed as HTML.
-              <p className="vec-description">{issue.description}</p>
+              <Markdown source={issue.description} />
             ) : (
               <p className="vec-muted-note">{t("detail.noDescription")}</p>
             )}
