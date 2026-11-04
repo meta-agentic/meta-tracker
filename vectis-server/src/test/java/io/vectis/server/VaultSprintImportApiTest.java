@@ -129,6 +129,37 @@ class VaultSprintImportApiTest {
     }
 
     @Test
+    void anActiveSprintThatLeftTheVaultIsDemotedSoTheNewActiveOneImports() throws IOException {
+        sprint("VEC-S2", "closed", "start: '2026-10-15'\n");
+        sprint("VEC-S3", "closed", "start: '2026-10-29'\n");
+        sprint("VEC-S4", "future", "");
+        sprint("VEC-S1", "active", "start: '2026-10-01'\n");
+        post().then().statusCode(200);
+        Files.delete(SPACE.resolve("sprints/VEC-S1.md"));
+        sprint("VEC-S4", "active", "start: '2026-11-12'\n");
+
+        post().then().statusCode(200).body("problems", hasItem(containsString("VEC-S1")));
+
+        given().get("/api/v1/workspaces/VEC/sprints").then().statusCode(200)
+                .body("find { it.key == 'VEC-S4' }.state", equalTo("ACTIVE"))
+                .body("find { it.key == 'VEC-S1' }.state", equalTo("COMPLETED"));
+        assertEquals(List.of("VEC-1", "VEC-2", "VEC-3", "VEC-4").size(),
+                given().get("/api/v1/workspaces/VEC/items").jsonPath().getList("items").size());
+    }
+
+    @Test
+    void sprintsWithoutDatesListInKeyNumberOrder() throws IOException {
+        sprint("VEC-S10", "future", "");
+        sprint("VEC-S2", "future", "");
+
+        post().then().statusCode(200);
+
+        given().get("/api/v1/workspaces/VEC/sprints").then().statusCode(200)
+                .body("key.findAll { it in ['VEC-S2', 'VEC-S4', 'VEC-S10'] }",
+                        equalTo(List.of("VEC-S2", "VEC-S4", "VEC-S10")));
+    }
+
+    @Test
     void anUnknownWorkspaceOrSprintIsAProblemJson404() {
         post().then().statusCode(200);
 
