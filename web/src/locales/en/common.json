@@ -133,6 +133,10 @@
   "sprint.none.body": "This workspace has no sprints. Sprints imported from a source appear here.",
   "sprint.noItems.title": "No items in this sprint",
   "sprint.noItems.body": "No item currently belongs to this sprint.",
-  "sprint.loading": "Loading sprints…",
-  "sprint.error": "The sprints could not be loaded."
+  "sprint.error": "The sprints could not be loaded.",
+  "sprint.itemsError": "The sprint's items could not be loaded.",
+  "sprint.otherBoard.title": "This sprint's items are on another board",
+  "sprint.otherBoard.body": "Pick the board they are on, above, to see them.",
+  "sprint.offBoard_one": "{{items}} item is in a column that is not shown on the board.",
+  "sprint.offBoard_other": "{{items}} items are in columns that are not shown on the board."
 }

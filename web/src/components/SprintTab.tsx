@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSprints, type WireSprint, type WorkspaceApiClient } from "../api";
 import { useWorkspaceStore } from "../store/workspaceStore";
+import { selectActiveBoard } from "../store/selectors";
 import { uiTracking } from "../store/cache";
 import { useDateFormat, useNumberFormat } from "../i18n/format";
 import type { ID } from "../store/types";
@@ -77,18 +78,35 @@ function SprintBoard({
   onOpenIssue: (issueId: ID) => void;
 }) {
   const { t } = useTranslation();
+  const number = useNumberFormat();
   const itemsById = useWorkspaceStore((s) => s.issuesById);
-  const only = useMemo(() => {
+  const board = useWorkspaceStore(selectActiveBoard);
+  const { only, offBoard, elsewhere } = useMemo(() => {
+    const shown = new Set(board?.columns.map((column) => column.id));
     const ids = new Set<ID>();
+    let off = 0;
+    let other = 0;
     for (const key of keys ?? []) {
       const issue = itemsById[key];
-      if (issue && issue.boardId === boardId) ids.add(issue.id);
+      if (!issue) continue;
+      if (issue.boardId !== boardId) other += 1;
+      else {
+        ids.add(issue.id);
+        if (!shown.has(issue.columnId)) off += 1;
+      }
     }
-    return ids;
-  }, [keys, itemsById, boardId]);
+    return { only: ids, offBoard: off, elsewhere: other };
+  }, [keys, itemsById, boardId, board]);
 
   if (keys !== null && only.size === 0) {
-    return (
+    // Items on a board that is not open are not "no items": say where they are.
+    return elsewhere > 0 ? (
+      <EmptyState
+        icon={<BoardIcon size={22} />}
+        title={t("sprint.otherBoard.title")}
+        body={t("sprint.otherBoard.body")}
+      />
+    ) : (
       <EmptyState
         icon={<BoardIcon size={22} />}
         title={t("sprint.noItems.title")}
@@ -97,9 +115,16 @@ function SprintBoard({
     );
   }
   return (
-    <ErrorBoundary resetKey={boardId} fallback={(error) => <BoardCrash error={error} />}>
-      <BoardView onOpenIssue={onOpenIssue} only={only} />
-    </ErrorBoundary>
+    <>
+      {offBoard > 0 && (
+        <p className="vec-muted-note vec-sprint-note">
+          {t("sprint.offBoard", { count: offBoard, items: number(offBoard) })}
+        </p>
+      )}
+      <ErrorBoundary resetKey={boardId} fallback={(error) => <BoardCrash error={error} />}>
+        <BoardView onOpenIssue={onOpenIssue} only={only} />
+      </ErrorBoundary>
+    </>
   );
 }
 
@@ -134,18 +159,18 @@ export function SprintTab({ createClient, onOpenIssue }: SprintTabProps) {
   const latestClosed = useMemo(() => shown.sprints.find((s) => s.state === "COMPLETED") ?? null, [shown.sprints]);
 
   if (shown.status === "loading") return <LoadingBoard />;
-  if (shown.status === "error" || shown.itemsStatus === "error") {
-    return (
-      <div className="vec-state" role="alert">
-        <h2 className="vec-state__title">{t("sprint.error")}</h2>
-        {shown.error && <code className="vec-state__diagnostic">{shown.error.message}</code>}
-        <button type="button" className="vec-button vec-button--primary" onClick={shown.retry}>
-          <RetryIcon size={14} />
-          {t("app.retry")}
-        </button>
-      </div>
-    );
-  }
+  const failure = (title: string) => (
+    <div className="vec-state" role="alert">
+      <h2 className="vec-state__title">{title}</h2>
+      {shown.error && <code className="vec-state__diagnostic">{shown.error.message}</code>}
+      <button type="button" className="vec-button vec-button--primary" onClick={shown.retry}>
+        <RetryIcon size={14} />
+        {t("app.retry")}
+      </button>
+    </div>
+  );
+  // Without the list there is no switcher to keep; a failed sprint keeps it.
+  if (shown.status === "error") return failure(t("sprint.error"));
   if (shown.sprints.length === 0) {
     return (
       <EmptyState
@@ -177,12 +202,18 @@ export function SprintTab({ createClient, onOpenIssue }: SprintTabProps) {
       {selected ? (
         <>
           <SprintHeader sprint={selected} />
-          <SprintBoard
-            key={`${selected.key}:${activeBoardId}`}
-            keys={shown.itemKeys}
-            boardId={activeBoardId}
-            onOpenIssue={onOpenIssue}
-          />
+          {shown.itemsStatus === "error" ? (
+            failure(t("sprint.itemsError"))
+          ) : shown.itemsStatus === "loading" ? (
+            <LoadingBoard />
+          ) : (
+            <SprintBoard
+              key={`${selected.key}:${activeBoardId}`}
+              keys={shown.itemKeys}
+              boardId={activeBoardId}
+              onOpenIssue={onOpenIssue}
+            />
+          )}
         </>
       ) : (
         <EmptyState
