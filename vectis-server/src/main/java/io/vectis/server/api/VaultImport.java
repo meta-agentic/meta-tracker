@@ -7,21 +7,25 @@ import io.vectis.connector.vault.VaultBacklogSource;
 import io.vectis.domain.Workspace;
 import io.vectis.extension.spi.BacklogSnapshot;
 import io.vectis.extension.spi.BacklogSourceException;
+import io.vectis.extension.spi.SourceSprint;
 import io.vectis.persistence.BoardRepository;
 import io.vectis.persistence.ImportResult;
 import io.vectis.persistence.ItemRepository;
 import io.vectis.persistence.KeyedBoard;
 import io.vectis.persistence.PlacementException;
+import io.vectis.persistence.SprintRepository;
 import io.vectis.persistence.TemplateRef;
 import io.vectis.persistence.WorkspaceRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * The vault import (VEC-54): reads the configured vault through the connector, provisions the
- * workspace named by the vault's key prefix if it does not exist, and upserts the items into
+ * workspace named by the vault's key prefix if it does not exist, and upserts the sprints and the items into
  * its board. The vault is only read.
  */
 @ApplicationScoped
@@ -40,9 +44,11 @@ public class VaultImport {
     private final WorkspaceRepository workspaces;
     private final BoardRepository boards;
     private final ItemRepository items;
+    private final SprintRepository sprints;
 
     public VaultImport(VaultImportConfig config, WorkspaceRepository workspaces, BoardRepository boards,
-                       ItemRepository items) {
+                       ItemRepository items, SprintRepository sprints) {
+        this.sprints = sprints;
         this.config = config;
         this.workspaces = workspaces;
         this.boards = boards;
@@ -72,6 +78,18 @@ public class VaultImport {
 
     private Uni<Report> write(BacklogSnapshot snapshot) {
         String key = snapshot.keyPrefix();
+        var plan = ImportedSprints.of(snapshot.sprints());
+        var known = snapshot.sprints().stream().map(SourceSprint::key).collect(Collectors.toSet());
+        var problems = new ArrayList<>(snapshot.problems());
+        problems.addAll(plan.problems());
+        var imported = snapshot.items().stream().map(item -> {
+            boolean placed = item.sprintKey() != null && known.contains(item.sprintKey());
+            if (item.sprintKey() != null && !placed) {
+                problems.add(item.origin() + ": sprint '" + item.sprintKey()
+                        + "' is not in the vault; the item is left without a sprint");
+            }
+            return ImportedItems.of(item, placed ? item.sprintKey() : null);
+        }).toList();
         return workspaces.findByKey(key)
                 .chain(found -> found.map(ws -> Uni.createFrom().item(new Provisioned(ws, false)))
                         .orElseGet(() -> provision(key)))
@@ -81,12 +99,12 @@ public class VaultImport {
                                 throw ProblemException.conflict("workspace " + key + " has no board to import into");
                             }
                             KeyedBoard board = all.getFirst();
-                            return items.upsertAll(board.board().id(),
-                                    snapshot.items().stream().map(ImportedItems::of).toList(), ORIGIN);
+                            return sprints.upsertImported(board.board().id(), plan.sprints(), ORIGIN)
+                                    .chain(sprintResult -> items.upsertAll(board.board().id(), imported, ORIGIN));
                         })
                         .onFailure(PlacementException.class).transform(e -> ProblemException.unprocessable(
                                 "workspace " + key + " cannot hold the vault's items: " + e.getMessage(), List.of()))
-                        .map(result -> report(key, target.created(), result, snapshot.problems())));
+                        .map(result -> report(key, target.created(), result, problems)));
     }
 
     /**
