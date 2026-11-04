@@ -9,6 +9,7 @@ import {
 import type { ID } from "./store/types";
 import { BoardSwitcher } from "./components/BoardSwitcher";
 import { BoardView } from "./components/BoardView";
+import { SprintTab } from "./components/SprintTab";
 import { BacklogTree, type BacklogTreeHandle } from "./components/BacklogTree";
 import { IssueDetail } from "./components/IssueDetail";
 import { PreferenceControls } from "./components/PreferenceControls";
@@ -17,6 +18,7 @@ import {
   InboxIcon,
   LogoMark,
   RoadmapIcon,
+  SprintIcon,
   TimelineIcon,
   TreeIcon,
 } from "./components/icons";
@@ -49,7 +51,14 @@ function findCard(issueId: ID): HTMLElement | null {
   return null;
 }
 
-function BoardsTab({ sync }: { sync: WorkspaceSync }) {
+/** The Boards tab, and the Sprint tab, which is the same board narrowed to one sprint. */
+function BoardsTab({
+  sync,
+  sprint,
+}: {
+  sync: WorkspaceSync;
+  sprint?: { createClient?: WorkspaceSyncOptions["createClient"] };
+}) {
   const { t } = useTranslation();
   const activeBoardId = useWorkspaceStore((s) => s.activeBoardId);
   const hasBoards = useWorkspaceStore((s) => Object.keys(s.boardsById).length > 0);
@@ -108,15 +117,21 @@ function BoardsTab({ sync }: { sync: WorkspaceSync }) {
   return (
     <>
       {sync.status === "stale" && <StaleBanner sync={sync} />}
-      <BoardSwitcher />
-      {/* Keyed on the board, never on the locale or the sync status: re-keying
-          on either would re-mount the board and lose the scroll position on a
-          language swap or a background revalidation. Inside its own boundary,
-          so a board that fails to render leaves the shell and the switcher
-          above it working; switching boards clears it. */}
-      <ErrorBoundary resetKey={activeBoardId} fallback={(error) => <BoardCrash error={error} />}>
-        <BoardView key={activeBoardId} onOpenIssue={openIssue} />
-      </ErrorBoundary>
+      {sprint ? (
+        <SprintTab createClient={sprint.createClient} onOpenIssue={openIssue} />
+      ) : (
+        <>
+          <BoardSwitcher />
+          {/* Keyed on the board, never on the locale or the sync status: re-keying
+              on either would re-mount the board and lose the scroll position on a
+              language swap or a background revalidation. Inside its own boundary,
+              so a board that fails to render leaves the shell and the switcher
+              above it working; switching boards clears it. */}
+          <ErrorBoundary resetKey={activeBoardId} fallback={(error) => <BoardCrash error={error} />}>
+            <BoardView key={activeBoardId} onOpenIssue={openIssue} />
+          </ErrorBoundary>
+        </>
+      )}
       {openIssueId && (
         <IssueDetail issueId={openIssueId} onClose={closeIssue} onNavigate={showIssue} />
       )}
@@ -337,6 +352,15 @@ export function App({ sync: syncOptions }: AppProps = {}) {
           <button
             type="button"
             className="vec-nav__item"
+            aria-current={tab === "sprint" ? "page" : undefined}
+            onClick={() => setTab("sprint")}
+          >
+            <SprintIcon />
+            {t("nav.sprint")}
+          </button>
+          <button
+            type="button"
+            className="vec-nav__item"
             aria-current={tab === "backlog" ? "page" : undefined}
             onClick={() => setTab("backlog")}
           >
@@ -371,6 +395,7 @@ export function App({ sync: syncOptions }: AppProps = {}) {
 
       <main id="vec-main" className="vec-main" tabIndex={-1}>
         {tab === "boards" && <BoardsTab sync={sync} />}
+        {tab === "sprint" && <BoardsTab sync={sync} sprint={{ createClient: syncOptions?.createClient }} />}
         {tab === "backlog" && <BacklogTab sync={sync} />}
         {tab === "roadmap" && <RoadmapTab sync={sync} />}
         {/* The profiler generates its own data and is deliberately not gated on

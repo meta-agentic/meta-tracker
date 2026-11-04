@@ -298,3 +298,61 @@
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+
+/* ---------- Sprint tab ---------- */
+
+.vec-sprint-note {
+  margin: 4px 20px 0;
+}
+
+.vec-sprint-header {
+  margin: 12px 20px 0;
+  padding: 12px 16px;
+  border: 1px solid var(--vec-border);
+  border-radius: 10px;
+  background: var(--vec-surface);
+}
+
+.vec-sprint-header__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+
+.vec-sprint-header__name {
+  margin: 0;
+  font-size: 16px;
+}
+
+.vec-sprint-state {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--vec-surface-sunken);
+  color: var(--vec-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.vec-sprint-header__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 32px;
+  margin: 8px 0 0;
+}
+
+.vec-sprint-header__facts dt {
+  color: var(--vec-text-muted);
+  font-size: 12px;
+}
+
+.vec-sprint-header__facts dd {
+  margin: 0;
+  font-size: 14px;
+}
+
+.vec-sprint-offer {
+  display: flex;
+  justify-content: center;
+  padding: 0 20px 24px;
+}
