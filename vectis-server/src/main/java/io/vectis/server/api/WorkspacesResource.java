@@ -8,6 +8,8 @@ import io.vectis.persistence.BoardRepository;
 import io.vectis.persistence.ItemRepository;
 import io.vectis.persistence.KeyedBoard;
 import io.vectis.persistence.PlacedItem;
+import io.vectis.persistence.SprintRepository;
+import io.vectis.persistence.SprintSummary;
 import io.vectis.persistence.WorkspaceRepository;
 import io.vectis.persistence.WorkspaceSummary;
 import jakarta.ws.rs.GET;
@@ -17,6 +19,7 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import java.nio.ByteBuffer;
+import java.time.LocalDate;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -36,8 +39,11 @@ public class WorkspacesResource {
     private final WorkspaceRepository workspaces;
     private final BoardRepository boards;
     private final ItemRepository items;
+    private final SprintRepository sprints;
 
-    public WorkspacesResource(WorkspaceRepository workspaces, BoardRepository boards, ItemRepository items) {
+    public WorkspacesResource(WorkspaceRepository workspaces, BoardRepository boards, ItemRepository items,
+                              SprintRepository sprints) {
+        this.sprints = sprints;
         this.workspaces = workspaces;
         this.boards = boards;
         this.items = items;
@@ -64,18 +70,29 @@ public class WorkspacesResource {
                 .map(all -> all.stream().map(BoardView::of).toList());
     }
 
+    /** The workspace's sprints, oldest first, with the story points each holds and has finished. */
+    @GET
+    @Path("/{key}/sprints")
+    public Uni<List<SprintView>> sprints(@PathParam("key") String key) {
+        return workspace(key)
+                .chain(ws -> sprints.summariesByWorkspace(ws.id()))
+                .map(all -> all.stream().map(SprintView::of).toList());
+    }
+
     /**
      * The workspace's items, newest first, {@code limit} at a time; {@code next} is the cursor of
      * the following page, null on the last one.
      *
      * @param board  narrows to the board with this key
      * @param column narrows to the column with this key, on {@code board} or on any board
+     * @param sprint narrows to the items of the sprint with this key
      * @param cursor the {@code next} of the previous page
      */
     @GET
     @Path("/{key}/items")
     public Uni<ItemPage> items(@PathParam("key") String key, @QueryParam("board") String board,
-                               @QueryParam("column") String column, @QueryParam("cursor") String cursor,
+                               @QueryParam("column") String column, @QueryParam("sprint") String sprint,
+                               @QueryParam("cursor") String cursor,
                                @QueryParam("limit") String limit) {
         int size = limit(limit);
         UUID before = cursor == null ? null : Cursor.decode(cursor);
@@ -83,10 +100,23 @@ public class WorkspacesResource {
             throw ProblemException.badRequest("column is a column key; got '" + column + "'");
         }
         return workspace(key)
-                .chain(ws -> boards.findByWorkspace(ws.id())
+                .chain(ws -> checkSprint(ws.id(), key, sprint)
+                        .chain(() -> boards.findByWorkspace(ws.id()))
                         .map(all -> scope(key, all, board, column))
-                        .chain(boardId -> items.pageNewestFirst(ws.id(), boardId, column, before, size + 1)))
+                        .chain(boardId -> items.pageNewestFirst(ws.id(), boardId, column, sprint, before, size + 1)))
                 .map(page -> ItemPage.of(page, size));
+    }
+
+    /** A sprint key that names no sprint of the workspace is a 404, as an unknown column is. */
+    private Uni<Void> checkSprint(UUID workspaceId, String workspace, String sprint) {
+        if (sprint == null) {
+            return Uni.createFrom().voidItem();
+        }
+        return sprints.summariesByWorkspace(workspaceId).invoke(all -> {
+            if (all.stream().noneMatch(s -> s.key().equals(sprint))) {
+                throw ProblemException.notFound("workspace " + workspace + " has no sprint " + sprint);
+            }
+        }).replaceWithVoid();
     }
 
     private Uni<WorkspaceSummary> workspace(String key) {
@@ -122,6 +152,14 @@ public class WorkspacesResource {
             throw ProblemException.badRequest("limit is a whole number from 1 to " + MAX_LIMIT + "; got '" + limit + "'");
         }
         return size;
+    }
+
+    record SprintView(String key, String name, String state, LocalDate start, LocalDate end, LocalDate closed,
+                      String goal, double committedPoints, double donePoints) {
+        static SprintView of(SprintSummary s) {
+            return new SprintView(s.key(), s.name(), s.status().name(), s.start(), s.end(), s.closed(), s.goal(),
+                    s.committedPoints(), s.donePoints());
+        }
     }
 
     record WorkspaceView(String key, String name, TemplateRefView template) {
