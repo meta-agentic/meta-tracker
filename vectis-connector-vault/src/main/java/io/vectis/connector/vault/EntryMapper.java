@@ -80,7 +80,7 @@ final class EntryMapper {
                 placed.isPresent() ? placed.get().category() : tier.category(),
                 placed.isPresent() ? placed.get().outcome() : tier.outcome(),
                 optionalText(fields, "epic", origin, problems),
-                optionalText(fields, "sprint", origin, problems),
+                sprintKey(fields, origin, problems),
                 points(fields.get("storyPoints"), origin, problems),
                 optionalText(fields, "priority", origin, problems),
                 keys(fields, "labels", origin, problems),
@@ -110,7 +110,8 @@ final class EntryMapper {
                 sprintState(text(fields.get("state")), origin, problems),
                 date(fields, "start", origin, problems),
                 date(fields, "end", origin, problems),
-                date(fields, "closed", origin, problems)));
+                date(fields, "closed", origin, problems),
+                optionalText(fields, "goal", origin, problems)));
     }
 
     /**
@@ -183,7 +184,11 @@ final class EntryMapper {
         }
         if (value instanceof String text) {
             try {
-                return LocalDate.parse(text.strip());
+                LocalDate parsed = LocalDate.parse(text.strip());
+                // PostgreSQL's date type holds years 1 to 9999 only
+                if (parsed.getYear() >= 1 && parsed.getYear() <= 9999) {
+                    return parsed;
+                }
             } catch (DateTimeParseException e) {
                 // reported below
             }
@@ -238,6 +243,15 @@ final class EntryMapper {
             problems.accept(origin + ": '" + name + "' has " + count + " not text; dropped");
         }
         return keys;
+    }
+
+    /** The item's sprint; an item carried through several lists them oldest first, and the last is the latest. */
+    private static String sprintKey(Map<String, Object> fields, String origin, Consumer<String> problems) {
+        if (fields.get("sprint") instanceof List<?>) {
+            List<String> sprints = keys(fields, "sprint", origin, problems);
+            return sprints.isEmpty() ? null : sprints.getLast();
+        }
+        return optionalText(fields, "sprint", origin, problems);
     }
 
     private static void putLinks(Map<String, List<String>> links, String type, List<String> targets) {

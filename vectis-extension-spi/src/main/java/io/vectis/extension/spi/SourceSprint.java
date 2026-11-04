@@ -13,8 +13,14 @@ import java.util.Objects;
  * @param start  planned or actual start; {@code null} when the source has none
  * @param end    planned end; {@code null} when the source has none
  * @param closed when the sprint was closed; {@code null} unless the source recorded it
+ * @param goal   what the sprint is for, in the source's words; {@code null} when the source has none
  */
-public record SourceSprint(String key, State state, LocalDate start, LocalDate end, LocalDate closed) {
+public record SourceSprint(String key, State state, LocalDate start, LocalDate end, LocalDate closed, String goal) {
+
+    /** A sprint without a goal. */
+    public SourceSprint(String key, State state, LocalDate start, LocalDate end, LocalDate closed) {
+        this(key, state, start, end, closed, null);
+    }
 
     /** The sprint's lifecycle state in the source. */
     public enum State { FUTURE, ACTIVE, CLOSED }

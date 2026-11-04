@@ -104,7 +104,8 @@ public final class VaultBacklogSource implements BacklogSource {
         }
         var problems = new ArrayList<String>();
         var budget = new ReadBudget(maxEntries, maxTotalBytes, maxProblems);
-        String keyPrefix = keyPrefix(root, budget, problems);
+        var declaredNext = new long[] {-1};
+        String keyPrefix = keyPrefix(root, budget, problems, declaredNext);
         var mapper = new EntryMapper(keyPrefix);
 
         var items = new LinkedHashMap<String, SourceItem>();
@@ -137,6 +138,8 @@ public final class VaultBacklogSource implements BacklogSource {
                     .ifPresent(sprints::add);
         }
 
+        staleCounter(keyPrefix, declaredNext[0], items.keySet(), problems);
+
         if (budget.exhausted()) {
             problems.add(BacklogSnapshot.FATAL + originBase + ": stopped reading after " + budget.exceeded()
                     + "; the snapshot is incomplete");
@@ -148,8 +151,30 @@ public final class VaultBacklogSource implements BacklogSource {
         return new BacklogSnapshot(keyPrefix, ordered, sprints, problems);
     }
 
-    /** The prefix from {@code idPolicy.prefix}, or the upper-cased space name when the meta file does not say. */
-    private String keyPrefix(Path root, ReadBudget budget, List<String> problems) {
+    /** Reports a declared {@code idPolicy.next} that is not above the highest id in use: the next minted id would collide. */
+    private void staleCounter(String keyPrefix, long next, Iterable<String> keys, List<String> problems) {
+        if (next < 0) {
+            return;
+        }
+        long highest = -1;
+        for (String key : keys) {
+            try {
+                highest = Math.max(highest, Long.parseLong(key.substring(keyPrefix.length() + 1)));
+            } catch (NumberFormatException | IndexOutOfBoundsException e) {
+                // not of the form <prefix>-<number>; the mapper has already reported it
+            }
+        }
+        if (next <= highest) {
+            problems.add(originBase + "/" + META + ": next: " + next + " is not above the highest id in use, "
+                    + keyPrefix + "-" + highest + "; the counter is stale");
+        }
+    }
+
+    /**
+     * The prefix from {@code idPolicy.prefix}, or the upper-cased space name when the meta file does not say.
+     * A whole-number {@code idPolicy.next} is stored in {@code declaredNext[0]}, which stays -1 otherwise.
+     */
+    private String keyPrefix(Path root, ReadBudget budget, List<String> problems, long[] declaredNext) {
         String origin = originBase + "/" + META;
         String fallback = space.toUpperCase(Locale.ROOT);
         String prefix = fallback;
@@ -161,6 +186,9 @@ public final class VaultBacklogSource implements BacklogSource {
                 Object idPolicy = VaultFiles.mapping(VaultFiles.read(meta, budget), "meta file").get("idPolicy");
                 if (idPolicy instanceof Map<?, ?> policy && policy.get("prefix") instanceof String declared) {
                     prefix = declared.strip();
+                    if (policy.get("next") instanceof Integer n) {
+                        declaredNext[0] = n;
+                    }
                 } else {
                     problems.add(origin + ": no 'idPolicy.prefix'; key prefix taken from the space name as "
                             + fallback);

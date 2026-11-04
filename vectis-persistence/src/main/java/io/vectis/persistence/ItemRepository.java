@@ -171,6 +171,7 @@ public class ItemRepository {
                     String[] titles = new String[n];
                     String[] ranks = new String[n];
                     String[] fields = new String[n];
+                    String[] sprintKeys = new String[n];
                     for (int i = 0; i < n; i++) {
                         ImportedItem item = items.get(i);
                         columnOf[i] = columnIds.get(item.columnKey());
@@ -183,22 +184,28 @@ public class ItemRepository {
                         titles[i] = item.title();
                         ranks[i] = item.rank();
                         fields[i] = new JsonObject(item.fields()).encode();
+                        sprintKeys[i] = item.sprintKey();
                     }
                     return scope.connection().preparedQuery("""
-                                    insert into item (id, workspace_id, board_id, column_id, key, title, rank, fields)
-                                    select x.id, $1, $2, x.column_id, x.key, x.title, x.rank, x.fields::jsonb
-                                      from unnest($3::uuid[], $4::uuid[], $5::text[], $6::text[], $7::text[], $8::text[])
-                                           as x (id, column_id, key, title, rank, fields)
+                                    insert into item (id, workspace_id, board_id, column_id, key, title, rank, fields,
+                                                      sprint_id)
+                                    select x.id, $1, $2, x.column_id, x.key, x.title, x.rank, x.fields::jsonb,
+                                           (select s.id from sprint s where s.board_id = $2 and s.key = x.sprint_key)
+                                      from unnest($3::uuid[], $4::uuid[], $5::text[], $6::text[], $7::text[], $8::text[],
+                                                  $9::text[])
+                                           as x (id, column_id, key, title, rank, fields, sprint_key)
                                     on conflict (workspace_id, key) do update
                                        set board_id = excluded.board_id, column_id = excluded.column_id,
                                            title = excluded.title, fields = excluded.fields,
+                                           sprint_id = excluded.sprint_id,
                                            version = item.version + 1, updated_at = now()
-                                     where (item.board_id, item.column_id, item.title, item.fields)
-                                           is distinct from (excluded.board_id, excluded.column_id, excluded.title, excluded.fields)
+                                     where (item.board_id, item.column_id, item.title, item.fields, item.sprint_id)
+                                           is distinct from (excluded.board_id, excluded.column_id, excluded.title,
+                                                             excluded.fields, excluded.sprint_id)
                                     returning (xmax = 0) as created
                                     """)
                             .execute(Tuple.from(new Object[] {
-                                scope.workspaceId(), boardId, ids, columnOf, keys, titles, ranks, fields}))
+                                scope.workspaceId(), boardId, ids, columnOf, keys, titles, ranks, fields, sprintKeys}))
                             .map(rows -> {
                                 int created = 0;
                                 int updated = 0;
@@ -438,6 +445,12 @@ public class ItemRepository {
      */
     public Uni<List<PlacedItem>> pageNewestFirst(UUID workspaceId, UUID boardId, String columnKey, UUID before,
                                                  int limit) {
+        return pageNewestFirst(workspaceId, boardId, columnKey, null, before, limit);
+    }
+
+    /** {@link #pageNewestFirst(UUID, UUID, String, UUID, int)} narrowed to the items of the sprint with this key. */
+    public Uni<List<PlacedItem>> pageNewestFirst(UUID workspaceId, UUID boardId, String columnKey, String sprintKey,
+                                                 UUID before, int limit) {
         return pool.preparedQuery("select " + qualified("i") + """
                         , b.key as board_key, c.key as column_key
                           from item i
@@ -447,10 +460,12 @@ public class ItemRepository {
                            and ($2::uuid is null or i.board_id = $2)
                            and ($3::text is null or c.key = $3)
                            and ($4::uuid is null or i.id < $4)
+                           and ($5::text is null or exists (
+                                select 1 from sprint s where s.id = i.sprint_id and s.key = $5))
                          order by i.id desc
-                         limit $5
+                         limit $6
                         """)
-                .execute(Tuple.of(workspaceId, boardId, columnKey, before, limit))
+                .execute(Tuple.of(workspaceId, boardId, columnKey, before, sprintKey, limit))
                 .map(rows -> {
                     List<PlacedItem> out = new ArrayList<>(rows.size());
                     rows.forEach(row -> out.add(new PlacedItem(map(row), row.getString("board_key"),
