@@ -68,7 +68,7 @@
   "detail.ancestors": "Genitori",
   "detail.sprint": "Sprint",
   "detail.axes": "estensione {{extension}} · intensione {{intension}}",
-  "detail.dependedOnBy": "Ha come dipendenza",
+  "detail.dependedOnBy": "Richiesto da",
   "detail.relatedFrom": "Collegato da",
   "detail.children": "In questo epic",
 

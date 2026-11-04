@@ -3,6 +3,6 @@ package io.vectis.persistence;
 
 import io.vectis.domain.Item;
 
-/** An item and the keys of the board and the column it is in, as one read returns them. */
-public record PlacedItem(Item item, String boardKey, String columnKey) {
+/** An item and the keys of the board, the column and the sprint (null in the backlog) it is in, as one read returns them. */
+public record PlacedItem(Item item, String boardKey, String columnKey, String sprintKey) {
 }

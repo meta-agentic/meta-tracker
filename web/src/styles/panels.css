@@ -575,3 +575,35 @@ button.vec-link-row:hover {
   margin-inline-start: 8px;
   font-size: 12px;
 }
+
+.vec-ancestor--depth-1 {
+  padding-inline-start: 1rem;
+}
+
+.vec-ancestor--depth-2 {
+  padding-inline-start: 2rem;
+}
+
+.vec-ancestor--depth-3 {
+  padding-inline-start: 3rem;
+}
+
+.vec-ancestor--depth-4 {
+  padding-inline-start: 4rem;
+}
+
+.vec-ancestor--depth-5 {
+  padding-inline-start: 5rem;
+}
+
+.vec-ancestor--depth-6 {
+  padding-inline-start: 6rem;
+}
+
+.vec-ancestor--depth-7 {
+  padding-inline-start: 7rem;
+}
+
+.vec-ancestor--depth-8 {
+  padding-inline-start: 8rem;
+}

@@ -3,6 +3,35 @@ import type { Board, Epic, ID, Issue } from "../store/types";
 /** The most ancestors followed. A vault file is untrusted; a chain is never this deep. */
 export const MAX_CHAIN = 16;
 
+/**
+ * An epic read as an issue, so the one detail panel opens either. The epic's
+ * parent is its `epicId`; fields an entry cached before epics carried them
+ * lacks read as empty.
+ */
+export function epicAsIssue(epic: Epic): Issue {
+  return {
+    id: epic.id,
+    key: epic.key,
+    boardId: epic.boardId ?? "",
+    epicId: epic.epicId ?? null,
+    columnId: epic.columnId ?? "",
+    title: epic.title,
+    order: 0,
+    startDate: epic.startDate ?? null,
+    dueDate: epic.dueDate ?? null,
+    storyPoints: epic.storyPoints ?? null,
+    type: epic.type ?? "epic",
+    labels: epic.labels ?? [],
+    priority: epic.priority ?? null,
+    description: epic.description ?? null,
+    dependsOn: epic.dependsOn ?? [],
+    relates: epic.relates ?? [],
+    sprint: epic.sprint ?? null,
+    extension: epic.extension ?? null,
+    intension: epic.intension ?? null,
+  };
+}
+
 /** An epic or an issue, read the one way the detail panel needs. */
 export interface ItemNode {
   id: ID;

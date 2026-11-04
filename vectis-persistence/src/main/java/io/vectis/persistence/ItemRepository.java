@@ -452,10 +452,11 @@ public class ItemRepository {
     public Uni<List<PlacedItem>> pageNewestFirst(UUID workspaceId, UUID boardId, String columnKey, String sprintKey,
                                                  UUID before, int limit) {
         return pool.preparedQuery("select " + qualified("i") + """
-                        , b.key as board_key, c.key as column_key
+                        , b.key as board_key, c.key as column_key, sp.key as sprint_key
                           from item i
                           join board b on b.id = i.board_id
                           join board_column c on c.id = i.column_id
+                          left join sprint sp on sp.id = i.sprint_id
                          where i.workspace_id = $1
                            and ($2::uuid is null or i.board_id = $2)
                            and ($3::text is null or c.key = $3)
@@ -469,7 +470,7 @@ public class ItemRepository {
                 .map(rows -> {
                     List<PlacedItem> out = new ArrayList<>(rows.size());
                     rows.forEach(row -> out.add(new PlacedItem(map(row), row.getString("board_key"),
-                            row.getString("column_key"))));
+                            row.getString("column_key"), row.getString("sprint_key"))));
                     return List.copyOf(out);
                 });
     }

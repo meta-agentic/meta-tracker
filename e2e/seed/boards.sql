@@ -72,7 +72,7 @@ select ('01900000-0000-7000-8000-0000000020' || lpad(n::text, 2, '0'))::uuid,
 from (values
     (1, 'Outer epic', '{"type": "epic", "priority": "P0"}'),
     (2, 'Inner epic', '{"type": "epic", "parentId": "E2E-401", "priority": "P1"}'),
-    (3, 'Story under the epics', '{"type": "story", "parentId": "E2E-402", "dependencies": ["E2E-404", "E2E-999"], "sprint": "S1", "storyPoints": 3, "extension": 0.2, "intension": -0.3}'),
+    (3, 'Story under the epics', '{"type": "story", "parentId": "E2E-402", "dependencies": ["E2E-404", "E2E-999"], "storyPoints": 3, "extension": 0.2, "intension": -0.3}'),
     (4, 'Story it depends on', '{"type": "story"}')
 ) as v(n, t, f);
 
