@@ -42,6 +42,8 @@ class VaultBacklogSourceTest {
                 item.links(), "a dangling reference is kept, not resolved");
         assertEquals("## Why\n\nA synthetic fixture item.", item.body());
         assertEquals("vault/demo/raw/DEMO-1.md", item.origin());
+        assertEquals(0.2, item.extension());
+        assertEquals(0.1, item.intension());
     }
 
     @Test
@@ -54,6 +56,8 @@ class VaultBacklogSourceTest {
         assertNull(epic.epicKey());
         assertNull(epic.sprintKey());
         assertNull(epic.storyPoints());
+        assertNull(epic.extension(), "no estimate, no axes");
+        assertNull(epic.intension());
         assertEquals(List.of(), epic.labels());
         assertEquals(Map.of(), epic.links());
         assertEquals(3.0, spike.storyPoints(), "an integer estimate");

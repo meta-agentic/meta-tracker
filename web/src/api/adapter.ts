@@ -50,6 +50,9 @@ export const FIELD = {
   description: "description",
   dependencies: "dependencies",
   relates: "relates",
+  sprint: "sprint",
+  extension: "extension",
+  intension: "intension",
 } as const;
 
 /** The `fields.type` value that marks an item as an epic rather than an issue. */
@@ -132,12 +135,25 @@ function toColumns(board: WireBoard): Column[] {
     }));
 }
 
-function toEpic(item: WireItem): Epic {
+function toEpic(item: WireItem, epicIds: Set<ID>): Epic {
+  const parentId = readString(item.fields, FIELD.parentId);
   return {
     id: item.key,
     key: item.key,
     title: item.title,
     color: readString(item.fields, FIELD.color) ?? stableColor(item.key),
+    // A self-parent is no parent; a cycle longer than one is cut by the reader.
+    epicId: parentId !== null && parentId !== item.key && epicIds.has(parentId) ? parentId : null,
+    boardId: item.board,
+    columnId: item.column,
+    type: readString(item.fields, FIELD.type),
+    priority: readString(item.fields, FIELD.priority),
+    storyPoints: readNumber(item.fields, FIELD.storyPoints),
+    sprint: readString(item.fields, FIELD.sprint),
+    extension: readNumber(item.fields, FIELD.extension),
+    intension: readNumber(item.fields, FIELD.intension),
+    dependsOn: readStrings(item.fields, FIELD.dependencies),
+    relates: readStrings(item.fields, FIELD.relates),
   };
 }
 
@@ -192,8 +208,8 @@ export function toWorkspaceSnapshot(payload: WireWorkspacePayload): WorkspaceSna
   const placeable = items.filter((item) => boardIds.has(item.board));
 
   const epicItems = placeable.filter(isEpic);
-  const epics: Epic[] = epicItems.map(toEpic);
-  const epicIds = new Set(epics.map((epic) => epic.id));
+  const epicIds = new Set(epicItems.map((item) => item.key));
+  const epics: Epic[] = epicItems.map((item) => toEpic(item, epicIds));
 
   const issueItems = placeable.filter((item) => !isEpic(item));
   const orders = assignOrders(issueItems);
@@ -220,6 +236,9 @@ export function toWorkspaceSnapshot(payload: WireWorkspacePayload): WorkspaceSna
       description: readString(item.fields, FIELD.description),
       dependsOn: readStrings(item.fields, FIELD.dependencies),
       relates: readStrings(item.fields, FIELD.relates),
+      sprint: readString(item.fields, FIELD.sprint),
+      extension: readNumber(item.fields, FIELD.extension),
+      intension: readNumber(item.fields, FIELD.intension),
     };
   });
 

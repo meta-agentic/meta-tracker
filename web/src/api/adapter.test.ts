@@ -67,7 +67,7 @@ describe("toWorkspaceSnapshot", () => {
       items: [epicItemFixture, itemFixture()],
     });
 
-    expect(epics).toEqual([
+    expect(epics).toMatchObject([
       { id: "VEC-1", key: "VEC-1", title: "Client shell", color: "#123456" },
     ]);
     expect(issues.map((i) => i.id)).toEqual(["VEC-2"]);
@@ -154,6 +154,21 @@ describe("toWorkspaceSnapshot", () => {
       dueDate: "2026-02-01",
       storyPoints: 5,
     });
+  });
+
+  it("reads the sprint and the two estimate axes, on an issue and on an epic", () => {
+    const fields = { sprint: "VEC-S7", extension: 0.2, intension: -0.3 };
+    const { issues, epics } = toWorkspaceSnapshot({
+      ...base,
+      items: [
+        itemFixture({ fields }),
+        itemFixture({ key: "VEC-9", fields: { type: "epic", parentId: "VEC-9", ...fields } }),
+      ],
+    });
+
+    expect(issues[0]).toMatchObject({ sprint: "VEC-S7", extension: 0.2, intension: -0.3 });
+    expect(epics[0]).toMatchObject({ sprint: "VEC-S7", extension: 0.2, intension: -0.3 });
+    expect(epics[0].epicId, "a self-parent is no parent").toBeNull();
   });
 
   it("nulls a malformed or absent optional field rather than guessing", () => {

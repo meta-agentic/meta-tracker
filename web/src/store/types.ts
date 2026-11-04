@@ -13,11 +13,33 @@ export interface Board {
   columns: Column[];
 }
 
-export interface Epic {
+/**
+ * What the detail panel shows about an item, whichever kind it is. Optional so
+ * an entry cached before they existed still reads.
+ */
+export interface ItemDetail {
+  boardId: ID;
+  columnId: ID;
+  /** Work-item kind (story, bug, task, …) as the field document names it. */
+  type: string | null;
+  priority: string | null;
+  storyPoints: number | null;
+  /** Key of the sprint the item is in (the latest, when several). */
+  sprint: string | null;
+  /** The two estimate axes, when the source carries them. */
+  extension: number | null;
+  intension: number | null;
+  dependsOn: string[];
+  relates: string[];
+}
+
+export interface Epic extends Partial<ItemDetail> {
   id: ID;
   key: string;
   title: string;
   color: string;
+  /** The epic this epic sits under, when that is an epic in the payload. */
+  epicId?: ID | null;
 }
 
 export interface Issue {
@@ -41,6 +63,9 @@ export interface Issue {
   dependsOn: string[];
   /** Keys of related items. May name items the client never loaded. */
   relates: string[];
+  sprint?: string | null;
+  extension?: number | null;
+  intension?: number | null;
 }
 
 /** The workspace the snapshot belongs to — what the app shell names. */

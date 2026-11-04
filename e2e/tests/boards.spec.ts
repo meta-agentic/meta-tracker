@@ -31,7 +31,7 @@ test('boards journey: after a reload the Boards tab shows the stored columns and
   const doing = column(page, 'In Progress');
   await expect(doing.locator('.vec-count')).toHaveText('2');
   await expect(doing.getByRole('button')).toHaveText([/Follow the cursor/, /Render the board from the server/]);
-  await expect(column(page, 'Done').getByText('No items')).toBeVisible();
+  await expect(column(page, 'Done').locator('.vec-count')).toHaveText('2'); // the detail journey's stories
 
   // To Do holds more items than one page. Its first card by rank is its oldest item,
   // which only the second page carries.
@@ -39,6 +39,25 @@ test('boards journey: after a reload the Boards tab shows the stored columns and
   await expect(todo.locator('.vec-count')).toHaveText('205');
   await expect(todo.getByRole('button').first()).toContainText('Seeded item 1');
   await expect(todo.getByText('+155 more')).toBeVisible();
+});
+
+test('item detail journey: a story shows its epic chain and the items that depend on it', async ({ page }) => {
+  await page.goto(`${vectis}/`);
+  await column(page, 'Done').getByRole('button', { name: /Story under the epics/ }).click();
+
+  // The epic's epic, then the epic, outermost first; the outer one is not indented.
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.locator('.vec-ancestor .vec-key')).toHaveText(['E2E-401', 'E2E-402']);
+  await expect(dialog.locator('.vec-ancestor').nth(1)).toContainText('Inner epic');
+  await expect(dialog.locator('.vec-sprint-chip')).toHaveText('S1');
+  await expect(dialog.getByText('extension +0.2')).toBeVisible();
+
+  // A link both ways: open the item it depends on and find the story under "Depended on by".
+  await dialog.getByRole('button', { name: /E2E-404/ }).click();
+  const reverse = dialog.locator('.vec-links', { has: page.getByRole('heading', { name: 'Depended on by' }) });
+  await expect(reverse.getByRole('button', { name: /E2E-403/ })).toBeVisible();
+  await reverse.getByRole('button', { name: /E2E-403/ }).click();
+  await expect(dialog.getByRole('heading', { name: 'Story under the epics' })).toBeVisible();
 });
 
 test('an unknown workspace shows the server problem, not a crash', async ({ page }) => {
