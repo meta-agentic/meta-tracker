@@ -23,7 +23,13 @@ final class ImportedItems {
     private ImportedItems() {
     }
 
+    /** The item without a sprint. */
     static ImportedItem of(SourceItem item) {
+        return of(item, null);
+    }
+
+    /** The item in the sprint with this key on the board, if any. */
+    static ImportedItem of(SourceItem item, String sprintKey) {
         var fields = new LinkedHashMap<String, Object>();
         fields.put("type", item.kind());
         fields.put("status", item.status());
@@ -37,7 +43,7 @@ final class ImportedItems {
         put(fields, "labels", labels(item));
         put(fields, "dependencies", item.links().get(SourceItem.DEPENDS_ON));
         put(fields, "relates", item.links().get(SourceItem.RELATES_TO));
-        return new ImportedItem(item.key(), item.title(), ColumnPlacement.columnKey(item), rank(item.key()), fields);
+        return new ImportedItem(item.key(), item.title(), ColumnPlacement.columnKey(item), rank(item.key()), fields, sprintKey);
     }
 
     /** The source's labels, and {@link #REFINED_LABEL} for a {@code REFINED} item, once. */

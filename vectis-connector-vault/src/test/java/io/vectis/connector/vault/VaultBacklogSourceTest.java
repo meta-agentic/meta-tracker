@@ -93,10 +93,27 @@ class VaultBacklogSourceTest {
 
         assertEquals(List.of(
                 new SourceSprint("DEMO-S1", SourceSprint.State.CLOSED,
-                        LocalDate.of(2026, 1, 5), LocalDate.of(2026, 1, 19), LocalDate.of(2026, 1, 20)),
+                        LocalDate.of(2026, 1, 5), LocalDate.of(2026, 1, 19), LocalDate.of(2026, 1, 20),
+                        "A synthetic closed sprint"),
                 new SourceSprint("DEMO-S2", SourceSprint.State.ACTIVE,
-                        LocalDate.of(2026, 1, 20), LocalDate.of(2026, 2, 3), null),
+                        LocalDate.of(2026, 1, 20), LocalDate.of(2026, 2, 3), null, "Ship the import"),
                 new SourceSprint("DEMO-S3", SourceSprint.State.FUTURE, null, null, null)), sprints);
+    }
+
+    @Test
+    void anItemListingSeveralSprintsBelongsToTheLastOne() {
+        SourceItem item = Fixtures.item(Fixtures.read("mapping"), "DEMO-11");
+
+        assertEquals("DEMO-S2", item.sprintKey(), "a carried-over item lists its sprints oldest first");
+        assertEquals(List.of(), Fixtures.problemsAbout(Fixtures.read("mapping"), "output/DEMO-11.md"));
+    }
+
+    @Test
+    void aSprintGoalIsReadWhenThereIsOneAndNullWhenThereIsNot() {
+        List<SourceSprint> sprints = Fixtures.read("mapping").sprints();
+
+        assertEquals("Ship the import", sprints.get(1).goal());
+        assertNull(sprints.get(2).goal());
     }
 
     @Test
