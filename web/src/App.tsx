@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useWorkspaceStore } from "./store/workspaceStore";
 import {
@@ -9,6 +9,8 @@ import {
 import type { ID } from "./store/types";
 import { BoardSwitcher } from "./components/BoardSwitcher";
 import { BoardView } from "./components/BoardView";
+import { FilterBar } from "./components/FilterBar";
+import { boardIssues } from "./store/selectors";
 import { SprintTab } from "./components/SprintTab";
 import { BacklogTree, type BacklogTreeHandle } from "./components/BacklogTree";
 import { IssueDetail } from "./components/IssueDetail";
@@ -49,6 +51,18 @@ function findCard(issueId: ID): HTMLElement | null {
     if (card.dataset.issueId === issueId) return card;
   }
   return null;
+}
+
+/** The filter bar over the active board's items, for the Boards and Backlog tabs. */
+function BoardFilterBar() {
+  const activeBoardId = useWorkspaceStore((s) => s.activeBoardId);
+  const issuesById = useWorkspaceStore((s) => s.issuesById);
+  const boardIssueIds = useWorkspaceStore((s) => s.boardIssueIds);
+  const items = useMemo(
+    () => (activeBoardId ? boardIssues(issuesById, boardIssueIds, activeBoardId) : []),
+    [activeBoardId, issuesById, boardIssueIds],
+  );
+  return <FilterBar items={items} scope="board" />;
 }
 
 /** The Boards tab, and the Sprint tab, which is the same board narrowed to one sprint. */
@@ -125,6 +139,7 @@ function BoardsTab({
       ) : (
         <>
           <BoardSwitcher />
+          <BoardFilterBar />
           {/* Keyed on the board, never on the locale or the sync status: re-keying
               on either would re-mount the board and lose the scroll position on a
               language swap or a background revalidation. Inside its own boundary,
@@ -213,6 +228,7 @@ function BacklogTab({ sync }: { sync: WorkspaceSync }) {
       <BoardSwitcher />
       {activeBoardId ? (
         <div className="vec-backlog">
+          <BoardFilterBar />
           <div className="vec-backlog__toolbar">
             <button type="button" className="vec-button" onClick={expandAll}>
               {t("backlog.expandAll")}

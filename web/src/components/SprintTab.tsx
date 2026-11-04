@@ -5,8 +5,9 @@ import { useWorkspaceStore } from "../store/workspaceStore";
 import { selectActiveBoard } from "../store/selectors";
 import { uiTracking } from "../store/cache";
 import { useDateFormat, useNumberFormat } from "../i18n/format";
-import type { ID } from "../store/types";
+import type { ID, Issue } from "../store/types";
 import { BoardView } from "./BoardView";
+import { FilterBar } from "./FilterBar";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { BoardIcon, InboxIcon, RetryIcon } from "./icons";
 import { BoardCrash, EmptyState, LoadingBoard } from "./states";
@@ -81,9 +82,10 @@ function SprintBoard({
   const number = useNumberFormat();
   const itemsById = useWorkspaceStore((s) => s.issuesById);
   const board = useWorkspaceStore(selectActiveBoard);
-  const { only, offBoard, elsewhere } = useMemo(() => {
+  const { only, offBoard, elsewhere, onBoard } = useMemo(() => {
     const shown = new Set(board?.columns.map((column) => column.id));
     const ids = new Set<ID>();
+    const issues: Issue[] = [];
     let off = 0;
     let other = 0;
     for (const key of keys ?? []) {
@@ -92,10 +94,11 @@ function SprintBoard({
       if (issue.boardId !== boardId) other += 1;
       else {
         ids.add(issue.id);
+        issues.push(issue);
         if (!shown.has(issue.columnId)) off += 1;
       }
     }
-    return { only: ids, offBoard: off, elsewhere: other };
+    return { only: ids, offBoard: off, elsewhere: other, onBoard: issues };
   }, [keys, itemsById, boardId, board]);
 
   if (keys !== null && only.size === 0) {
@@ -116,6 +119,7 @@ function SprintBoard({
   }
   return (
     <>
+      <FilterBar items={onBoard} scope="sprint" />
       {offBoard > 0 && (
         <p className="vec-muted-note vec-sprint-note">
           {t("sprint.offBoard", { count: offBoard, items: number(offBoard) })}

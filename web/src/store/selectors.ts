@@ -165,9 +165,14 @@ type TreeSource = Pick<
  * an epic with no issues on any board (shown with a zero count, since that is
  * backlog still to be planned). An epic whose issues all sit on other boards is
  * left off: it has children, just not here, and a zero beside it would say
- * otherwise.
+ * otherwise. Under a filter, `hideEmptyEpics` also drops the epics with nothing
+ * left under them.
  */
-export function boardTreeLevels(state: TreeSource, boardId: ID): TreeLevel[] {
+export function boardTreeLevels(
+  state: TreeSource,
+  boardId: ID,
+  hideEmptyEpics = false,
+): TreeLevel[] {
   const board = state.boardsById[boardId];
   const columnOrder = new Map(board?.columns.map((column) => [column.id, column.order]) ?? []);
   const rank = (issue: Issue) => columnOrder.get(issue.columnId) ?? Number.MAX_SAFE_INTEGER;
@@ -186,7 +191,7 @@ export function boardTreeLevels(state: TreeSource, boardId: ID): TreeLevel[] {
 
   const inUse = epicsInUse(state.issuesById);
   const epicIds = Object.values(state.epicsById)
-    .filter((epic) => byEpic.has(epic.id) || !inUse.has(epic.id))
+    .filter((epic) => byEpic.has(epic.id) || (!hideEmptyEpics && !inUse.has(epic.id)))
     .sort((a, b) => a.key.localeCompare(b.key, undefined, { numeric: true }))
     .map((epic) => epic.id);
 
@@ -201,6 +206,7 @@ export function selectFlatTree(
   state: TreeSource,
   boardId: ID,
   expandedIds: ReadonlySet<ID>,
+  hideEmptyEpics = false,
 ): TreeRow[] {
-  return flattenTree(boardTreeLevels(state, boardId), expandedIds);
+  return flattenTree(boardTreeLevels(state, boardId, hideEmptyEpics), expandedIds);
 }

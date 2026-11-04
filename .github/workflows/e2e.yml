@@ -130,7 +130,9 @@ jobs:
         # After the server is up: Flyway creates the schema and the built-in templates at boot.
         env:
           PGPASSWORD: vectis
-        run: psql -v ON_ERROR_STOP=1 -h localhost -U vectis -d vectis -f e2e/seed/boards.sql
+        run: |
+          psql -v ON_ERROR_STOP=1 -h localhost -U vectis -d vectis -f e2e/seed/boards.sql
+          psql -v ON_ERROR_STOP=1 -h localhost -U vectis -d vectis -f e2e/seed/filter.sql
 
       - name: Browser journeys
         working-directory: e2e

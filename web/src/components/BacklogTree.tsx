@@ -13,10 +13,11 @@ import { useTranslation } from "react-i18next";
 import { defaultRangeExtractor, useVirtualizer, type Range } from "@tanstack/react-virtual";
 import { useWorkspaceStore, workspaceStore } from "../store/workspaceStore";
 import { selectFlatTree, type TreeRow } from "../store/selectors";
+import { filterIssues, isFilterActive, useBoardFilter } from "../store/boardFilter";
 import { useNumberFormat } from "../i18n/format";
 import type { ID } from "../store/types";
 import { TypeBadge } from "./IssueCard";
-import { ChevronIcon, InboxIcon, ListIcon } from "./icons";
+import { ChevronIcon, InboxIcon, ListIcon, SearchIcon } from "./icons";
 import { EmptyState } from "./states";
 
 export interface BacklogTreeProps {
@@ -78,10 +79,25 @@ export const BacklogTree = forwardRef<BacklogTreeHandle, BacklogTreeProps>(funct
   const treeExpanded = useWorkspaceStore((s) => s.treeExpanded);
   const toggleTreeRow = useWorkspaceStore((s) => s.toggleTreeRow);
 
+  const [filter] = useBoardFilter();
+  const filtering = isFilterActive(filter);
+  // The tree is built from the ids the filter leaves on this board.
+  const shownIds = useMemo(() => {
+    if (!filtering) return boardIssueIds;
+    const issues = (boardIssueIds[boardId] ?? []).flatMap((id) => issuesById[id] ?? []);
+    return { ...boardIssueIds, [boardId]: filterIssues(issues, epicsById, filter).map((i) => i.id) };
+  }, [filtering, boardIssueIds, boardId, issuesById, epicsById, filter]);
+
   const expanded = useMemo(() => new Set(treeExpanded), [treeExpanded]);
   const rows = useMemo(
-    () => selectFlatTree({ issuesById, epicsById, boardsById, boardIssueIds }, boardId, expanded),
-    [issuesById, epicsById, boardsById, boardIssueIds, boardId, expanded],
+    () =>
+      selectFlatTree(
+        { issuesById, epicsById, boardsById, boardIssueIds: shownIds },
+        boardId,
+        expanded,
+        filtering,
+      ),
+    [issuesById, epicsById, boardsById, shownIds, boardId, expanded, filtering],
   );
   const board = boardsById[boardId];
   const columnNames = useMemo(
@@ -170,8 +186,12 @@ export const BacklogTree = forwardRef<BacklogTreeHandle, BacklogTreeProps>(funct
       if (next.has(row.id)) next.delete(row.id);
       else next.add(row.id);
       const nextTotal =
-        selectFlatTree({ issuesById, epicsById, boardsById, boardIssueIds }, boardId, next).length *
-        rowHeight;
+        selectFlatTree(
+          { issuesById, epicsById, boardsById, boardIssueIds: shownIds },
+          boardId,
+          next,
+          filtering,
+        ).length * rowHeight;
       const viewportBottom = element.scrollTop + element.clientHeight;
       if (nextTotal < viewportBottom) bottom = viewportBottom;
     }
@@ -254,6 +274,16 @@ export const BacklogTree = forwardRef<BacklogTreeHandle, BacklogTreeProps>(funct
   };
 
   if (rows.length === 0) {
+    // A filter that hides everything on a board that has items is not an empty board.
+    if (filtering && (boardIssueIds[boardId] ?? []).length > 0) {
+      return (
+        <EmptyState
+          icon={<SearchIcon size={22} />}
+          title={t("filter.noMatch.title")}
+          body={t("filter.noMatch.body")}
+        />
+      );
+    }
     return (
       <EmptyState
         icon={<InboxIcon size={22} />}
