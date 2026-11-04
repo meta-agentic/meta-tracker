@@ -192,6 +192,26 @@ class UntrustedInputTest {
         return new VaultBacklogSource(vault, "demo").read();
     }
 
+    @Test
+    void aNextCounterBelowTheHighestIdInUseIsReported() throws IOException {
+        Files.writeString(space.resolve("_backlog-meta.yaml"), "idPolicy:\n  prefix: DEMO\n  next: 5\n");
+        Files.writeString(space.resolve("raw/DEMO-7.md"), item("DEMO-7"));
+
+        BacklogSnapshot snapshot = read();
+
+        List<String> problems = Fixtures.problemsAbout(snapshot, "_backlog-meta.yaml");
+        assertEquals(1, problems.size(), snapshot.problems()::toString);
+        assertTrue(problems.get(0).contains("next: 5 is not above the highest id in use, DEMO-7"), problems::toString);
+    }
+
+    @Test
+    void aNextCounterAboveTheHighestIdInUseIsNotReported() throws IOException {
+        Files.writeString(space.resolve("_backlog-meta.yaml"), "idPolicy:\n  prefix: DEMO\n  next: 8\n");
+        Files.writeString(space.resolve("raw/DEMO-7.md"), item("DEMO-7"));
+
+        assertEquals(List.of(), read().problems());
+    }
+
     private static String item(String key) {
         return "---\nkind: story\nid: " + key + "\ntitle: A title\nstatus: TO DO\n---\n\nBody.\n";
     }
