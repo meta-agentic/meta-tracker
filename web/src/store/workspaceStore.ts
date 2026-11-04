@@ -20,8 +20,8 @@ import type {
 // v2: issues gained type, labels, priority, description and links, and the
 // workspace itself is cached. A v1 entry would hydrate issues without those
 // arrays, so it is ignored rather than read.
-const CACHE_KEY = "workspace:v2";
-const LEGACY_CACHE_KEYS = ["workspace:v1"];
+const CACHE_KEY = "workspace:v3";
+const LEGACY_CACHE_KEYS = ["workspace:v1", "workspace:v2"];
 const ACTIVE_BOARD_KEY = "ui:activeBoardId";
 
 /**

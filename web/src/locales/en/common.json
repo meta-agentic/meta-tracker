@@ -64,6 +64,12 @@
   "detail.relates": "Relates to",
   "detail.noLinks": "No linked items.",
   "detail.notLoaded": "Not loaded",
+  "detail.ancestors": "Parents",
+  "detail.sprint": "Sprint",
+  "detail.axes": "extension {{extension}} · intension {{intension}}",
+  "detail.dependedOnBy": "Depended on by",
+  "detail.relatedFrom": "Related from",
+  "detail.children": "In this epic",
 
   "prefs.theme.label": "Theme",
   "prefs.theme.system": "System",

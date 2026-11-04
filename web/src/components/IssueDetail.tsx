@@ -3,10 +3,11 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useWorkspaceStore } from "../store/workspaceStore";
 import { useDateFormat, useNumberFormat } from "../i18n/format";
-import type { ID, Issue } from "../store/types";
+import type { ID } from "../store/types";
 import { EpicChip, TypeBadge } from "./IssueCard";
 import { CloseIcon, LinkIcon } from "./icons";
 import { Markdown } from "./Markdown";
+import { ancestorChain, linkGroups, type ItemIndex, type ItemNode, type LinkRow } from "../lib/itemTree";
 
 export interface IssueDetailProps {
   issueId: ID;
@@ -110,16 +111,18 @@ export function IssueDetail({ issueId, onClose, onNavigate }: IssueDetailProps) 
   );
   const board = useWorkspaceStore((s) => (issue ? (s.boardsById[issue.boardId] ?? null) : null));
   const issuesById = useWorkspaceStore((s) => s.issuesById);
+  const epicsById = useWorkspaceStore((s) => s.epicsById);
+  const boardsById = useWorkspaceStore((s) => s.boardsById);
   const rootRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
-  // Links name items by key, which is how the field document carries them.
-  const byKey = useMemo(() => {
-    const index = new Map<string, Issue>();
-    for (const candidate of Object.values(issuesById)) index.set(candidate.key, candidate);
-    return index;
-  }, [issuesById]);
+  const index = useMemo<ItemIndex>(
+    () => ({ issuesById, epicsById, boardsById }),
+    [issuesById, epicsById, boardsById],
+  );
+  const ancestors = useMemo(() => ancestorChain(index, issueId), [index, issueId]);
+  const groups = useMemo(() => linkGroups(index, issueId), [index, issueId]);
 
   // A revalidation can remove the item under an open panel. Closing beats
   // rendering a panel about nothing.
@@ -147,11 +150,6 @@ export function IssueDetail({ issueId, onClose, onNavigate }: IssueDetailProps) 
   const start = issue.startDate ? parseDay(issue.startDate) : null;
   const due = issue.dueDate ? parseDay(issue.dueDate) : null;
   const titleId = `vec-detail-title-${issue.id}`;
-
-  const linkGroups = [
-    { key: "dependsOn", label: t("detail.dependsOn"), keys: issue.dependsOn },
-    { key: "relates", label: t("detail.relates"), keys: issue.relates },
-  ].filter((group) => group.keys.length > 0);
 
   return createPortal(
     <div className="vec-sheet-root" ref={rootRef}>
@@ -181,6 +179,18 @@ export function IssueDetail({ issueId, onClose, onNavigate }: IssueDetailProps) 
         </div>
 
         <div className="vec-sheet__body">
+          {ancestors.length > 0 && (
+            <nav className="vec-ancestors" aria-label={t("detail.ancestors")}>
+              {ancestors.map((ancestor, depth) => (
+                <AncestorHeader
+                  key={ancestor.id}
+                  node={ancestor}
+                  depth={depth}
+                  onOpen={onNavigate}
+                />
+              ))}
+            </nav>
+          )}
           <h2 id={titleId} className="vec-sheet__title">
             {issue.title}
           </h2>
@@ -198,12 +208,30 @@ export function IssueDetail({ issueId, onClose, onNavigate }: IssueDetailProps) 
               <dt>{t("detail.points")}</dt>
               <dd>
                 {issue.storyPoints !== null ? (
-                  <span className="vec-points">{number(issue.storyPoints)}</span>
+                  <>
+                    <span className="vec-points">{number(issue.storyPoints)}</span>
+                    {issue.extension != null && issue.intension != null && (
+                      <span className="vec-muted vec-axes">
+                        {t("detail.axes", {
+                          extension: signed(issue.extension),
+                          intension: signed(issue.intension),
+                        })}
+                      </span>
+                    )}
+                  </>
                 ) : (
                   "—"
                 )}
               </dd>
             </div>
+            {issue.sprint && (
+              <div>
+                <dt>{t("detail.sprint")}</dt>
+                <dd>
+                  <span className="vec-chip vec-sprint-chip">{issue.sprint}</span>
+                </dd>
+              </div>
+            )}
             {issue.priority && (
               <div>
                 <dt>{t("detail.priority")}</dt>
@@ -251,39 +279,16 @@ export function IssueDetail({ issueId, onClose, onNavigate }: IssueDetailProps) 
 
           <section className="vec-sheet__section" aria-labelledby={`${titleId}-links`}>
             <h3 id={`${titleId}-links`}>{t("detail.links")}</h3>
-            {linkGroups.length === 0 && <p className="vec-muted-note">{t("detail.noLinks")}</p>}
-            {linkGroups.map((group) => (
-              <div key={group.key} className="vec-links">
-                <h4>{group.label}</h4>
+            {groups.length === 0 && <p className="vec-muted-note">{t("detail.noLinks")}</p>}
+            {groups.map((group) => (
+              <div key={group.group} className="vec-links">
+                <h4>{t(`detail.${group.group}`)}</h4>
                 <ul>
-                  {group.keys.map((key) => {
-                    const target = byKey.get(key);
-                    return (
-                      <li key={key}>
-                        {target ? (
-                          <button
-                            type="button"
-                            className="vec-link-row"
-                            onClick={() => onNavigate(target.id)}
-                          >
-                            <LinkIcon size={14} />
-                            <span className="vec-key">{target.key}</span>
-                            <span className="vec-link-row__title">{target.title}</span>
-                          </button>
-                        ) : (
-                          // A key the client never loaded: shown, not linked, so
-                          // nothing on the panel leads nowhere.
-                          <span className="vec-link-row vec-link-row--static">
-                            <LinkIcon size={14} />
-                            <span className="vec-key">{key}</span>
-                            <span className="vec-link-row__title vec-muted">
-                              {t("detail.notLoaded")}
-                            </span>
-                          </span>
-                        )}
-                      </li>
-                    );
-                  })}
+                  {group.rows.map((row) => (
+                    <li key={row.key}>
+                      <LinkRowView row={row} onOpen={onNavigate} />
+                    </li>
+                  ))}
                 </ul>
               </div>
             ))}
@@ -292,5 +297,59 @@ export function IssueDetail({ issueId, onClose, onNavigate }: IssueDetailProps) 
       </aside>
     </div>,
     document.body,
+  );
+}
+
+/** `+0.2`, `-0.3`, `0`: the sign is part of an axis. */
+function signed(value: number): string {
+  return value > 0 ? `+${value}` : String(value);
+}
+
+/** One ancestor, indented one step per level, with the facts the dashboard's header shows. */
+function AncestorHeader({
+  node,
+  depth,
+  onOpen,
+}: {
+  node: ItemNode;
+  depth: number;
+  onOpen: (id: ID) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="vec-ancestor" style={{ paddingInlineStart: `${depth}rem` }}>
+      <button type="button" className="vec-key vec-ancestor__key" onClick={() => onOpen(node.id)}>
+        {node.key}
+      </button>
+      <span className="vec-ancestor__title">{node.title}</span>
+      {node.status && <span className="vec-status">{node.status}</span>}
+      <span className="vec-chip">{node.type ?? t("detail.none")}</span>
+      {node.priority && <span className="vec-chip">{node.priority}</span>}
+      {node.points !== null && <span className="vec-points">{node.points}</span>}
+    </div>
+  );
+}
+
+function LinkRowView({ row, onOpen }: { row: LinkRow; onOpen: (id: ID) => void }) {
+  const { t } = useTranslation();
+  const { node } = row;
+  if (!node) {
+    // A key the client never loaded: shown, not linked, so nothing on the
+    // panel leads nowhere.
+    return (
+      <span className="vec-link-row vec-link-row--static">
+        <LinkIcon size={14} />
+        <span className="vec-key">{row.key}</span>
+        <span className="vec-link-row__title vec-muted">{t("detail.notLoaded")}</span>
+      </span>
+    );
+  }
+  return (
+    <button type="button" className="vec-link-row" onClick={() => onOpen(node.id)}>
+      <LinkIcon size={14} />
+      <span className="vec-key">{node.key}</span>
+      <span className="vec-link-row__title">{node.title}</span>
+      {node.status && <span className="vec-status">{node.status}</span>}
+    </button>
   );
 }

@@ -40,6 +40,13 @@ final class ImportedItems {
             double points = item.storyPoints();
             fields.put("storyPoints", points == Math.rint(points) ? (Object) (long) points : (Object) points);
         }
+        put(fields, "sprint", sprintKey);
+        if (item.extension() != null) {
+            fields.put("extension", item.extension());
+        }
+        if (item.intension() != null) {
+            fields.put("intension", item.intension());
+        }
         put(fields, "labels", labels(item));
         put(fields, "dependencies", item.links().get(SourceItem.DEPENDS_ON));
         put(fields, "relates", item.links().get(SourceItem.RELATES_TO));

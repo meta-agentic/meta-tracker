@@ -86,7 +86,18 @@ final class EntryMapper {
                 keys(fields, "labels", origin, problems),
                 links,
                 entry.body(),
-                origin));
+                origin,
+                axis(fields.get("estimate"), "extension"),
+                axis(fields.get("estimate"), "intension")));
+    }
+
+    /** One axis of the {@code estimate} mapping; absent, not a number or not finite is left empty. */
+    private static Double axis(Object estimate, String name) {
+        if (estimate instanceof Map<?, ?> axes && axes.get(name) instanceof Number number
+                && Double.isFinite(number.doubleValue())) {
+            return number.doubleValue();
+        }
+        return null;
     }
 
     Optional<SourceSprint> sprint(VaultFiles.Entry entry, String fileName, String origin,

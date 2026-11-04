@@ -34,6 +34,8 @@ import java.util.Objects;
  * @param body        the item's free-text description; never {@code null}, may be empty
  * @param origin      where the item came from inside the source, for provenance,
  *                    e.g. {@code ".vault/vec/raw/VEC-42.md"}; never {@code null}
+ * @param extension   the estimate's extension axis (how complicated); {@code null} when the source has none
+ * @param intension   the estimate's intension axis (how complex); {@code null} when the source has none
  */
 public record SourceItem(
         String key,
@@ -49,7 +51,17 @@ public record SourceItem(
         List<String> labels,
         Map<String, List<String>> links,
         String body,
-        String origin) {
+        String origin,
+        Double extension,
+        Double intension) {
+
+    /** An item whose source carries no two-axis estimate. */
+    public SourceItem(String key, String title, String kind, String status, StatusCategory category,
+                      Outcome outcome, String epicKey, String sprintKey, Double storyPoints, String priority,
+                      List<String> labels, Map<String, List<String>> links, String body, String origin) {
+        this(key, title, kind, status, category, outcome, epicKey, sprintKey, storyPoints, priority, labels,
+                links, body, origin, null, null);
+    }
 
     /** Link type: this item cannot finish before the target does. */
     public static final String DEPENDS_ON = "depends-on";

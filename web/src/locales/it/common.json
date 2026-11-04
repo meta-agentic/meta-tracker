@@ -65,6 +65,12 @@
   "detail.relates": "Correlato a",
   "detail.noLinks": "Nessun elemento collegato.",
   "detail.notLoaded": "Non caricato",
+  "detail.ancestors": "Genitori",
+  "detail.sprint": "Sprint",
+  "detail.axes": "estensione {{extension}} · intensione {{intension}}",
+  "detail.dependedOnBy": "Ha come dipendenza",
+  "detail.relatedFrom": "Collegato da",
+  "detail.children": "In questo epic",
 
   "prefs.theme.label": "Tema",
   "prefs.theme.system": "Sistema",
