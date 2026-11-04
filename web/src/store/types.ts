@@ -31,6 +31,10 @@ export interface ItemDetail {
   intension: number | null;
   dependsOn: string[];
   relates: string[];
+  startDate: string | null;
+  dueDate: string | null;
+  labels: string[];
+  description: string | null;
 }
 
 export interface Epic extends Partial<ItemDetail> {

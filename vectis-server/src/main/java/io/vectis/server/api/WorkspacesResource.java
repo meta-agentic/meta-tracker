@@ -187,7 +187,7 @@ public class WorkspacesResource {
 
     /** {@code version} is the revision a later write takes back as {@code If-Match}. */
     record ItemView(String key, String title, String board, String column, String rank, Map<String, Object> fields,
-                    long version) {
+                    long version, String sprint) {
     }
 
     record ItemPage(List<ItemView> items, String next) {
@@ -196,7 +196,7 @@ public class WorkspacesResource {
             List<PlacedItem> shown = page.size() > size ? page.subList(0, size) : page;
             String next = page.size() > size ? Cursor.encode(shown.get(size - 1).item().id()) : null;
             return new ItemPage(shown.stream().map(p -> new ItemView(p.item().key(), p.item().title(),
-                    p.boardKey(), p.columnKey(), p.item().rank(), p.item().fields(), p.item().version())).toList(), next);
+                    p.boardKey(), p.columnKey(), p.item().rank(), p.item().fields(), p.item().version(), p.sprintKey())).toList(), next);
         }
     }
 

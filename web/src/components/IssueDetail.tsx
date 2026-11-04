@@ -7,7 +7,7 @@ import type { ID } from "../store/types";
 import { EpicChip, TypeBadge } from "./IssueCard";
 import { CloseIcon, LinkIcon } from "./icons";
 import { Markdown } from "./Markdown";
-import { ancestorChain, linkGroups, type ItemIndex, type ItemNode, type LinkRow } from "../lib/itemTree";
+import { ancestorChain, epicAsIssue, linkGroups, type ItemIndex, type ItemNode, type LinkRow } from "../lib/itemTree";
 
 export interface IssueDetailProps {
   issueId: ID;
@@ -105,7 +105,17 @@ export function IssueDetail({ issueId, onClose, onNavigate }: IssueDetailProps) 
   const { t } = useTranslation();
   const number = useNumberFormat();
   const day = useDateFormat({ dateStyle: "medium" });
-  const issue = useWorkspaceStore((s) => s.issuesById[issueId] ?? null);
+  const storedIssue = useWorkspaceStore((s) =>
+    Object.hasOwn(s.issuesById, issueId) ? s.issuesById[issueId] : null,
+  );
+  const storedEpic = useWorkspaceStore((s) =>
+    Object.hasOwn(s.epicsById, issueId) ? s.epicsById[issueId] : null,
+  );
+  // An epic opens in the same panel, read as an issue.
+  const issue = useMemo(
+    () => storedIssue ?? (storedEpic ? epicAsIssue(storedEpic) : null),
+    [storedIssue, storedEpic],
+  );
   const epic = useWorkspaceStore((s) =>
     issue?.epicId ? (s.epicsById[issue.epicId] ?? null) : null,
   );
@@ -207,21 +217,18 @@ export function IssueDetail({ issueId, onClose, onNavigate }: IssueDetailProps) 
             <div>
               <dt>{t("detail.points")}</dt>
               <dd>
-                {issue.storyPoints !== null ? (
-                  <>
-                    <span className="vec-points">{number(issue.storyPoints)}</span>
-                    {issue.extension != null && issue.intension != null && (
-                      <span className="vec-muted vec-axes">
-                        {t("detail.axes", {
-                          extension: signed(issue.extension),
-                          intension: signed(issue.intension),
-                        })}
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  "—"
+                {issue.storyPoints !== null && (
+                  <span className="vec-points">{number(issue.storyPoints)}</span>
                 )}
+                {issue.extension != null && issue.intension != null && (
+                  <span className="vec-muted vec-axes">
+                    {t("detail.axes", {
+                      extension: signed(issue.extension),
+                      intension: signed(issue.intension),
+                    })}
+                  </span>
+                )}
+                {issue.storyPoints === null && (issue.extension == null || issue.intension == null) && "—"}
               </dd>
             </div>
             {issue.sprint && (
@@ -317,7 +324,7 @@ function AncestorHeader({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="vec-ancestor" style={{ paddingInlineStart: `${depth}rem` }}>
+    <div className={`vec-ancestor vec-ancestor--depth-${Math.min(depth, 8)}`}>
       <button type="button" className="vec-key vec-ancestor__key" onClick={() => onOpen(node.id)}>
         {node.key}
       </button>

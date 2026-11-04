@@ -148,6 +148,15 @@ class VaultSprintImportApiTest {
     }
 
     @Test
+    void anItemIsServedWithTheKeyOfItsSprintAndNullInTheBacklog() {
+        post().then().statusCode(200);
+
+        given().get("/api/v1/workspaces/VEC/items?limit=10").then().statusCode(200)
+                .body("items.find { it.key == 'VEC-1' }.sprint", equalTo("VEC-S2"))
+                .body("items.find { it.key == 'VEC-4' }.sprint", nullValue());
+    }
+
+    @Test
     void sprintsWithoutDatesListInKeyNumberOrder() throws IOException {
         sprint("VEC-S10", "future", "");
         sprint("VEC-S2", "future", "");

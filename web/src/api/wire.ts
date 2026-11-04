@@ -70,6 +70,8 @@ export interface WireItem {
   fields: Record<string, WireJsonValue>;
   /** The revision a later write takes back as `If-Match`. */
   version: number;
+  /** Key of the sprint the item is in; null or absent in the backlog. */
+  sprint?: string | null;
 }
 
 /** `GET /workspaces/{key}/items`: newest first, `next` null on the last page. */
@@ -237,6 +239,7 @@ export function decodeItem(value: unknown, path = "item"): WireItem {
     rank: asString(record, "rank", path),
     fields: asFields(record, "fields", path),
     version: asInteger(record, "version", path),
+    sprint: asNullableString(record, "sprint", path),
   };
 }
 

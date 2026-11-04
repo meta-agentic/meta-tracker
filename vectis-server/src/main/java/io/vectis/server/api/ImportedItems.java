@@ -40,7 +40,6 @@ final class ImportedItems {
             double points = item.storyPoints();
             fields.put("storyPoints", points == Math.rint(points) ? (Object) (long) points : (Object) points);
         }
-        put(fields, "sprint", sprintKey);
         if (item.extension() != null) {
             fields.put("extension", item.extension());
         }
