@@ -27,10 +27,13 @@ export type {
   WireItem,
   WireItemPage,
   WireJsonValue,
+  WireSprint,
   WireTemplateRef,
   WireWorkspace,
 } from "./wire";
+export { useSprints, type SprintsState } from "./useSprints";
 export {
+  defaultCreateClient,
   useWorkspaceSync,
   type SyncStatus,
   type WorkspaceSync,

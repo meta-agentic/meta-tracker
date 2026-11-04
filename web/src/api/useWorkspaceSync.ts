@@ -54,7 +54,7 @@ export interface WorkspaceSyncOptions {
   store?: StoreApi<WorkspaceState>;
 }
 
-function defaultCreateClient(): WorkspaceApiClient {
+export function defaultCreateClient(): WorkspaceApiClient {
   return createWorkspaceApiClientFromEnv(import.meta.env);
 }
 

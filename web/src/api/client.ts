@@ -6,10 +6,12 @@ import { createHttpClient, type HttpClient, type Transport } from "./http";
 import {
   decodeBoards,
   decodeItemPage,
+  decodeSprints,
   decodeWorkspace,
   type WireBoard,
   type WireItem,
   type WireItemPage,
+  type WireSprint,
   type WireWorkspace,
 } from "./wire";
 
@@ -35,6 +37,10 @@ export interface WorkspaceApiClient {
   getItemPage(cursor: string | null, signal?: AbortSignal): Promise<WireItemPage>;
   /** Every item, following `next` until the last page. */
   listItems(signal?: AbortSignal): Promise<WireItem[]>;
+  /** The workspace's sprints as the server lists them: oldest first. */
+  listSprints(signal?: AbortSignal): Promise<WireSprint[]>;
+  /** The keys of the items in one sprint, following `next` until the last page. */
+  listSprintItemKeys(sprintKey: string, signal?: AbortSignal): Promise<string[]>;
 }
 
 export interface ClientOptions {
@@ -60,10 +66,29 @@ export function createWorkspaceApiClient(options: ClientOptions): WorkspaceApiCl
   const workspacePath = `/workspaces/${encodeURIComponent(config.workspaceKey)}`;
   const pageSize = options.pageSize ?? ITEM_PAGE_SIZE;
 
-  async function getItemPage(cursor: string | null, signal?: AbortSignal) {
+  async function getItemPage(cursor: string | null, signal?: AbortSignal, sprintKey?: string) {
     const query = new URLSearchParams({ limit: String(pageSize) });
+    if (sprintKey !== undefined) query.set("sprint", sprintKey);
     if (cursor !== null) query.set("cursor", cursor);
     return decodeItemPage(await http.getJson(`${workspacePath}/items?${query}`, signal));
+  }
+
+  async function listAll(signal?: AbortSignal, sprintKey?: string): Promise<WireItem[]> {
+    const items: WireItem[] = [];
+    const seen = new Set<string>();
+    let cursor: string | null = null;
+    do {
+      const page: WireItemPage = await getItemPage(cursor, signal, sprintKey);
+      items.push(...page.items);
+      cursor = page.next;
+      // A cursor handed out twice would page forever; the server never does it,
+      // so one that does is off-contract.
+      if (cursor !== null && seen.has(cursor)) {
+        throw new ApiError("format", `items: the cursor "${cursor}" was returned twice`);
+      }
+      if (cursor !== null) seen.add(cursor);
+    } while (cursor !== null);
+    return items;
   }
 
   return {
@@ -74,23 +99,13 @@ export function createWorkspaceApiClient(options: ClientOptions): WorkspaceApiCl
     async listBoards(signal) {
       return decodeBoards(await http.getJson(`${workspacePath}/boards`, signal));
     },
-    getItemPage,
-    async listItems(signal) {
-      const items: WireItem[] = [];
-      const seen = new Set<string>();
-      let cursor: string | null = null;
-      do {
-        const page: WireItemPage = await getItemPage(cursor, signal);
-        items.push(...page.items);
-        cursor = page.next;
-        // A cursor handed out twice would page forever; the server never does it,
-        // so one that does is off-contract.
-        if (cursor !== null && seen.has(cursor)) {
-          throw new ApiError("format", `items: the cursor "${cursor}" was returned twice`);
-        }
-        if (cursor !== null) seen.add(cursor);
-      } while (cursor !== null);
-      return items;
+    getItemPage: (cursor, signal) => getItemPage(cursor, signal),
+    listItems: (signal) => listAll(signal),
+    async listSprints(signal) {
+      return decodeSprints(await http.getJson(`${workspacePath}/sprints`, signal));
+    },
+    async listSprintItemKeys(sprintKey, signal) {
+      return (await listAll(signal, sprintKey)).map((item) => item.key);
     },
   };
 }

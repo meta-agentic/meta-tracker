@@ -40,6 +40,34 @@ describe("WorkspaceApiClient", () => {
     ]);
   });
 
+  it("reads the sprints, and the item keys of one sprint across pages", async () => {
+    const sprint = {
+      key: "VEC-S1", name: "VEC-S1", state: "ACTIVE", start: null, end: null,
+      closed: null, goal: null, committedPoints: 2, donePoints: 0,
+    };
+    const { client, recorded } = clientFor(
+      {
+        routes: {
+          "/sprints": { body: [sprint] },
+          "/items?limit=1&sprint=VEC-S1": { body: itemPage([itemFixture({ key: "VEC-2" })], "c1") },
+          "/items?limit=1&sprint=VEC-S1&cursor=c1": { body: itemPage([itemFixture({ key: "VEC-3" })]) },
+        },
+      },
+      1,
+    );
+
+    expect(await client.listSprints()).toEqual([sprint]);
+    expect(await client.listSprintItemKeys("VEC-S1")).toEqual(["VEC-2", "VEC-3"]);
+    expect(recorded.calls).toContain(`${base}/items?limit=1&sprint=VEC-S1&cursor=c1`);
+  });
+
+  it("refuses a sprint without points", async () => {
+    const { client } = clientFor({
+      routes: { "/sprints": { body: [{ key: "VEC-S1", name: "VEC-S1", state: "ACTIVE" }] } },
+    });
+    await expect(client.listSprints()).rejects.toThrow(/sprints\[0\]\.committedPoints/);
+  });
+
   it("decodes the wire payload into the store snapshot", async () => {
     const { client } = clientFor();
     const snapshot = await fetchWorkspaceSnapshot(client);
