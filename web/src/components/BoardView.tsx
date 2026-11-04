@@ -15,6 +15,8 @@ const COLUMN_CARD_LIMIT = 50;
 
 export interface BoardViewProps {
   onOpenIssue: (issueId: ID) => void;
+  /** Shows only these items, in the board's columns: the Sprint tab's view of one sprint. */
+  only?: ReadonlySet<ID>;
 }
 
 /**
@@ -27,7 +29,7 @@ export interface BoardViewProps {
  * the zustand selector itself: a selector that allocated a fresh object on every
  * call would defeat `useSyncExternalStore`'s snapshot caching and loop.
  */
-export function BoardView({ onOpenIssue }: BoardViewProps) {
+export function BoardView({ onOpenIssue, only }: BoardViewProps) {
   const { t } = useTranslation();
   const number = useNumberFormat();
   const board = useWorkspaceStore(selectActiveBoard);
@@ -35,10 +37,16 @@ export function BoardView({ onOpenIssue }: BoardViewProps) {
   const epicsById = useWorkspaceStore((s) => s.epicsById);
   const boardIssueIds = useWorkspaceStore((s) => s.boardIssueIds);
 
-  const columns = useMemo(
-    () => (board ? boardColumns(issuesById, boardIssueIds, board.id) : dict<Issue[]>()),
-    [board, issuesById, boardIssueIds],
-  );
+  const columns = useMemo(() => {
+    if (!board) return dict<Issue[]>();
+    const all = boardColumns(issuesById, boardIssueIds, board.id);
+    if (!only) return all;
+    const kept = dict<Issue[]>();
+    for (const [columnId, issues] of Object.entries(all)) {
+      kept[columnId] = issues.filter((issue) => only.has(issue.id));
+    }
+    return kept;
+  }, [board, issuesById, boardIssueIds, only]);
 
   const columnCount = board?.columns.length ?? 0;
   useEffect(() => rememberBoardColumnCount(columnCount), [columnCount]);

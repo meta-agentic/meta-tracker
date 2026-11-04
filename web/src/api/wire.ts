@@ -78,6 +78,23 @@ export interface WireItemPage {
   next: string | null;
 }
 
+/** One sprint of `GET /workspaces/{key}/sprints`, oldest first: `WorkspacesResource.SprintView`. */
+export interface WireSprint {
+  /** Also its name. */
+  key: string;
+  name: string;
+  /** FUTURE, ACTIVE or COMPLETED. A string, so a state added later still decodes. */
+  state: string;
+  /** ISO dates; null where the sprint has none. */
+  start: string | null;
+  end: string | null;
+  closed: string | null;
+  goal: string | null;
+  /** Points of the items in the sprint now, not a record of what was planned. */
+  committedPoints: number;
+  donePoints: number;
+}
+
 function fail(path: string, expected: string, actual: unknown): never {
   throw new ApiError(
     "format",
@@ -257,4 +274,30 @@ export function readProblem(value: unknown): Problem | null {
     status,
     detail: typeof detail === "string" ? detail : null,
   };
+}
+
+function asNumber(record: Record<string, unknown>, key: string, path: string): number {
+  const value = record[key];
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    fail(`${path}.${key}`, "a number", value);
+  }
+  return value;
+}
+
+export function decodeSprints(value: unknown, path = "sprints"): WireSprint[] {
+  return asArray(value, path).map((entry, i) => {
+    const where = `${path}[${i}]`;
+    const record = asRecord(entry, where);
+    return {
+      key: asString(record, "key", where),
+      name: asString(record, "name", where),
+      state: asString(record, "state", where),
+      start: asNullableString(record, "start", where),
+      end: asNullableString(record, "end", where),
+      closed: asNullableString(record, "closed", where),
+      goal: asNullableString(record, "goal", where),
+      committedPoints: asNumber(record, "committedPoints", where),
+      donePoints: asNumber(record, "donePoints", where),
+    };
+  });
 }
