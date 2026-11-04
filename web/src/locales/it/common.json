@@ -136,6 +136,11 @@
   "sprint.none.body": "Questo workspace non ha sprint. Gli sprint importati da una fonte compaiono qui.",
   "sprint.noItems.title": "Nessun elemento in questo sprint",
   "sprint.noItems.body": "Nessun elemento appartiene ora a questo sprint.",
-  "sprint.loading": "Caricamento degli sprint…",
-  "sprint.error": "Impossibile caricare gli sprint."
+  "sprint.error": "Impossibile caricare gli sprint.",
+  "sprint.itemsError": "Impossibile caricare gli elementi dello sprint.",
+  "sprint.otherBoard.title": "Gli elementi di questo sprint sono su un'altra bacheca",
+  "sprint.otherBoard.body": "Scegliere sopra la bacheca in cui si trovano per vederli.",
+  "sprint.offBoard_one": "{{items}} elemento è in una colonna non mostrata sulla bacheca.",
+  "sprint.offBoard_many": "{{items}} elementi sono in colonne non mostrate sulla bacheca.",
+  "sprint.offBoard_other": "{{items}} elementi sono in colonne non mostrate sulla bacheca."
 }

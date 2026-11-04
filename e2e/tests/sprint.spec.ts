@@ -18,8 +18,8 @@ test('sprint journey: the active sprint under its header, a closed sprint where 
   await expect(header).toBeVisible();
   await expect(header).toContainText('Active');
   await expect(header).toContainText('Show the sprint');
-  await expect(header).toContainText('2026');
-  await expect(header.locator('dd').nth(1)).toHaveText('8');
+  await expect(header).toContainText('Oct 15, 2026 – Oct 28, 2026');
+  await expect(header.locator('dd').nth(1)).toHaveText('10');
   await expect(header.locator('dd').nth(2)).toHaveText('0');
 
   // Its items, in the board's columns; the switcher lists the sprints newest first.
@@ -31,7 +31,12 @@ test('sprint journey: the active sprint under its header, a closed sprint where 
 
   // Imported items are read-only, and the tab says so.
   await expect(page.getByText('Read-only: these items are imported')).toBeVisible();
-  await expect(page.locator('[draggable="true"]')).toHaveCount(0);
+  // An item held off the board is counted, not dropped.
+  await expect(page.getByText('1 item is in a column that is not shown on the board.')).toBeVisible();
+  // Dragging a card onto another column moves nothing.
+  await column(page, 'In Progress').getByRole('button', { name: /Follow the cursor/ }).dragTo(column(page, 'Done'));
+  await expect(column(page, 'In Progress').getByRole('button')).toHaveCount(2);
+  await expect(column(page, 'Done').getByText('No items')).toBeVisible();
 
   // A closed sprint shows its items where they ended.
   await switcher.getByRole('button', { name: 'E2E-S1' }).click();
