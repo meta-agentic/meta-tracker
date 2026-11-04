@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useWorkspaceStore } from "../store/workspaceStore";
 import {
@@ -11,6 +11,7 @@ import {
 } from "../store/boardFilter";
 import { useNumberFormat } from "../i18n/format";
 import type { Issue } from "../store/types";
+import { boardIssues, selectActiveBoard } from "../store/selectors";
 import { SearchIcon } from "./icons";
 
 export interface FilterBarProps {
@@ -21,6 +22,28 @@ export interface FilterBarProps {
    */
   items: readonly Issue[];
   scope: "board" | "sprint";
+}
+
+/** How long typing pauses before the text reaches the URL. */
+const WRITE_DELAY_MS = 250;
+
+/**
+ * The bar over the active board's items. `onBoardOnly` leaves out items in
+ * columns the board does not show, for the Boards tab, which cannot render them.
+ * The Backlog lists every item, so it counts them all.
+ */
+export function BoardFilterBar({ onBoardOnly = false }: { onBoardOnly?: boolean }) {
+  const activeBoardId = useWorkspaceStore((s) => s.activeBoardId);
+  const board = useWorkspaceStore(selectActiveBoard);
+  const issuesById = useWorkspaceStore((s) => s.issuesById);
+  const boardIssueIds = useWorkspaceStore((s) => s.boardIssueIds);
+  const items = useMemo(() => {
+    const all = activeBoardId ? boardIssues(issuesById, boardIssueIds, activeBoardId) : [];
+    if (!onBoardOnly) return all;
+    const shown = new Set(board?.columns.map((column) => column.id));
+    return all.filter((issue) => shown.has(issue.columnId));
+  }, [activeBoardId, board, issuesById, boardIssueIds, onBoardOnly]);
+  return <FilterBar items={items} scope="board" />;
 }
 
 interface Option {
@@ -38,6 +61,30 @@ export function FilterBar({ items, scope }: FilterBarProps) {
   const epicsById = useWorkspaceStore((s) => s.epicsById);
   const [filter, setFilter] = useBoardFilter();
   const active = isFilterActive(filter);
+
+  // The text box keeps its own copy and reaches the URL after a pause: the URL
+  // is written with history.replaceState, which browsers rate-limit, and a
+  // write per keystroke would hit that limit while the user is still typing.
+  const [draft, setDraft] = useState(filter.text);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelWrite = useCallback(() => {
+    if (timer.current !== null) clearTimeout(timer.current);
+    timer.current = null;
+  }, []);
+  // The URL changed from elsewhere (clear, back button): follow it, unless a
+  // write of newer typing is still waiting.
+  useEffect(() => {
+    if (timer.current === null) setDraft(filter.text);
+  }, [filter.text]);
+  useEffect(() => cancelWrite, [cancelWrite]);
+  const typed = (text: string) => {
+    setDraft(text);
+    cancelWrite();
+    timer.current = setTimeout(() => {
+      timer.current = null;
+      setFilter({ ...filter, text });
+    }, WRITE_DELAY_MS);
+  };
 
   const matching = useMemo(() => filterIssues(items, epicsById, filter).length, [items, epicsById, filter]);
 
@@ -64,7 +111,8 @@ export function FilterBar({ items, scope }: FilterBarProps) {
 
   const toggle = (facet: Facet, value: string, on: boolean) => {
     const rest = filter[facet].filter((v) => v.toLowerCase() !== value.toLowerCase());
-    setFilter({ ...filter, [facet]: on ? [...rest, value] : rest });
+    cancelWrite();
+    setFilter({ ...filter, text: draft, [facet]: on ? [...rest, value] : rest });
   };
 
   return (
@@ -80,10 +128,10 @@ export function FilterBar({ items, scope }: FilterBarProps) {
         <input
           type="search"
           className="vec-filter__input"
-          value={filter.text}
+          value={draft}
           placeholder={t("filter.text")}
           maxLength={200}
-          onChange={(event) => setFilter({ ...filter, text: event.target.value })}
+          onChange={(event) => typed(event.target.value)}
         />
       </label>
       {FACETS.map((facet) => (
@@ -116,8 +164,12 @@ export function FilterBar({ items, scope }: FilterBarProps) {
       <button
         type="button"
         className="vec-button"
-        disabled={!active}
-        onClick={() => setFilter(EMPTY_FILTER)}
+        disabled={!active && draft === ""}
+        onClick={() => {
+          cancelWrite();
+          setDraft("");
+          setFilter(EMPTY_FILTER);
+        }}
       >
         {t("filter.clear")}
       </button>

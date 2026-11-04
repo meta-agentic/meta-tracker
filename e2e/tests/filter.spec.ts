@@ -8,27 +8,32 @@ const vectis = process.env.VECTIS_URL ?? 'http://localhost:8080';
 test('filter journey: an epic narrows the board, and the filter survives a reload and a tab switch', async ({ page }) => {
   await page.goto(`${vectis}/`);
   const count = page.getByTestId('filter-count');
-  await expect(count).toContainText(/^208 of 208 items/);
+  await expect(count).toContainText(/^\d+ of \d+ items/);
+  // Whatever the board holds: the journey reads the total instead of assuming it.
+  const total = /^(\d+) of (\d+) items/.exec((await count.textContent()) ?? '')?.[2];
+  expect(total).toBeTruthy();
+  await expect(count).toContainText(`${total} of ${total} items`);
 
   await page.locator('summary', { hasText: 'Epic' }).click();
-  await page.getByRole('checkbox', { name: /E2E-401/ }).check();
-  await expect(count).toContainText(/^5 of 208 items/);
-  await expect(page).toHaveURL(/[?&]epic=E2E-401(&|$)/);
+  await page.getByRole('checkbox', { name: /E2E-501/ }).check();
+  await expect(count).toContainText(new RegExp(`^5 of ${total} items`));
+  await expect(page).toHaveURL(/[?&]epic=E2E-501(&|$)/);
   await expect(page.getByRole('button', { name: /Seeded item 4\b/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /Seeded item 9\b/ })).toHaveCount(0);
 
   // A reload keeps it.
   await page.reload();
-  await expect(count).toContainText(/^5 of 208 items/);
+  await expect(count).toContainText(new RegExp(`^5 of ${total} items`));
 
   // So does a tab switch, there and back.
+  // The Backlog also lists items in columns kept off the board, so its total is its own.
   await page.getByRole('button', { name: 'Backlog', exact: true }).click();
-  await expect(count).toContainText(/^5 of 208 items/);
+  await expect(count).toContainText(/^5 of \d+ items/);
   await page.getByRole('button', { name: 'Boards', exact: true }).click();
-  await expect(count).toContainText(/^5 of 208 items/);
+  await expect(count).toContainText(new RegExp(`^5 of ${total} items`));
 
   // One control clears it.
   await page.getByRole('button', { name: 'Clear filter' }).click();
-  await expect(count).toContainText(/^208 of 208 items/);
+  await expect(count).toContainText(`${total} of ${total} items`);
   await expect(page).not.toHaveURL(/epic=/);
 });

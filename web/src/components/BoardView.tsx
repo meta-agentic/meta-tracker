@@ -50,7 +50,10 @@ export function BoardView({ onOpenIssue, only }: BoardViewProps) {
     let shown = 0;
     if (board) {
       const all = boardColumns(issuesById, boardIssueIds, board.id);
-      for (const [columnId, issues] of Object.entries(all)) {
+      // Only the columns the board shows: an item in a column kept off the
+      // board has no card here, so it counts toward nothing.
+      for (const { id: columnId } of board.columns) {
+        const issues = all[columnId] ?? [];
         const scoped = only ? issues.filter((issue) => only.has(issue.id)) : issues;
         const matching = filterIssues(scoped, epicsById, filter);
         kept[columnId] = matching;

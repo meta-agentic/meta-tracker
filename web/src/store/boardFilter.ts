@@ -115,22 +115,40 @@ export function filterIssues(
 const CHANGE_EVENT = "vec:filterchange";
 
 function subscribe(onChange: () => void) {
-  window.addEventListener("popstate", onChange);
+  const onPop = () => {
+    unwritten = null;
+    onChange();
+  };
+  window.addEventListener("popstate", onPop);
   window.addEventListener(CHANGE_EVENT, onChange);
   return () => {
-    window.removeEventListener("popstate", onChange);
+    window.removeEventListener("popstate", onPop);
     window.removeEventListener(CHANGE_EVENT, onChange);
   };
 }
 
-const currentSearch = () => window.location.search;
+// The search string the filter holds when the browser refused to write it to the URL.
+let unwritten: string | null = null;
+
+const currentSearch = () => unwritten ?? window.location.search;
 
 export function useBoardFilter(): [BoardFilter, (next: BoardFilter) => void] {
   const search = useSyncExternalStore(subscribe, currentSearch, () => "");
   const filter = useMemo(() => parseFilter(search), [search]);
   const setFilter = useCallback((next: BoardFilter) => {
-    const url = `${window.location.pathname}${writeFilter(window.location.search, next)}${window.location.hash}`;
-    window.history.replaceState(window.history.state, "", url);
+    const search = writeFilter(currentSearch(), next);
+    try {
+      window.history.replaceState(
+        window.history.state,
+        "",
+        `${window.location.pathname}${search}${window.location.hash}`,
+      );
+      unwritten = null;
+    } catch {
+      // Safari throws after too many calls in a short while. The filter then
+      // lives in memory until a write succeeds or the user navigates.
+      unwritten = search;
+    }
     window.dispatchEvent(new Event(CHANGE_EVENT));
   }, []);
   return [filter, setFilter];
