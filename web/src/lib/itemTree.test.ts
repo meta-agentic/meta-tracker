@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Board, Epic, Issue } from "../store/types";
-import { ancestorChain, linkGroups, nodeOf, type ItemIndex } from "./itemTree";
+import { ancestorChain, epicAsIssue, linkGroups, nodeOf, type ItemIndex } from "./itemTree";
 
 const board: Board = {
   id: "b",
@@ -71,5 +71,14 @@ describe("linkGroups", () => {
   it("answers nothing for an unknown id", () => {
     expect(linkGroups(index([], []), "X")).toEqual([]);
     expect(nodeOf(index([], []), "__proto__")).toBeNull();
+  });
+});
+
+describe("epicAsIssue", () => {
+  it("reads an epic as an issue the detail panel can open, keeping its parent and status", () => {
+    const e = epic("E2", { epicId: "E1", priority: "P1", sprint: "S1", description: "Why" });
+    const asIssue = epicAsIssue(e);
+    expect(asIssue).toMatchObject({ id: "E2", epicId: "E1", type: "epic", priority: "P1", sprint: "S1", description: "Why" });
+    expect(epicAsIssue(epic("E3")).labels).toEqual([]);
   });
 });

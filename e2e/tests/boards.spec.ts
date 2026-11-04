@@ -49,8 +49,15 @@ test('item detail journey: a story shows its epic chain and the items that depen
   const dialog = page.getByRole('dialog');
   await expect(dialog.locator('.vec-ancestor .vec-key')).toHaveText(['E2E-401', 'E2E-402']);
   await expect(dialog.locator('.vec-ancestor').nth(1)).toContainText('Inner epic');
-  await expect(dialog.locator('.vec-sprint-chip')).toHaveText('S1');
   await expect(dialog.getByText('extension +0.2')).toBeVisible();
+
+  // An ancestor opens in the same panel, with its own parent above it and its stories below.
+  await dialog.getByRole('button', { name: 'E2E-402' }).click();
+  await expect(dialog.getByRole('heading', { name: 'Inner epic' })).toBeVisible();
+  await expect(dialog.locator('.vec-ancestor .vec-key')).toHaveText(['E2E-401']);
+  const inEpic = dialog.locator('.vec-links', { has: page.getByRole('heading', { name: 'In this epic' }) });
+  await expect(inEpic.getByRole('button', { name: /E2E-403/ })).toBeVisible();
+  await inEpic.getByRole('button', { name: /E2E-403/ }).click();
 
   // A link both ways: open the item it depends on and find the story under "Depended on by".
   await dialog.getByRole('button', { name: /E2E-404/ }).click();
@@ -58,6 +65,12 @@ test('item detail journey: a story shows its epic chain and the items that depen
   await expect(reverse.getByRole('button', { name: /E2E-403/ })).toBeVisible();
   await reverse.getByRole('button', { name: /E2E-403/ }).click();
   await expect(dialog.getByRole('heading', { name: 'Story under the epics' })).toBeVisible();
+});
+
+test('item detail journey: the sprint chip shows the item\'s sprint', async ({ page }) => {
+  await page.goto(`${vectis}/`);
+  await column(page, 'In Progress').getByRole('button', { name: /Follow the cursor/ }).click();
+  await expect(page.getByRole('dialog').locator('.vec-sprint-chip')).toHaveText('E2E-S2');
 });
 
 test('an unknown workspace shows the server problem, not a crash', async ({ page }) => {

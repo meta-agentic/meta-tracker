@@ -138,11 +138,10 @@ class ImportedItemsTest {
         snapshot.items().forEach(i -> byKey.put(i.key(), ImportedItems.of(i, i.sprintKey())));
 
         Map<String, Object> first = byKey.get("VEC-1").fields();
-        assertEquals("VEC-S2", first.get("sprint"));
+        assertFalse(first.containsKey("sprint"), "the sprint is the item's sprint relation, not a field");
         assertEquals(0.2, first.get("extension"));
         assertEquals(-0.3, first.get("intension"));
         Map<String, Object> second = byKey.get("VEC-2").fields();
-        assertFalse(second.containsKey("sprint"));
         assertFalse(second.containsKey("extension"));
         assertFalse(second.containsKey("intension"));
     }

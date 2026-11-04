@@ -157,12 +157,12 @@ describe("toWorkspaceSnapshot", () => {
   });
 
   it("reads the sprint and the two estimate axes, on an issue and on an epic", () => {
-    const fields = { sprint: "VEC-S7", extension: 0.2, intension: -0.3 };
+    const fields = { extension: 0.2, intension: -0.3 };
     const { issues, epics } = toWorkspaceSnapshot({
       ...base,
       items: [
-        itemFixture({ fields }),
-        itemFixture({ key: "VEC-9", fields: { type: "epic", parentId: "VEC-9", ...fields } }),
+        itemFixture({ fields, sprint: "VEC-S7" }),
+        itemFixture({ key: "VEC-9", sprint: "VEC-S7", fields: { type: "epic", parentId: "VEC-9", ...fields } }),
       ],
     });
 

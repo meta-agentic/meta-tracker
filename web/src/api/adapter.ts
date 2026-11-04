@@ -50,7 +50,6 @@ export const FIELD = {
   description: "description",
   dependencies: "dependencies",
   relates: "relates",
-  sprint: "sprint",
   extension: "extension",
   intension: "intension",
 } as const;
@@ -149,11 +148,15 @@ function toEpic(item: WireItem, epicIds: Set<ID>): Epic {
     type: readString(item.fields, FIELD.type),
     priority: readString(item.fields, FIELD.priority),
     storyPoints: readNumber(item.fields, FIELD.storyPoints),
-    sprint: readString(item.fields, FIELD.sprint),
+    sprint: item.sprint ?? null,
     extension: readNumber(item.fields, FIELD.extension),
     intension: readNumber(item.fields, FIELD.intension),
     dependsOn: readStrings(item.fields, FIELD.dependencies),
     relates: readStrings(item.fields, FIELD.relates),
+    startDate: readString(item.fields, FIELD.startDate),
+    dueDate: readString(item.fields, FIELD.dueDate),
+    labels: readStrings(item.fields, FIELD.labels),
+    description: readString(item.fields, FIELD.description),
   };
 }
 
@@ -236,7 +239,7 @@ export function toWorkspaceSnapshot(payload: WireWorkspacePayload): WorkspaceSna
       description: readString(item.fields, FIELD.description),
       dependsOn: readStrings(item.fields, FIELD.dependencies),
       relates: readStrings(item.fields, FIELD.relates),
-      sprint: readString(item.fields, FIELD.sprint),
+      sprint: item.sprint ?? null,
       extension: readNumber(item.fields, FIELD.extension),
       intension: readNumber(item.fields, FIELD.intension),
     };
