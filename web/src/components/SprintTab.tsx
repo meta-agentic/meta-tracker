@@ -94,8 +94,9 @@ function SprintBoard({
       if (issue.boardId !== boardId) other += 1;
       else {
         ids.add(issue.id);
-        issues.push(issue);
+        // The bar counts what the board can show; the note counts what it cannot.
         if (!shown.has(issue.columnId)) off += 1;
+        else issues.push(issue);
       }
     }
     return { only: ids, offBoard: off, elsewhere: other, onBoard: issues };
