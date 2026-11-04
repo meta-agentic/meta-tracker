@@ -184,7 +184,11 @@ final class EntryMapper {
         }
         if (value instanceof String text) {
             try {
-                return LocalDate.parse(text.strip());
+                LocalDate parsed = LocalDate.parse(text.strip());
+                // PostgreSQL's date type holds years 1 to 9999 only
+                if (parsed.getYear() >= 1 && parsed.getYear() <= 9999) {
+                    return parsed;
+                }
             } catch (DateTimeParseException e) {
                 // reported below
             }

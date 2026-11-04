@@ -105,6 +105,26 @@ public class SprintRepository {
         });
     }
 
+    /**
+     * Completes the board's ACTIVE sprints other than the one with {@code keepKey}, which an import is
+     * about to make active, and that the import does not itself name (it writes those in order), so the single-active index cannot refuse it. Returns the key of each, or
+     * its id for a sprint made in Vectis.
+     */
+    public Uni<List<String>> demoteActiveExcept(UUID boardId, String keepKey, List<String> importedKeys, String origin) {
+        return log.writeToBoard(boardId, origin, scope -> scope.connection().preparedQuery("""
+                        update sprint set status = 'COMPLETED', completed_at = coalesce(completed_at, now())
+                         where board_id = $1 and status = 'ACTIVE' and key is distinct from $2
+                           and (key is null or key <> all($3::text[]))
+                        returning coalesce(key, id::text) as label
+                        """)
+                .execute(Tuple.of(boardId, keepKey, importedKeys.toArray(String[]::new)))
+                .map(rows -> {
+                    List<String> labels = new ArrayList<>();
+                    rows.forEach(row -> labels.add(row.getString("label")));
+                    return Change.of(List.copyOf(labels));
+                }));
+    }
+
     private static Uni<ImportResult> upsertImported(SqlConnection conn, UUID boardId, List<ImportedSprint> sprints) {
         if (sprints.isEmpty()) {
             return Uni.createFrom().item(new ImportResult(0, 0, 0));
@@ -169,7 +189,7 @@ public class SprintRepository {
                           left join board_column c on c.id = i.column_id
                          where b.workspace_id = $1 and s.key is not null
                          group by s.id
-                         order by coalesce(s.start_date, s.end_date) nulls last, s.key
+                         order by coalesce(s.start_date, s.end_date) nulls last, length(s.key), s.key
                         """)
                 .execute(Tuple.of(workspaceId))
                 .map(rows -> {

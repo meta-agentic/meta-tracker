@@ -99,12 +99,30 @@ public class VaultImport {
                                 throw ProblemException.conflict("workspace " + key + " has no board to import into");
                             }
                             KeyedBoard board = all.getFirst();
-                            return sprints.upsertImported(board.board().id(), plan.sprints(), ORIGIN)
+                            return demoteStale(board.board().id(), plan, problems)
+                                    .chain(() -> sprints.upsertImported(board.board().id(), plan.sprints(), ORIGIN))
                                     .chain(sprintResult -> items.upsertAll(board.board().id(), imported, ORIGIN));
                         })
                         .onFailure(PlacementException.class).transform(e -> ProblemException.unprocessable(
                                 "workspace " + key + " cannot hold the vault's items: " + e.getMessage(), List.of()))
                         .map(result -> report(key, target.created(), result, problems)));
+    }
+
+    /**
+     * A board's active sprint that the vault no longer lists as active (its file is gone or its id
+     * changed) is completed first, because the board allows one active sprint and the vault's
+     * active sprint is the one that counts. Removal itself is not part of the import.
+     */
+    private Uni<Void> demoteStale(java.util.UUID boardId, ImportedSprints.Plan plan, List<String> problems) {
+        var active = plan.sprints().stream().filter(s -> s.status() == io.vectis.domain.SprintStatus.ACTIVE).findFirst();
+        if (active.isEmpty()) {
+            return Uni.createFrom().voidItem();
+        }
+        return sprints.demoteActiveExcept(boardId, active.get().key(),
+                plan.sprints().stream().map(io.vectis.persistence.ImportedSprint::key).toList(), ORIGIN).invoke(demoted -> demoted.forEach(
+                label -> problems.add("sprint " + label + " was active on the board but is not the vault's active"
+                        + " sprint " + active.get().key() + "; completed")))
+                .replaceWithVoid();
     }
 
     /**
