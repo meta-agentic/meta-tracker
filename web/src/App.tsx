@@ -118,7 +118,10 @@ function BoardsTab({
     <>
       {sync.status === "stale" && <StaleBanner sync={sync} />}
       {sprint ? (
-        <SprintTab createClient={sprint.createClient} onOpenIssue={openIssue} />
+        <>
+          <BoardSwitcher />
+          <SprintTab createClient={sprint.createClient} onOpenIssue={openIssue} />
+        </>
       ) : (
         <>
           <BoardSwitcher />

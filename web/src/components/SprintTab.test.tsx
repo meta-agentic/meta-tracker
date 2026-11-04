@@ -8,7 +8,9 @@ import { createWorkspaceApiClient } from "../api/client";
 import { readApiConfig } from "../api/config";
 import { newestFirst } from "../api/useSprints";
 import type { WireSprint } from "../api/wire";
+import type { WireItem } from "../api/wire";
 import {
+  boardFixture,
   createRecordedTransport,
   itemFixture,
   itemPage,
@@ -72,6 +74,58 @@ beforeEach(async () => {
   workspaceStore.getState().setActiveTab("sprint");
   createWorkspaceStore(new IndexedDbCache()).getState().reset();
   await new Promise((resolve) => setTimeout(resolve, 50));
+});
+
+const withIcebox = {
+  ...boardFixture,
+  columns: [...boardFixture.columns, { key: "icebox", name: "Icebox", ordinal: 2, onBoard: false }],
+};
+const otherBoard = { key: "OTH", name: "Other", columns: [{ key: "todo", name: "To Do", ordinal: 0, onBoard: true }] };
+
+function withBoards(sprints: WireSprint[], all: WireItem[], inSprint: WireItem[]): Recording {
+  return recording(sprints, {
+    "/boards": { body: [withIcebox, otherBoard] },
+    "/items": { body: itemPage(all) },
+    "/items?limit=200&sprint=VEC-S2": { body: itemPage(inSprint) },
+  });
+}
+
+describe("Sprint tab, items the board does not show", () => {
+  const active = [sprint("VEC-S2", { state: "ACTIVE", committedPoints: 5 })];
+
+  it("counts the items in columns kept off the board instead of dropping them", async () => {
+    const iced = itemFixture({ key: "VEC-5", title: "On ice", column: "icebox" });
+    mount(withBoards(active, [...items, iced], [items[0], iced]));
+
+    expect(await screen.findByText("Wire the client")).toBeInTheDocument();
+    expect(screen.getByText("1 item is in a column that is not shown on the board.")).toBeInTheDocument();
+    expect(screen.queryByText("No items in this sprint")).not.toBeInTheDocument();
+  });
+
+  it("says so, with the board switcher, when the sprint's items are on another board", async () => {
+    const elsewhere = itemFixture({ key: "OTH-1", title: "Over there", board: "OTH", column: "todo" });
+    mount(withBoards(active, [...items, elsewhere], [elsewhere]));
+
+    expect(await screen.findByText("This sprint's items are on another board")).toBeInTheDocument();
+    expect(screen.queryByText("No items in this sprint")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Other" }));
+    expect(await screen.findByText("Over there")).toBeInTheDocument();
+  });
+
+  it("keeps the switcher when one sprint's items fail, and recovers on another", async () => {
+    mount(
+      recording(
+        [sprint("VEC-S1"), sprint("VEC-S2", { state: "ACTIVE" })],
+        { "/items?limit=200&sprint=VEC-S2": { status: 500, statusText: "Server Error" } },
+      ),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("The sprint's items could not be loaded.");
+    const switcher = screen.getByRole("navigation", { name: "Sprints of this workspace" });
+    fireEvent.click(within(switcher).getByRole("button", { name: "VEC-S1" }));
+    expect(await screen.findByText("Old work")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
 });
 
 describe("newestFirst", () => {

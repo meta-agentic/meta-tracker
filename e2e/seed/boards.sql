@@ -31,7 +31,7 @@ insert into board_column (id, board_id, key, name, ordinal, on_board) values
     ('01900000-0000-7000-8000-0000000c0101', '01900000-0000-7000-8000-00000000b0a1', 'doing', 'In Progress', 1, true);
 
 -- Three sprints for the Sprint tab (sprint.spec.ts): E2E-S1 closed, with E2E-1 .. E2E-3 still in
--- To Do; E2E-S2 active, with the two In Progress items; E2E-S3 planned, without dates.
+-- To Do; E2E-S2 active, with the two In Progress items and E2E-303, which sits in a column kept off the board; E2E-S3 planned, without dates.
 insert into sprint (id, board_id, name, status, key, goal, start_date, end_date, closed_date) values
     ('01900000-0000-7000-8000-0000005b0001', '01900000-0000-7000-8000-00000000b0a1', 'E2E-S1', 'COMPLETED', 'E2E-S1',
      'Prove the harness', '2026-10-01', '2026-10-14', '2026-10-15'),
@@ -60,6 +60,7 @@ insert into item (id, workspace_id, board_id, column_id, key, title, rank, field
      '01900000-0000-7000-8000-0000005b0002'),
     ('01900000-0000-7000-8000-000000001003', '01900000-0000-7000-8000-00000000e2e0',
      '01900000-0000-7000-8000-00000000b0a1', '01900000-0000-7000-8000-0000000c0103',
-     'E2E-303', 'Kept off the board', 'a', '{"type": "story"}', null);
+     'E2E-303', 'Kept off the board', 'a', '{"type": "story", "storyPoints": 2}',
+     '01900000-0000-7000-8000-0000005b0002');
 
 commit;
