@@ -59,6 +59,10 @@ acceptance criteria, and — on finished items — what was actually found along
 
 `_index.md` files are generated summaries. Treat them as output, not source.
 
+## Minting an id
+
+An id is minted by a commit on `main` that raises `next:` in `vec/_backlog-meta.yaml` (the `reserve: main-counter` policy): the counter is committed before the id is used, so two contributions cannot take the same number. If a duplicate id still enters through a merge, repair it by hand: rename the newer file to a fresh id taken from the counter, update the `id:` field and every reference to the old id (dependencies, epic, sprint files), and regenerate the dependency index. The vault reader also reports a `next:` that is not above the highest id in use, so a stale counter shows up on import.
+
 ## Working with it
 
 Because the backlog is plain files, you need no tooling to read it, search it, or change

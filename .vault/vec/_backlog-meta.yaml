@@ -1,9 +1,9 @@
 idPolicy:
   tracker: local
   prefix: VEC
-  reserve: git-ref
+  reserve: main-counter
   pattern: '^VEC-\d+$'
-  next: 58
+  next: 123
 sprints:
 - id: VEC-S1
   name: VEC Sprint 1
