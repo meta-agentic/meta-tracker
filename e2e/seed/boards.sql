@@ -63,4 +63,17 @@ insert into item (id, workspace_id, board_id, column_id, key, title, rank, field
      'E2E-303', 'Kept off the board', 'a', '{"type": "story", "storyPoints": 2}',
      '01900000-0000-7000-8000-0000005b0002');
 
+-- The item detail journey: a story under an epic that sits under another epic, and a story it
+-- depends on. The two stories sit in Done; the epics are lifted out of the board.
+insert into item (id, workspace_id, board_id, column_id, key, title, rank, fields)
+select ('01900000-0000-7000-8000-0000000020' || lpad(n::text, 2, '0'))::uuid,
+       '01900000-0000-7000-8000-00000000e2e0', '01900000-0000-7000-8000-00000000b0a1',
+       '01900000-0000-7000-8000-0000000c0102', 'E2E-' || (400 + n), t, 'm' || n, f::jsonb
+from (values
+    (1, 'Outer epic', '{"type": "epic", "priority": "P0"}'),
+    (2, 'Inner epic', '{"type": "epic", "parentId": "E2E-401", "priority": "P1"}'),
+    (3, 'Story under the epics', '{"type": "story", "parentId": "E2E-402", "dependencies": ["E2E-404", "E2E-999"], "sprint": "S1", "storyPoints": 3, "extension": 0.2, "intension": -0.3}'),
+    (4, 'Story it depends on', '{"type": "story"}')
+) as v(n, t, f);
+
 commit;

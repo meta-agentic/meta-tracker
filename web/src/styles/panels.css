@@ -542,3 +542,36 @@ button.vec-link-row:hover {
     padding: 16px 16px 32px;
   }
 }
+
+.vec-ancestors {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.vec-ancestor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.vec-ancestor__key {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.vec-ancestor__title {
+  min-width: 0;
+  color: var(--vec-text);
+}
+
+.vec-axes {
+  margin-inline-start: 8px;
+  font-size: 12px;
+}
