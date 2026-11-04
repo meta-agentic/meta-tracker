@@ -212,6 +212,35 @@ class UntrustedInputTest {
         assertEquals(List.of(), read().problems());
     }
 
+    @Test
+    void aNextCounterEqualToTheHighestIdInUseIsReported() throws IOException {
+        Files.writeString(space.resolve("_backlog-meta.yaml"), "idPolicy:\n  prefix: DEMO\n  next: 7\n");
+        Files.writeString(space.resolve("raw/DEMO-7.md"), item("DEMO-7"));
+
+        List<String> problems = Fixtures.problemsAbout(read(), "_backlog-meta.yaml");
+
+        assertEquals(1, problems.size(), problems::toString);
+        assertTrue(problems.get(0).contains("next: 7 is not above the highest id in use, DEMO-7"), problems::toString);
+    }
+
+    @Test
+    void aNextCounterIsNotReportedForAnEmptySpace() throws IOException {
+        Files.writeString(space.resolve("_backlog-meta.yaml"), "idPolicy:\n  prefix: DEMO\n  next: 1\n");
+
+        assertEquals(List.of(), read().problems());
+    }
+
+    @Test
+    void anItemWithAnotherPrefixDoesNotMakeTheCounterStale() throws IOException {
+        Files.writeString(space.resolve("_backlog-meta.yaml"), "idPolicy:\n  prefix: DEMO\n  next: 5\n");
+        Files.writeString(space.resolve("raw/OTHER-99.md"), item("OTHER-99"));
+
+        BacklogSnapshot snapshot = read();
+
+        assertEquals(List.of(), Fixtures.problemsAbout(snapshot, "_backlog-meta.yaml"));
+        assertEquals(1, Fixtures.problemsAbout(snapshot, "raw/OTHER-99.md").size(), snapshot.problems()::toString);
+    }
+
     private static String item(String key) {
         return "---\nkind: story\nid: " + key + "\ntitle: A title\nstatus: TO DO\n---\n\nBody.\n";
     }
