@@ -1,0 +1,5 @@
+idPolicy:
+  tracker: local
+  prefix: VEC
+  pattern: '^VEC-\d+$'
+  next: 13
