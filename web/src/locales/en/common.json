@@ -26,6 +26,17 @@
 
   "boards.label": "Boards in this workspace",
 
+  "workspace.switcher": "Switch workspace",
+  "workspace.list": "Workspaces on this server",
+  "workspace.listing": "Listing workspaces…",
+  "workspace.listError": "The workspaces could not be listed.",
+  "workspace.pick.title": "Choose a workspace",
+  "workspace.pick.body": "Pick the workspace to open. Its address then names it, so a link opens it directly.",
+  "workspace.notFound.title": "Workspace {{key}} was not found",
+  "workspace.notFound.body": "This server has no workspace with that key; the link may be out of date. Pick a workspace below.",
+  "workspace.none.title": "No workspaces yet",
+  "workspace.none.body": "This server has no workspaces. Workspaces created or imported on the server appear here.",
+
   "board.empty": "Select a board.",
   "board.columnCount": "{{count}}",
   "board.moreIssues": "+{{count}} more",

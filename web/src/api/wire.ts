@@ -33,7 +33,7 @@ export interface WireTemplateRef {
   version: number;
 }
 
-/** `GET /workspaces/{key}`: `WorkspacesResource.WorkspaceView`. */
+/** `GET /workspaces/{key}`, and one entry of `GET /workspaces`: `WorkspacesResource.WorkspaceView`. */
 export interface WireWorkspace {
   key: string;
   name: string;
@@ -206,6 +206,10 @@ export function decodeWorkspace(value: unknown, path = "workspace"): WireWorkspa
       version: asInteger(template, "version", `${path}.template`),
     },
   };
+}
+
+export function decodeWorkspaces(value: unknown, path = "workspaces"): WireWorkspace[] {
+  return asArray(value, path).map((workspace, i) => decodeWorkspace(workspace, `${path}[${i}]`));
 }
 
 export function decodeBoardColumn(value: unknown, path: string): WireBoardColumn {

@@ -4,8 +4,8 @@ import { App } from "./App";
 import { AppProviders } from "./providers/AppProviders";
 import { IndexedDbCache } from "./store/cache";
 import { createWorkspaceStore, workspaceStore } from "./store/workspaceStore";
-import { createWorkspaceApiClient } from "./api/client";
-import { readApiConfig } from "./api/config";
+import { createApiClient } from "./api/client";
+import { readApiConfig, type ApiEnv } from "./api/config";
 import { toWorkspaceSnapshot } from "./api/adapter";
 import {
   boardFixture,
@@ -15,6 +15,7 @@ import {
   itemFixture,
   itemPage,
   snapshotRecording,
+  twoWorkspacesRecording,
   workspaceFixture,
   workspaceNotFound,
   type Recording,
@@ -26,7 +27,8 @@ import { giveElementSize } from "./test/layout";
  * needed, rendered. The transport is recorded, so nothing here needs a server.
  */
 
-const config = readApiConfig({ VITE_VECTIS_WORKSPACE_KEY: "VEC" });
+/** Built for VEC, as a local run is: the default when the URL names no workspace. */
+const builtForVec: ApiEnv = { VITE_VECTIS_WORKSPACE_KEY: "VEC" };
 
 /**
  * The components render from the module-level `workspaceStore`, so these tests
@@ -34,16 +36,12 @@ const config = readApiConfig({ VITE_VECTIS_WORKSPACE_KEY: "VEC" });
  * substituted. The cache is reached through a throwaway store over the same
  * IndexedDB, which is the store's own public way to seed and clear it.
  */
-function mount(recording: Recording, pageSize?: number) {
+function mount(recording: Recording, pageSize?: number, env: ApiEnv = builtForVec) {
   const recorded = createRecordedTransport(recording);
+  const config = readApiConfig(env);
   const view = render(
     <AppProviders>
-      <App
-        sync={{
-          createClient: () =>
-            createWorkspaceApiClient({ config, transport: recorded.transport, pageSize }),
-        }}
-      />
+      <App createApi={() => createApiClient({ config, transport: recorded.transport, pageSize })} />
     </AppProviders>,
   );
   return { recorded, view };
@@ -69,6 +67,7 @@ async function warmCache() {
 
 beforeEach(async () => {
   localStorage.clear();
+  window.history.replaceState(null, "", "/");
   workspaceStore.getState().reset();
   // The open tab and the expanded rows persist across reloads, so they would
   // also leak across tests.
@@ -236,6 +235,134 @@ describe("App", () => {
 
     expect(screen.getByRole("button", { name: "Run dual-axis profile" })).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
+describe("choosing the workspace at run time", () => {
+  /** Built with no workspace key, as the published image is. */
+  const unset: ApiEnv = {};
+
+  const picker = () => screen.getByRole("navigation", { name: "Workspaces on this server" });
+
+  async function openSwitcher() {
+    const summary = within(screen.getByRole("banner")).getByText("Switch workspace").closest("summary")!;
+    fireEvent.click(summary);
+    return screen.findByRole("navigation", { name: "Workspaces on this server" });
+  }
+
+  it("opens the only workspace on the server, leaving the address alone", async () => {
+    mount(snapshotRecording(), undefined, unset);
+
+    expect(await screen.findByText("Wire the client")).toBeInTheDocument();
+    expect(window.location.search).toBe("");
+  });
+
+  it("offers a picker for several workspaces, and a pick opens one at its own address", async () => {
+    mount(twoWorkspacesRecording(), undefined, unset);
+
+    expect(await screen.findByRole("heading", { name: "Choose a workspace" })).toBeInTheDocument();
+    const links = within(picker()).getAllByRole("link");
+    // In name order, each a real address.
+    expect(links.map((link) => link.textContent)).toEqual(["OperationsOPS", "VectisVEC"]);
+    expect(links[0]).toHaveAttribute("href", "/?ws=OPS");
+
+    fireEvent.click(links[1]);
+
+    expect(await screen.findByText("Wire the client")).toBeInTheDocument();
+    expect(window.location.search).toBe("?ws=VEC");
+  });
+
+  it("opens the workspace the address names", async () => {
+    window.history.replaceState(null, "", "/?ws=OPS");
+    const { recorded } = mount(twoWorkspacesRecording(), undefined, unset);
+
+    expect(await screen.findByText("Rotate the keys")).toBeInTheDocument();
+    expect(recorded.calls).toContain("/api/v1/workspaces/OPS/boards");
+    expect(recorded.calls.some((url) => url.includes("/workspaces/VEC"))).toBe(false);
+  });
+
+  it("shows an unknown workspace as not found, together with the picker", async () => {
+    window.history.replaceState(null, "", "/?ws=NOPE");
+    mount(twoWorkspacesRecording(), undefined, unset);
+
+    const alert = await screen.findByRole("alert");
+    await waitFor(() => expect(alert).toHaveTextContent("Workspace NOPE was not found"));
+    expect(within(picker()).getAllByRole("link")).toHaveLength(2);
+    expect(screen.queryByText("Wire the client")).not.toBeInTheDocument();
+  });
+
+  it("opens the build-time default when the address names none", async () => {
+    mount(twoWorkspacesRecording());
+    expect(await screen.findByText("Wire the client")).toBeInTheDocument();
+  });
+
+  it("lets the address override the build-time default", async () => {
+    window.history.replaceState(null, "", "/?ws=OPS");
+    mount(twoWorkspacesRecording());
+    expect(await screen.findByText("Rotate the keys")).toBeInTheDocument();
+  });
+
+  it("says so when the server holds no workspace", async () => {
+    mount({ routes: { "/workspaces": { body: [] } } }, undefined, unset);
+    expect(await screen.findByRole("heading", { name: "No workspaces yet" })).toBeInTheDocument();
+  });
+
+  it("reports a list that could not be read, with a working retry", async () => {
+    const { recorded } = mount(
+      { routes: {}, networkError: new TypeError("Failed to fetch") },
+      undefined,
+      unset,
+    );
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("The workspaces could not be listed.");
+
+    recorded.play(twoWorkspacesRecording());
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(await screen.findByRole("heading", { name: "Choose a workspace" })).toBeInTheDocument();
+  });
+
+  it("switches from the shell to a new address, without the filter, and goes back to both", async () => {
+    window.history.replaceState(null, "", "/?ws=VEC&q=wire");
+    mount(twoWorkspacesRecording());
+    expect(await screen.findByText("Wire the client")).toBeInTheDocument();
+    expect(screen.getByRole("searchbox")).toHaveValue("wire");
+
+    const menu = await openSwitcher();
+    expect(within(menu).getByRole("link", { name: /Vectis/ })).toHaveAttribute("aria-current", "page");
+    fireEvent.click(within(menu).getByRole("link", { name: /Operations/ }));
+
+    expect(window.location.search).toBe("?ws=OPS");
+    expect(await screen.findByText("Rotate the keys")).toBeInTheDocument();
+    expect(screen.queryByText("Wire the client")).not.toBeInTheDocument();
+    expect(screen.getByRole("searchbox")).toHaveValue("");
+    expect(within(screen.getByRole("banner")).getByText("Operations")).toBeInTheDocument();
+
+    act(() => window.history.back());
+
+    expect(await screen.findByText("Wire the client")).toBeInTheDocument();
+    expect(window.location.search).toBe("?ws=VEC&q=wire");
+    expect(screen.getByRole("searchbox")).toHaveValue("wire");
+  });
+
+  it("never shows the workspace left behind while the next one loads", async () => {
+    const { recorded } = mount(twoWorkspacesRecording());
+    expect(await screen.findByText("Wire the client")).toBeInTheDocument();
+
+    const gate = createGate();
+    recorded.play({ ...twoWorkspacesRecording(), gate: gate.promise });
+    fireEvent.click(within(await openSwitcher()).getByRole("link", { name: /Operations/ }));
+
+    expect(screen.getByText("Loading workspace…")).toBeInTheDocument();
+    expect(screen.queryByText("Wire the client")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delivery" })).not.toBeInTheDocument();
+    const banner = screen.getByRole("banner");
+    expect(within(banner).getByText("Operations")).toBeInTheDocument();
+    expect(within(banner).queryByText("Vectis", { selector: ".vec-workspace__name" })).not.toBeInTheDocument();
+
+    gate.release();
+    expect(await screen.findByText("Rotate the keys")).toBeInTheDocument();
   });
 });
 

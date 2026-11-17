@@ -6,12 +6,19 @@ URL or a header.
 
 | File | Responsibility |
 | --- | --- |
-| `config.ts` | Base URL, workspace key and timeout, read from `VITE_VECTIS_*`. |
+| `config.ts` | Base URL, default workspace key and timeout, read from `VITE_VECTIS_*`. |
 | `http.ts` | The one place a request leaves the client. Timeouts, aborts, status. |
 | `wire.ts` | The server's shapes, and the narrowing from `unknown` into them. |
-| `client.ts` | The workspace, board and item reads, plus the snapshot fan-out. |
+| `client.ts` | The workspace list, then one workspace's reads, plus the snapshot fan-out. |
 | `adapter.ts` | Wire shape → the store's `WorkspaceSnapshot`. |
+| `useWorkspaces.ts` | The server's workspaces, for the switcher and the picker. |
 | `useWorkspaceSync.ts` | Cache-first hydration and the loading/error states. |
+
+The workspace is chosen at run time, not at build time, so one bundle serves any
+deployment. `src/store/workspaceRoute.ts` holds the rule: the workspace named by
+`?ws=KEY` in the page's URL, else `VITE_VECTIS_WORKSPACE_KEY` as a default, else
+the only workspace the server lists, else a picker. A named key the server does
+not list is shown as not found beside the picker.
 
 Configuration lives in the environment and nowhere else; `web/.env.example`
 documents the variables and carries a value for none of them. The default base
@@ -21,8 +28,9 @@ function in `http.ts`, so it arrives there without a call site changing.
 
 ## The contract: VEC-94 under ADR-VEC-05
 
-`client.ts` reads the three VEC-94 resources under `/api/v1`, and `wire.ts` decodes them field for field:
+`client.ts` reads the workspace list and the three VEC-94 resources of one workspace under `/api/v1`, and `wire.ts` decodes them field for field:
 
+- `GET /workspaces`: every workspace, newest first, each `{key, name, template: {key, version}}`.
 - `GET /workspaces/{key}`: `{key, name, template: {key, version}}`.
 - `GET /workspaces/{key}/boards`: `[{key, name, columns: [{key, name, ordinal, onBoard}]}]`.
 - `GET /workspaces/{key}/items?limit=&cursor=`: `{items: [{key, title, board, column, rank, fields, version}], next}`, newest first. `listItems` follows `next` until it is null, 200 items a page (the server's maximum); a cursor handed out twice is a format error rather than an endless loop.

@@ -26,6 +26,17 @@
 
   "boards.label": "Bacheche di questo spazio di lavoro",
 
+  "workspace.switcher": "Cambia spazio di lavoro",
+  "workspace.list": "Spazi di lavoro su questo server",
+  "workspace.listing": "Elenco degli spazi di lavoro…",
+  "workspace.listError": "Impossibile elencare gli spazi di lavoro.",
+  "workspace.pick.title": "Scegli uno spazio di lavoro",
+  "workspace.pick.body": "Scegli lo spazio di lavoro da aprire. Il suo indirizzo lo indica, quindi un link lo apre direttamente.",
+  "workspace.notFound.title": "Spazio di lavoro {{key}} non trovato",
+  "workspace.notFound.body": "Su questo server non c'è uno spazio di lavoro con questa chiave; il link potrebbe non essere più valido. Scegli uno spazio di lavoro qui sotto.",
+  "workspace.none.title": "Ancora nessuno spazio di lavoro",
+  "workspace.none.body": "Questo server non ha spazi di lavoro. Gli spazi di lavoro creati o importati sul server compaiono qui.",
+
   "board.empty": "Seleziona una bacheca.",
   "board.columnCount": "{{count}}",
   "board.moreIssues": "+{{count}} altri",
