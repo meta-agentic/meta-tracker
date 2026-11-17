@@ -7,8 +7,8 @@ import java.util.Map;
 
 /**
  * {@link ApiTestProfile} with the vault import pointed at a scratch directory that
- * {@link VaultImportApiTest} fills with a copy of this repository's own {@code .vault}, so a
- * test can edit the vault without touching the repository's.
+ * {@link VaultImportApiTest} fills with a copy of the fixture vault in this module's test resources,
+ * so a test can edit the vault without touching the fixture.
  */
 public class ImportTestProfile extends ApiTestProfile {
 

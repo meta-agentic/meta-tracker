@@ -40,16 +40,18 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * VEC-54 against PostgreSQL 16: {@code POST /api/v1/imports/vault} over a copy of this repository's
- * own {@code .vault/vec}. What should be on the board is worked out here from the files
- * themselves, by status, not from the code under test.
+ * VEC-54 against PostgreSQL 16: {@code POST /api/v1/imports/vault} over a copy of the fixture vault
+ * under this module's test resources, a synthetic {@code vec} space with every status. What should
+ * be on the board is worked out here from the files themselves, by status, not from the code under
+ * test.
  */
 @QuarkusTest
 @TestProfile(ImportTestProfile.class)
 @QuarkusTestResource(value = DatabaseResource.class, restrictToAnnotatedClass = true)
 class VaultImportApiTest {
 
-    private static final Path REPOSITORY_VAULT = Path.of("..", ".vault").toAbsolutePath().normalize();
+    /** Relative to the module, where Maven runs the tests, as ImportTestProfile's target directory is. */
+    private static final Path FIXTURE_VAULT = Path.of("src", "test", "resources", "import-vault").toAbsolutePath();
     private static final Path VAULT = ImportTestProfile.VAULT;
     private static final Pattern STATUS = Pattern.compile("(?m)^status:\\s*(.+?)\\s*$");
 
@@ -62,7 +64,7 @@ class VaultImportApiTest {
     void freshVaultAndNoWorkspace() throws IOException {
         Files.createDirectories(VAULT);
         deleteTree(VAULT);
-        copyTree(REPOSITORY_VAULT, VAULT);
+        copyTree(FIXTURE_VAULT, VAULT);
         update("delete from workspace where key = 'VEC'");
     }
 
@@ -71,7 +73,7 @@ class VaultImportApiTest {
     @Test
     void importProvisionsTheWorkspaceFromScrumAndShowsEveryItemOnceInItsColumn() throws IOException {
         Map<String, String> expected = expectedColumns();
-        assertTrue(expected.size() >= 10, "the repository's backlog is the fixture: " + expected.size());
+        assertTrue(expected.size() >= 10, "the fixture vault holds the backlog: " + expected.size());
 
         post("vault").then().statusCode(200)
                 .body("workspace", equalTo("VEC"))
