@@ -10,7 +10,10 @@ import { CloudOffIcon, RetryIcon, WarningIcon } from "./icons";
  * what happened and, where there is one, what to do next.
  */
 
-function RetryButton({ sync, variant }: { sync: WorkspaceSync; variant: "primary" | "quiet" }) {
+/** What a failure panel needs from a load: the sync of a workspace, or the list of them. */
+type Failure = Pick<WorkspaceSync, "error" | "canRetry" | "retry">;
+
+function RetryButton({ sync, variant }: { sync: Failure; variant: "primary" | "quiet" }) {
   const { t } = useTranslation();
   return (
     <button
@@ -80,14 +83,14 @@ export function LoadingTree() {
 }
 
 /** The no-cache failure: there is nothing to show, so this is the whole tab. */
-export function ErrorState({ sync }: { sync: WorkspaceSync }) {
+export function ErrorState({ sync, title }: { sync: Failure; title?: string }) {
   const { t } = useTranslation();
   return (
     <div className="vec-state" role="alert">
       <span className="vec-state__icon vec-state__icon--danger">
         <CloudOffIcon size={22} />
       </span>
-      <h2 className="vec-state__title">{t("app.error")}</h2>
+      <h2 className="vec-state__title">{title ?? t("app.error")}</h2>
       <p className="vec-state__body">{t("app.errorHint")}</p>
       {sync.error && (
         // Server and network messages are diagnostics, not chrome — shown as

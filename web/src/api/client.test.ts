@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createWorkspaceApiClient, fetchWorkspaceSnapshot } from "./client";
+import { createApiClient, createWorkspaceApiClient, fetchWorkspaceSnapshot } from "./client";
 import { readApiConfig } from "./config";
 import { ApiError, isRetryable } from "./errors";
 import {
@@ -22,7 +22,12 @@ function clientFor(recording: Recording = snapshotRecording(), pageSize?: number
   const recorded = createRecordedTransport(recording);
   return {
     recorded,
-    client: createWorkspaceApiClient({ config, transport: recorded.transport, pageSize }),
+    client: createWorkspaceApiClient({
+      config,
+      workspaceKey: "VEC",
+      transport: recorded.transport,
+      pageSize,
+    }),
   };
 }
 
@@ -258,6 +263,7 @@ describe("WorkspaceApiClient", () => {
       const recorded = createRecordedTransport({ routes: {}, hang: true });
       const client = createWorkspaceApiClient({
         config: { ...config, timeoutMs: 50 },
+        workspaceKey: "VEC",
         transport: recorded.transport,
       });
 
@@ -274,7 +280,11 @@ describe("WorkspaceApiClient", () => {
 
   it("propagates a caller's abort as the caller's own error, not a transport failure", async () => {
     const recorded = createRecordedTransport({ routes: {}, hang: true });
-    const client = createWorkspaceApiClient({ config, transport: recorded.transport });
+    const client = createWorkspaceApiClient({
+      config,
+      workspaceKey: "VEC",
+      transport: recorded.transport,
+    });
     const controller = new AbortController();
 
     const pending = client.listItems(controller.signal).catch((e: unknown) => e);
@@ -289,5 +299,34 @@ describe("WorkspaceApiClient", () => {
     // All three URLs are requested before any response is awaited.
     expect(recorded.calls).toHaveLength(3);
     await pending;
+  });
+});
+
+describe("ApiClient", () => {
+  const other = { key: "OPS", name: "Operations", template: { key: "scrum", version: 1 } };
+
+  it("lists the server's workspaces, and reads any of them over the same transport", async () => {
+    const recorded = createRecordedTransport({
+      routes: {
+        "/workspaces": { body: [other, workspaceFixture] },
+        "/workspaces/OPS": { body: other },
+      },
+    });
+    const api = createApiClient({ config: readApiConfig({}), transport: recorded.transport });
+
+    expect(await api.listWorkspaces()).toEqual([other, workspaceFixture]);
+    const ops = api.workspace("OPS");
+    expect(ops.workspaceKey).toBe("OPS");
+    expect(await ops.getWorkspace()).toEqual(other);
+    expect(recorded.calls).toEqual(["/api/v1/workspaces", "/api/v1/workspaces/OPS"]);
+  });
+
+  it("refuses a list entry the contract does not allow", async () => {
+    const recorded = createRecordedTransport({
+      routes: { "/workspaces": { body: [{ key: "OPS", name: "Operations" }] } },
+    });
+    const api = createApiClient({ config: readApiConfig({}), transport: recorded.transport });
+
+    await expect(api.listWorkspaces()).rejects.toThrow(/workspaces\[0\]\.template/);
   });
 });

@@ -1,12 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useWorkspaceStore } from "./store/workspaceStore";
 import {
+  connectApi,
+  defaultCreateApi,
+  useWorkspaces,
   useWorkspaceSync,
+  type ApiClient,
+  type WorkspaceApiClient,
   type WorkspaceSync,
-  type WorkspaceSyncOptions,
 } from "./api";
 import type { ID } from "./store/types";
+import { selectWorkspace, useWorkspaceParam } from "./store/workspaceRoute";
+import { WorkspacePicker, WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 import { BoardSwitcher } from "./components/BoardSwitcher";
 import { BoardView } from "./components/BoardView";
 import { BoardFilterBar } from "./components/FilterBar";
@@ -41,7 +47,7 @@ export interface AppProps {
    * Injected by the suite so the app can be driven over a recorded transport.
    * Production renders `<App />` and the client is built from the environment.
    */
-  sync?: WorkspaceSyncOptions;
+  createApi?: () => ApiClient;
 }
 
 /** The card for an item, if the board currently renders one. */
@@ -58,7 +64,7 @@ function BoardsTab({
   sprint,
 }: {
   sync: WorkspaceSync;
-  sprint?: { createClient?: WorkspaceSyncOptions["createClient"] };
+  sprint?: { createClient: () => WorkspaceApiClient };
 }) {
   const { t } = useTranslation();
   const activeBoardId = useWorkspaceStore((s) => s.activeBoardId);
@@ -279,12 +285,38 @@ function RoadmapTab({ sync }: { sync: WorkspaceSync }) {
   );
 }
 
-export function App({ sync: syncOptions }: AppProps = {}) {
+export function App({ createApi = defaultCreateApi }: AppProps = {}) {
   const { t, i18n } = useTranslation();
-  const sync = useWorkspaceSync(syncOptions);
-  const workspace = useWorkspaceStore((s) => s.workspace);
+  const [connection] = useState(() => connectApi(createApi));
+  const workspaces = useWorkspaces(connection);
+  const [requested, switchWorkspace] = useWorkspaceParam();
+  const choice = selectWorkspace({
+    requested,
+    fallback: connection.api?.config.defaultWorkspaceKey ?? null,
+    listed: workspaces.workspaces,
+  });
+  const openKey = choice.kind === "open" ? choice.key : null;
+  const createClient = useCallback(
+    (workspaceKey: string) => {
+      if (connection.api === null) throw connection.error;
+      return connection.api.workspace(workspaceKey);
+    },
+    [connection],
+  );
+  const sync = useWorkspaceSync({ workspaceKey: openKey, createClient });
+  const stored = useWorkspaceStore((s) => s.workspace);
   const tab = useWorkspaceStore((s) => s.activeTab);
   const setTab = useWorkspaceStore((s) => s.setActiveTab);
+
+  // Right after a switch the store still holds the workspace left behind, so
+  // the name comes from the list until the store has caught up.
+  const listed = workspaces.workspaces?.find((w) => w.key === openKey);
+  const workspace =
+    openKey === null
+      ? null
+      : stored?.key === openKey
+        ? stored
+        : { key: openKey, name: listed?.name ?? null };
 
   const navRef = useRef<HTMLElement>(null);
   // On a narrow window the nav scrolls sideways. The stylesheet fades each
@@ -310,10 +342,11 @@ export function App({ sync: syncOptions }: AppProps = {}) {
     return () => window.removeEventListener("resize", markNavEdges);
   }, [markNavEdges]);
 
+  const workspaceName = workspace?.name ?? null;
   useEffect(() => {
     const product = t("app.title");
-    document.title = workspace ? `${workspace.name} · ${product}` : product;
-  }, [workspace, t]);
+    document.title = workspaceName ? `${workspaceName} · ${product}` : product;
+  }, [workspaceName, t]);
 
   return (
     // The backlog and the roadmap fill the window and scroll inside themselves;
@@ -328,14 +361,10 @@ export function App({ sync: syncOptions }: AppProps = {}) {
             <LogoMark />
             <span className="vec-brand__name">{t("app.title")}</span>
           </span>
-          {workspace && (
+          {(workspace || (workspaces.workspaces?.length ?? 0) > 0) && (
             <>
               <span className="vec-topbar__divider" aria-hidden="true" />
-              <span className="vec-workspace">
-                {/* Workspace names are user data, not chrome — deliberately not localized. */}
-                <span className="vec-workspace__name">{workspace.name}</span>
-                <span className="vec-workspace__key">{workspace.key}</span>
-              </span>
+              <WorkspaceSwitcher current={workspace} list={workspaces} onSwitch={switchWorkspace} />
             </>
           )}
         </div>
@@ -394,19 +423,34 @@ export function App({ sync: syncOptions }: AppProps = {}) {
         </nav>
 
         <div className="vec-topbar__end">
-          <SyncIndicator status={sync.status} />
+          {openKey !== null && <SyncIndicator status={sync.status} />}
           <PreferenceControls />
         </div>
       </header>
 
       <main id="vec-main" className="vec-main" tabIndex={-1}>
-        {tab === "boards" && <BoardsTab sync={sync} />}
-        {tab === "sprint" && <BoardsTab sync={sync} sprint={{ createClient: syncOptions?.createClient }} />}
-        {tab === "backlog" && <BacklogTab sync={sync} />}
-        {tab === "roadmap" && <RoadmapTab sync={sync} />}
         {/* The profiler generates its own data and is deliberately not gated on
-            the sync state: it must run with no server listening. */}
-        {tab === "timeline" && <ProfilingHarness />}
+            the sync state or on a workspace: it must run with no server listening. */}
+        {tab === "timeline" ? (
+          <ProfilingHarness />
+        ) : openKey !== null ? (
+          // Keyed on the workspace: an open item, a chosen sprint and a scroll
+          // position belong to the workspace they were in.
+          <Fragment key={openKey}>
+            {tab === "boards" && <BoardsTab sync={sync} />}
+            {tab === "sprint" && (
+              <BoardsTab sync={sync} sprint={{ createClient: () => createClient(openKey) }} />
+            )}
+            {tab === "backlog" && <BacklogTab sync={sync} />}
+            {tab === "roadmap" && <RoadmapTab sync={sync} />}
+          </Fragment>
+        ) : choice.kind === "pick" ? (
+          <WorkspacePicker missing={choice.missing} list={workspaces} onSwitch={switchWorkspace} />
+        ) : workspaces.status === "error" ? (
+          <ErrorState sync={workspaces} title={t("workspace.listError")} />
+        ) : (
+          <LoadingBoard />
+        )}
       </main>
     </div>
   );

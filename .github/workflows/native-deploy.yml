@@ -231,6 +231,10 @@ jobs:
           check "GET /api/unknown status" 404 "$(code /api/unknown)"
           check "GET $asset status" 200 "$(code "$asset")"
           check "GET $asset cache" "public, max-age=31536000, immutable" "$(header "$asset" cache-control)"
+          # The client is built here without VITE_VECTIS_WORKSPACE_KEY and picks its workspace at
+          # run time. A script that still refused to start without the key would carry that refusal
+          # as a string, so the script the shell names must not.
+          check "script starts without a build-time workspace" 0 "$(curl -s "http://localhost:8080$asset" | grep -c 'VITE_VECTIS_WORKSPACE_KEY is not set')"
           # VEC-88: the probes deploy/k8s/base calls, never answered with the shell.
           for probe in started ready live; do
             check "GET /q/health/$probe status" 200 "$(code /q/health/$probe)"

@@ -1,3 +1,4 @@
+import { isWorkspaceKey } from "../store/workspaceRoute";
 import { ApiError } from "./errors";
 
 /**
@@ -6,7 +7,9 @@ import { ApiError } from "./errors";
  * No host, port or credential is committed here. `VITE_VECTIS_API_BASE_URL` is
  * the only place a deployment names its server, and it is absent from the
  * repository by design — `web/.env.example` documents the variables without
- * carrying a value for any of them.
+ * carrying a value for any of them. Which workspace to open is not part of the
+ * build: `VITE_VECTIS_WORKSPACE_KEY` is only a default for when the URL names
+ * none (see `src/store/workspaceRoute.ts`).
  *
  * The default is the *relative* path `/api/v1`, not a hostname: same-origin
  * deployments and the dev proxy both work with no configuration, and there is
@@ -19,13 +22,15 @@ export const DEFAULT_BASE_URL = "/api/v1";
 
 export const DEFAULT_TIMEOUT_MS = 10_000;
 
-/** The workspace key format enforced by `io.vectis.domain.Workspace`. */
-const WORKSPACE_KEY_FORMAT = /^[A-Z][A-Z0-9]{1,9}$/;
-
 export interface ApiConfig {
   /** No trailing slash. */
   baseUrl: string;
-  workspaceKey: string;
+  /**
+   * The workspace opened when the URL names none, or null. A default, not a
+   * binding: the client lists the server's workspaces at run time and can open
+   * any of them, so one bundle serves every deployment.
+   */
+  defaultWorkspaceKey: string | null;
   timeoutMs: number;
 }
 
@@ -45,9 +50,9 @@ function trimTrailingSlash(url: string): string {
 }
 
 /**
- * @throws ApiError `kind: "config"` when the environment is unusable. A missing
- * workspace key is a deployment error, and failing loudly at startup is better
- * than defaulting to some other tenant's data.
+ * @throws ApiError `kind: "config"` when the environment is unusable: a
+ * workspace key no workspace can have, or a timeout that is not one. An absent
+ * key is not an error; the client then picks the workspace at run time.
  */
 export function readApiConfig(env: ApiEnv): ApiConfig {
   const rawBaseUrl = env.VITE_VECTIS_API_BASE_URL?.trim();
@@ -55,19 +60,14 @@ export function readApiConfig(env: ApiEnv): ApiConfig {
     rawBaseUrl && rawBaseUrl.length > 0 ? rawBaseUrl : DEFAULT_BASE_URL,
   );
 
-  const workspaceKey = env.VITE_VECTIS_WORKSPACE_KEY?.trim() ?? "";
-  if (workspaceKey.length === 0) {
+  const rawKey = env.VITE_VECTIS_WORKSPACE_KEY?.trim() ?? "";
+  if (rawKey.length > 0 && !isWorkspaceKey(rawKey)) {
     throw new ApiError(
       "config",
-      "VITE_VECTIS_WORKSPACE_KEY is not set: the client does not know which workspace to load",
+      `VITE_VECTIS_WORKSPACE_KEY must be 2-10 upper-case alphanumeric characters starting with a letter, received "${rawKey}"`,
     );
   }
-  if (!WORKSPACE_KEY_FORMAT.test(workspaceKey)) {
-    throw new ApiError(
-      "config",
-      `VITE_VECTIS_WORKSPACE_KEY must be 2-10 upper-case alphanumeric characters starting with a letter, received "${workspaceKey}"`,
-    );
-  }
+  const defaultWorkspaceKey = rawKey.length > 0 ? rawKey : null;
 
   const rawTimeout = env.VITE_VECTIS_API_TIMEOUT_MS?.trim();
   let timeoutMs = DEFAULT_TIMEOUT_MS;
@@ -82,5 +82,5 @@ export function readApiConfig(env: ApiEnv): ApiConfig {
     timeoutMs = parsed;
   }
 
-  return { baseUrl, workspaceKey, timeoutMs };
+  return { baseUrl, defaultWorkspaceKey, timeoutMs };
 }

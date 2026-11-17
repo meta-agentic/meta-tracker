@@ -44,7 +44,12 @@ export interface WorkspaceState extends PreferencesState, NavigationState {
   upsertIssue: (issue: Issue) => void;
   moveIssue: (issueId: ID, columnId: ID, order: number) => void;
   setActiveBoard: (boardId: ID | null) => void;
-  hydrate: () => Promise<void>;
+  /**
+   * Loads the cached workspace. With `workspaceKey`, an entry cached for another
+   * workspace is not loaded: the store starts empty instead, and the entry is
+   * left for that workspace to find.
+   */
+  hydrate: (workspaceKey?: string) => Promise<void>;
   reset: () => void;
 }
 
@@ -157,8 +162,14 @@ export function createWorkspaceStore(
         uiTracking.write(ACTIVE_BOARD_KEY, boardId);
       },
 
-      hydrate: async () => {
-        const cached = await cache.get<NormalizedData>(CACHE_KEY);
+      hydrate: async (workspaceKey) => {
+        const stored = await cache.get<NormalizedData>(CACHE_KEY);
+        // One entry holds the workspace shown last; painted under another
+        // workspace's name, its boards would pass for that workspace's own.
+        const cached =
+          stored && (workspaceKey === undefined || stored.workspace?.key === workspaceKey)
+            ? stored
+            : undefined;
         for (const legacy of LEGACY_CACHE_KEYS) void cache.delete(legacy);
         const activeBoardId = uiTracking.read<ID | null>(
           ACTIVE_BOARD_KEY,

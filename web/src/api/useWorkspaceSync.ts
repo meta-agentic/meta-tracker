@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { StoreApi } from "zustand/vanilla";
 import { workspaceStore, type WorkspaceState } from "../store/workspaceStore";
-import {
-  createWorkspaceApiClientFromEnv,
-  fetchWorkspaceSnapshot,
-  type WorkspaceApiClient,
-} from "./client";
+import { fetchWorkspaceSnapshot, type WorkspaceApiClient } from "./client";
 import { ApiError, isRetryable } from "./errors";
 
 /**
@@ -22,6 +18,10 @@ import { ApiError, isRetryable } from "./errors";
  * The four states the synthetic path never needed are distinguished because the
  * UI owes a different thing in each: nothing to show yet, something stale to
  * keep showing, something fresh, or nothing at all.
+ *
+ * A switch to another workspace starts over at "loading" from the first render
+ * that names it: the store still holds the workspace left behind until the
+ * cache read for the new one lands, and none of it may show under the new name.
  */
 export type SyncStatus =
   /** No data yet and a request in flight. The board must not render empty. */
@@ -45,17 +45,15 @@ export interface WorkspaceSync {
 }
 
 export interface WorkspaceSyncOptions {
+  /** The workspace to load. Null while none is chosen: nothing is fetched. */
+  workspaceKey: string | null;
   /**
-   * Builds the client. Called on every attempt so a configuration error
-   * surfaces through the same path as a network one. The suite injects a client
-   * over a recorded transport; production omits it and reads the environment.
+   * Builds the client for a workspace. Called on every attempt so a
+   * configuration error surfaces through the same path as a network one. The
+   * suite injects one over a recorded transport.
    */
-  createClient?: () => WorkspaceApiClient;
+  createClient: (workspaceKey: string) => WorkspaceApiClient;
   store?: StoreApi<WorkspaceState>;
-}
-
-export function defaultCreateClient(): WorkspaceApiClient {
-  return createWorkspaceApiClientFromEnv(import.meta.env);
 }
 
 function asApiError(caught: unknown): ApiError {
@@ -65,10 +63,17 @@ function asApiError(caught: unknown): ApiError {
   });
 }
 
-export function useWorkspaceSync(options: WorkspaceSyncOptions = {}): WorkspaceSync {
+/** What the last attempt came to, and for which workspace. */
+interface Outcome {
+  workspaceKey: string | null;
+  status: SyncStatus;
+  error: ApiError | null;
+}
+
+export function useWorkspaceSync(options: WorkspaceSyncOptions): WorkspaceSync {
   const store = options.store ?? workspaceStore;
-  const [status, setStatus] = useState<SyncStatus>("loading");
-  const [error, setError] = useState<ApiError | null>(null);
+  const { workspaceKey } = options;
+  const [outcome, setOutcome] = useState<Outcome>({ workspaceKey, status: "loading", error: null });
   const [attempt, setAttempt] = useState(0);
 
   // Held in a ref so an inline `createClient` in a caller's render does not
@@ -81,22 +86,35 @@ export function useWorkspaceSync(options: WorkspaceSyncOptions = {}): WorkspaceS
   });
 
   useEffect(() => {
+    if (workspaceKey === null) return;
     const controller = new AbortController();
     let cancelled = false;
+    // An attempt in flight keeps the last failure until it settles itself.
+    const setStatus = (status: SyncStatus) =>
+      setOutcome((before) => ({
+        workspaceKey,
+        status,
+        error: before.workspaceKey === workspaceKey ? before.error : null,
+      }));
 
     const run = async () => {
       const initial = store.getState();
       // The cache read comes first and unconditionally: painting from it is what
       // makes a warm load instant, and its result decides whether a later
-      // failure is recoverable or fatal.
-      if (!initial.hydrated) await initial.hydrate();
+      // failure is recoverable or fatal. After a switch the store still holds
+      // the workspace left behind, so it is read again for this one.
+      if (!initial.hydrated || initial.workspace?.key !== workspaceKey) {
+        await initial.hydrate(workspaceKey);
+      }
       if (cancelled) return;
 
-      const cached = Object.keys(store.getState().boardsById).length > 0;
+      const held = store.getState();
+      const cached =
+        held.workspace?.key === workspaceKey && Object.keys(held.boardsById).length > 0;
       setStatus(cached ? "revalidating" : "loading");
 
       try {
-        const client = (createClientRef.current ?? defaultCreateClient)();
+        const client = createClientRef.current(workspaceKey);
         const snapshot = await fetchWorkspaceSnapshot(client, controller.signal);
         if (cancelled) return;
 
@@ -109,12 +127,10 @@ export function useWorkspaceSync(options: WorkspaceSyncOptions = {}): WorkspaceS
         // key and throw away the scroll position on every revalidation.
         if (!activeSurvives) after.setActiveBoard(snapshot.boards[0]?.id ?? null);
 
-        setError(null);
-        setStatus("ready");
+        setOutcome({ workspaceKey, status: "ready", error: null });
       } catch (caught) {
         if (cancelled || controller.signal.aborted) return;
-        setError(asApiError(caught));
-        setStatus(cached ? "stale" : "error");
+        setOutcome({ workspaceKey, status: cached ? "stale" : "error", error: asApiError(caught) });
       }
     };
 
@@ -124,10 +140,14 @@ export function useWorkspaceSync(options: WorkspaceSyncOptions = {}): WorkspaceS
       cancelled = true;
       controller.abort();
     };
-  }, [store, attempt]);
+  }, [store, attempt, workspaceKey]);
 
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
+  // Until the attempt for a newly named workspace reports, the outcome held is
+  // the previous workspace's.
+  const { status, error } =
+    outcome.workspaceKey === workspaceKey ? outcome : { status: "loading" as const, error: null };
   return {
     status,
     error,
