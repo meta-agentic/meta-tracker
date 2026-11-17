@@ -134,10 +134,112 @@ button {
 }
 
 .vec-workspace {
+  position: relative;
+  min-width: 0;
+}
+
+.vec-workspace__summary {
   display: inline-flex;
   align-items: baseline;
   gap: 8px;
+  max-width: 100%;
   min-width: 0;
+  padding: 4px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.vec-workspace__summary::-webkit-details-marker {
+  display: none;
+}
+
+.vec-workspace__summary:hover {
+  background: var(--vec-surface-hover);
+}
+
+.vec-workspace__chevron {
+  flex: none;
+  align-self: center;
+  color: var(--vec-text-muted);
+  transform: rotate(90deg);
+}
+
+.vec-workspace[open] .vec-workspace__chevron {
+  transform: rotate(-90deg);
+}
+
+.vec-workspace__menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  left: 0;
+  width: max-content;
+  min-width: 240px;
+  max-width: min(360px, calc(100vw - 32px));
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--vec-border-strong);
+  border-radius: 10px;
+  background: var(--vec-surface);
+  box-shadow: var(--vec-shadow-md);
+}
+
+.vec-workspace-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vec-workspace-list__link {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: var(--vec-text);
+  text-decoration: none;
+}
+
+.vec-workspace-list__link:hover {
+  background: var(--vec-surface-hover);
+}
+
+.vec-workspace-list__link[aria-current="page"] {
+  background: var(--vec-accent-soft);
+  color: var(--vec-accent-text);
+}
+
+.vec-workspace-list__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.vec-workspace-list__note {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 10px;
+}
+
+.vec-picker__list {
+  align-self: stretch;
+  margin-top: 6px;
+  padding: 4px;
+  border: 1px solid var(--vec-border);
+  border-radius: 10px;
+  background: var(--vec-surface);
+  text-align: left;
 }
 
 .vec-workspace__name {

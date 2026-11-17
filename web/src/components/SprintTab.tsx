@@ -134,7 +134,7 @@ function SprintBoard({
 }
 
 export interface SprintTabProps {
-  createClient?: () => WorkspaceApiClient;
+  createClient: () => WorkspaceApiClient;
   onOpenIssue: (issueId: ID) => void;
 }
 

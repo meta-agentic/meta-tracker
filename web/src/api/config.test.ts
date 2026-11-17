@@ -20,11 +20,14 @@ describe("readApiConfig", () => {
     expect(config.baseUrl).toBe("https://tracker.example.test/api/v1");
   });
 
-  it("refuses to run without a workspace key", () => {
-    expect(() => readApiConfig({})).toThrowError(ApiError);
-    expect(() => readApiConfig({ VITE_VECTIS_WORKSPACE_KEY: "  " })).toThrowError(
-      /VITE_VECTIS_WORKSPACE_KEY is not set/,
-    );
+  it("runs without a workspace key, leaving the choice to run time", () => {
+    expect(readApiConfig({}).defaultWorkspaceKey).toBeNull();
+    expect(readApiConfig({ VITE_VECTIS_WORKSPACE_KEY: "  " }).defaultWorkspaceKey).toBeNull();
+  });
+
+  it("keeps a build-time workspace key as the default", () => {
+    expect(readApiConfig(valid).defaultWorkspaceKey).toBe("VEC");
+    expect(readApiConfig({ VITE_VECTIS_WORKSPACE_KEY: " VEC " }).defaultWorkspaceKey).toBe("VEC");
   });
 
   it("rejects a workspace key the server would reject", () => {
@@ -48,7 +51,7 @@ describe("readApiConfig", () => {
 
   it("carries a configuration failure as a non-retryable ApiError", () => {
     try {
-      readApiConfig({});
+      readApiConfig({ VITE_VECTIS_WORKSPACE_KEY: "vec" });
       expect.unreachable("expected a config error");
     } catch (error) {
       expect(error).toBeInstanceOf(ApiError);

@@ -7,7 +7,7 @@ import "./styles/tree.css";
 import "./styles/roadmap.css";
 import "./styles/panels.css";
 import { App } from "./App";
-import type { WorkspaceSyncOptions } from "./api";
+import type { ApiClient } from "./api";
 import { AppProviders } from "./providers/AppProviders";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { applyPersistedThemeSync } from "./providers/applyTheme";
@@ -17,12 +17,12 @@ import { applyPersistedThemeSync } from "./providers/applyTheme";
 // makes the same write earlier still, before this bundle is even fetched.
 applyPersistedThemeSync();
 
-function mount(sync?: WorkspaceSyncOptions) {
+function mount(createApi?: () => ApiClient) {
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
       <AppProviders>
         <ErrorBoundary>
-          <App sync={sync} />
+          <App createApi={createApi} />
         </ErrorBoundary>
       </AppProviders>
     </StrictMode>,
@@ -33,7 +33,7 @@ function mount(sync?: WorkspaceSyncOptions) {
 // src/dev/fixtureSync.ts). `import.meta.env.DEV` is the literal `false` in a
 // production build, so this branch and the module it imports are removed.
 if (import.meta.env.DEV && import.meta.env.VITE_VECTIS_FIXTURES === "true") {
-  void import("./dev/fixtureSync").then(({ fixtureSyncOptions }) => mount(fixtureSyncOptions()));
+  void import("./dev/fixtureSync").then(({ fixtureCreateApi }) => mount(fixtureCreateApi()));
 } else {
   mount();
 }
