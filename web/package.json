@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.14.26",
-    "i18next": "^26.5.10",
+    "i18next": "^27.1.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-i18next": "^17.1.8",
