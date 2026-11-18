@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 /**
- * VEC-54 against PostgreSQL 16: the import's upsert. Every test reads the database back, because
+ * VEC-54 against PostgreSQL 18: the import's upsert. Every test reads the database back, because
  * what matters is which rows and events exist, not what the repository says it did.
  */
 @QuarkusTest

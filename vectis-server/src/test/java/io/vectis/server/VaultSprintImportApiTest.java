@@ -28,7 +28,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * VEC-40 against PostgreSQL 16: the import carries the vault's sprints and each item's sprint, and
+ * VEC-40 against PostgreSQL 18: the import carries the vault's sprints and each item's sprint, and
  * {@code /api/v1} serves them. The vault is built here: four sprints, two of them active, and four
  * items, one of them listing two sprints and one naming a sprint the vault lacks.
  */

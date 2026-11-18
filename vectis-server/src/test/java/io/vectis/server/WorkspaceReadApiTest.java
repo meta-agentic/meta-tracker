@@ -31,7 +31,7 @@ import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.junit.jupiter.api.Test;
 
-/** VEC-94 against PostgreSQL 16: the workspace, board, column and item reads under {@code /api/v1}. */
+/** VEC-94 against PostgreSQL 18: the workspace, board, column and item reads under {@code /api/v1}. */
 @QuarkusTest
 @TestProfile(ApiTestProfile.class)
 @QuarkusTestResource(value = DatabaseResource.class, restrictToAnnotatedClass = true)

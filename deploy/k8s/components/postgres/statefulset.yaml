@@ -37,9 +37,9 @@ spec:
       containers:
         - name: postgres
           # Same major and variant as the CI service containers in jvm-test.yml
-          # and native-deploy.yml (`postgres:16-alpine`), pinned to an exact minor
+          # and native-deploy.yml (`postgres:18-alpine`), pinned to an exact minor
           # and Alpine release so a deployed database only changes on purpose.
-          image: postgres:16.15-alpine3.24
+          image: postgres:18.7-alpine3.24
           imagePullPolicy: IfNotPresent
           ports:
             - name: postgres

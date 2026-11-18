@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * VEC-68 AC6 (as amended for Cloud Run): the server built with the template hierarchy migrations
- * boots against PostgreSQL 16, migrated from empty at start, with the four built-in templates
+ * boots against PostgreSQL 18, migrated from empty at start, with the four built-in templates
  * published, and reports ready.
  *
  * <p>The database is read over plain JDBC rather than an injected pool: injecting the pool here

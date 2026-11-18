@@ -130,7 +130,7 @@ jobs:
     # explicit, which means CI has to supply the database rather than conjure one.
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:18-alpine
         env:
           POSTGRES_USER: vectis
           POSTGRES_PASSWORD: vectis
@@ -272,7 +272,7 @@ jobs:
           # The key must belong to the server's user with mode 0600; a mounted file does not, so
           # the entrypoint installs both files before starting PostgreSQL.
           docker run -d --name tls-db -p 5433:5432 -e POSTGRES_USER=admin -e POSTGRES_PASSWORD=admin \
-            -v "$tls:/tls:ro" --entrypoint sh postgres:16-alpine -c \
+            -v "$tls:/tls:ro" --entrypoint sh postgres:18-alpine -c \
             'install -o postgres -g postgres -m 0644 /tls/server.crt /var/lib/postgresql/server.crt && install -o postgres -g postgres -m 0600 /tls/server.key /var/lib/postgresql/server.key && exec docker-entrypoint.sh postgres -c ssl=on -c ssl_cert_file=/var/lib/postgresql/server.crt -c ssl_key_file=/var/lib/postgresql/server.key' >/dev/null
           # Over TCP: the image's first-start server listens on its socket only, so this waits for the real one.
           for _ in $(seq 1 60); do docker exec tls-db pg_isready -h 127.0.0.1 -U admin >/dev/null 2>&1 && break; sleep 1; done

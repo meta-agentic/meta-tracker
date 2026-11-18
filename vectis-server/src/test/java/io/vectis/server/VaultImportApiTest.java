@@ -40,7 +40,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * VEC-54 against PostgreSQL 16: {@code POST /api/v1/imports/vault} over a copy of the fixture vault
+ * VEC-54 against PostgreSQL 18: {@code POST /api/v1/imports/vault} over a copy of the fixture vault
  * under this module's test resources, a synthetic {@code vec} space with every status. What should
  * be on the board is worked out here from the files themselves, by status, not from the code under
  * test.

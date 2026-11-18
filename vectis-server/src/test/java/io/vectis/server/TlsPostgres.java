@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit;
 final class TlsPostgres implements AutoCloseable {
 
     /** Same minor line as CI and deploy/k8s/components/postgres. */
-    private static final String IMAGE = "postgres:16-alpine";
+    private static final String IMAGE = "postgres:18-alpine";
 
     final Path directory;
     final Path caCertificate;
