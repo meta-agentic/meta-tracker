@@ -52,7 +52,7 @@ jobs:
     # without one. Same image and VECTIS_DB_* contract as jvm-test.yml.
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:18-alpine
         env:
           POSTGRES_USER: vectis
           POSTGRES_PASSWORD: vectis

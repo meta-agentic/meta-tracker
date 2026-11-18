@@ -108,7 +108,7 @@ jobs:
     # disabled in that module's test config, so CI supplies the database.
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:18-alpine
         env:
           POSTGRES_USER: vectis
           POSTGRES_PASSWORD: vectis

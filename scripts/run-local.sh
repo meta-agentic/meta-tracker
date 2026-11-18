@@ -22,11 +22,11 @@ export VECTIS_DB_PASSWORD="${VECTIS_DB_PASSWORD:-vectis}"
 export QUARKUS_HTTP_PORT="$port"
 export VECTIS_IMPORT_VAULT_ROOT="$PWD/.vault"
 
-echo "== database ($db_container, postgres:16-alpine, 127.0.0.1:$VECTIS_DB_PORT)"
+echo "== database ($db_container, postgres:18-alpine, 127.0.0.1:$VECTIS_DB_PORT)"
 if [ -z "$(docker ps -aq -f "name=^${db_container}\$")" ]; then
   docker run -d --name "$db_container" \
     -e POSTGRES_USER="$VECTIS_DB_USER" -e POSTGRES_PASSWORD="$VECTIS_DB_PASSWORD" -e POSTGRES_DB="$VECTIS_DB_NAME" \
-    -p "127.0.0.1:${VECTIS_DB_PORT}:5432" postgres:16-alpine >/dev/null
+    -p "127.0.0.1:${VECTIS_DB_PORT}:5432" postgres:18-alpine >/dev/null
 else
   docker start "$db_container" >/dev/null
 fi

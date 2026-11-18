@@ -37,7 +37,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * VEC-69 against PostgreSQL 16: the configuration read API, the template reads and the one
+ * VEC-69 against PostgreSQL 18: the configuration read API, the template reads and the one
  * problem shape of the {@code /api/v1} conventions.
  */
 @QuarkusTest

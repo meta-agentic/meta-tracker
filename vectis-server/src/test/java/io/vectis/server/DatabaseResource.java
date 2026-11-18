@@ -13,7 +13,7 @@ import java.util.Map;
 public class DatabaseResource implements QuarkusTestResourceLifecycleManager {
 
     /** Same minor line as CI and deploy/k8s/components/postgres. */
-    private static final String IMAGE = "postgres:16-alpine";
+    private static final String IMAGE = "postgres:18-alpine";
 
     private static PostgreSQLContainer postgres;
 
