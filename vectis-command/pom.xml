@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.vectis</groupId>
+    <artifactId>vectis-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>vectis-command</artifactId>
+  <name>Vectis :: Commands</name>
+  <description>
+    The command layer every channel changes state through (ADR-VEC-04 D8): the REST resources
+    today, the agent surface and write-back later. It depends on the domain and the persistence
+    layer and on neither JAX-RS nor an agent protocol, so every channel writes the same way;
+    CommandModuleIsolationTest fails the build if either reaches this module's classpath.
+  </description>
+
+  <dependencies>
+    <dependency>
+      <groupId>io.vectis</groupId>
+      <artifactId>vectis-domain</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.vectis</groupId>
+      <artifactId>vectis-persistence</artifactId>
+    </dependency>
+
+    <!-- CDI only: the commands are an application-scoped bean the composition root injects. -->
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-arc</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>
