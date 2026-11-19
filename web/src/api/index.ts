@@ -8,10 +8,13 @@ export {
 } from "./config";
 export { createHttpClient, type HttpClient, type Transport } from "./http";
 export {
+  createApiClient,
+  createApiClientFromEnv,
   createWorkspaceApiClient,
-  createWorkspaceApiClientFromEnv,
   fetchWorkspaceSnapshot,
   ITEM_PAGE_SIZE,
+  type ApiClient,
+  type ApiClientOptions,
   type ClientOptions,
   type WorkspaceApiClient,
 } from "./client";
@@ -33,9 +36,15 @@ export type {
 } from "./wire";
 export { useSprints, type SprintsState } from "./useSprints";
 export {
-  defaultCreateClient,
   useWorkspaceSync,
   type SyncStatus,
   type WorkspaceSync,
   type WorkspaceSyncOptions,
 } from "./useWorkspaceSync";
+export {
+  connectApi,
+  defaultCreateApi,
+  useWorkspaces,
+  type ApiConnection,
+  type WorkspaceList,
+} from "./useWorkspaces";

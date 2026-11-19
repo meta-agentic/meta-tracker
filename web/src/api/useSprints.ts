@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { defaultCreateClient } from "./useWorkspaceSync";
 import type { WorkspaceApiClient } from "./client";
 import { ApiError } from "./errors";
 import type { WireSprint } from "./wire";
@@ -54,7 +53,7 @@ function asApiError(caught: unknown): ApiError {
 
 export function useSprints(
   chosenKey: string | null,
-  createClient?: () => WorkspaceApiClient,
+  createClient: () => WorkspaceApiClient,
 ): SprintsState {
   const [sprints, setSprints] = useState<WireSprint[]>([]);
   const [status, setStatus] = useState<LoadStatus>("loading");
@@ -78,7 +77,7 @@ export function useSprints(
     (async () => {
       setStatus("loading");
       try {
-        const client = (createRef.current ?? defaultCreateClient)();
+        const client = createRef.current();
         const listed = await client.listSprints(controller.signal);
         setSprints(newestFirst(listed));
         setError(null);
@@ -97,7 +96,7 @@ export function useSprints(
     const controller = new AbortController();
     (async () => {
       try {
-        const client = (createRef.current ?? defaultCreateClient)();
+        const client = createRef.current();
         const keys = await client.listSprintItemKeys(sprintKey, controller.signal);
         setLoaded({ key: sprintKey, keys: new Set(keys) });
         setItemsError(null);

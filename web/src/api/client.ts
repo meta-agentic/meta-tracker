@@ -8,6 +8,7 @@ import {
   decodeItemPage,
   decodeSprints,
   decodeWorkspace,
+  decodeWorkspaces,
   type WireBoard,
   type WireItem,
   type WireItemPage,
@@ -31,6 +32,7 @@ export const ITEM_PAGE_SIZE = 200;
  */
 export interface WorkspaceApiClient {
   readonly config: ApiConfig;
+  readonly workspaceKey: string;
   getWorkspace(signal?: AbortSignal): Promise<WireWorkspace>;
   listBoards(signal?: AbortSignal): Promise<WireBoard[]>;
   /** One page, newest first; `cursor` is the `next` of the page before. */
@@ -43,7 +45,20 @@ export interface WorkspaceApiClient {
   listSprintItemKeys(sprintKey: string, signal?: AbortSignal): Promise<string[]>;
 }
 
-export interface ClientOptions {
+/**
+ * The read above any one workspace — which workspaces the server holds — and a
+ * client for the one the user opens. The workspace is chosen at run time, so one
+ * bundle serves any deployment.
+ */
+export interface ApiClient {
+  readonly config: ApiConfig;
+  /** Every workspace on the server, in the server's order (newest first). */
+  listWorkspaces(signal?: AbortSignal): Promise<WireWorkspace[]>;
+  /** A client for one workspace, over the same transport. */
+  workspace(workspaceKey: string): WorkspaceApiClient;
+}
+
+export interface ApiClientOptions {
   config: ApiConfig;
   /** Injected by the suite; defaults to `fetch` through `createHttpClient`. */
   transport?: Transport;
@@ -53,17 +68,37 @@ export interface ClientOptions {
   pageSize?: number;
 }
 
-export function createWorkspaceApiClient(options: ClientOptions): WorkspaceApiClient {
-  const { config } = options;
-  const http =
+export interface ClientOptions extends ApiClientOptions {
+  workspaceKey: string;
+}
+
+function httpFor(options: ApiClientOptions): HttpClient {
+  return (
     options.http ??
     createHttpClient({
-      baseUrl: config.baseUrl,
-      timeoutMs: config.timeoutMs,
+      baseUrl: options.config.baseUrl,
+      timeoutMs: options.config.timeoutMs,
       transport: options.transport,
-    });
+    })
+  );
+}
 
-  const workspacePath = `/workspaces/${encodeURIComponent(config.workspaceKey)}`;
+export function createApiClient(options: ApiClientOptions): ApiClient {
+  const http = httpFor(options);
+  return {
+    config: options.config,
+    async listWorkspaces(signal) {
+      return decodeWorkspaces(await http.getJson("/workspaces", signal));
+    },
+    workspace: (workspaceKey) => createWorkspaceApiClient({ ...options, http, workspaceKey }),
+  };
+}
+
+export function createWorkspaceApiClient(options: ClientOptions): WorkspaceApiClient {
+  const { config, workspaceKey } = options;
+  const http = httpFor(options);
+
+  const workspacePath = `/workspaces/${encodeURIComponent(workspaceKey)}`;
   const pageSize = options.pageSize ?? ITEM_PAGE_SIZE;
 
   async function getItemPage(cursor: string | null, signal?: AbortSignal, sprintKey?: string) {
@@ -93,6 +128,7 @@ export function createWorkspaceApiClient(options: ClientOptions): WorkspaceApiCl
 
   return {
     config,
+    workspaceKey,
     async getWorkspace(signal) {
       return decodeWorkspace(await http.getJson(workspacePath, signal));
     },
@@ -111,11 +147,8 @@ export function createWorkspaceApiClient(options: ClientOptions): WorkspaceApiCl
 }
 
 /** Builds a client from the build-time environment. Throws `ApiError("config")`. */
-export function createWorkspaceApiClientFromEnv(
-  env: ApiEnv,
-  transport?: Transport,
-): WorkspaceApiClient {
-  return createWorkspaceApiClient({ config: readApiConfig(env), transport });
+export function createApiClientFromEnv(env: ApiEnv, transport?: Transport): ApiClient {
+  return createApiClient({ config: readApiConfig(env), transport });
 }
 
 /**

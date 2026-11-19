@@ -25,6 +25,7 @@
     <module>vectis-domain</module>
     <module>vectis-core</module>
     <module>vectis-persistence</module>
+    <module>vectis-command</module>
     <module>vectis-plugin-audit-enterprise</module>
     <module>vectis-connector-vault</module>
     <module>vectis-server</module>
@@ -85,6 +86,11 @@
       <dependency>
         <groupId>io.vectis</groupId>
         <artifactId>vectis-connector-vault</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.vectis</groupId>
+        <artifactId>vectis-command</artifactId>
         <version>${project.version}</version>
       </dependency>
     </dependencies>

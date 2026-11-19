@@ -1,4 +1,4 @@
-import { createWorkspaceApiClient, readApiConfig, type Transport, type WorkspaceSyncOptions } from "../api";
+import { createApiClient, readApiConfig, type ApiClient, type Transport } from "../api";
 import type { WireBoard, WireItem, WireJsonValue, WireWorkspace } from "../api/wire";
 
 /**
@@ -144,15 +144,17 @@ function fixtureTransport(scenario: Scenario): Transport {
     if (path.endsWith("/boards")) return json(empty ? [] : boards);
     if (path.endsWith("/items")) return json({ items: empty ? [] : items, next: null });
     if (path.endsWith(`/workspaces/${workspace.key}`)) return json(workspace);
+    if (path.endsWith("/workspaces")) return json([workspace]);
     return new Response("", { status: 404, statusText: "Not Found" });
   };
 }
 
-export function fixtureSyncOptions(): WorkspaceSyncOptions {
+/**
+ * The workspace is the default rather than left to the list, so the error
+ * scenario still opens it and a warm cache still shows the stale banner.
+ */
+export function fixtureCreateApi(): () => ApiClient {
   const scenario = scenarioFromUrl();
   const config = readApiConfig({ VITE_VECTIS_WORKSPACE_KEY: workspace.key });
-  return {
-    createClient: () =>
-      createWorkspaceApiClient({ config, transport: fixtureTransport(scenario) }),
-  };
+  return () => createApiClient({ config, transport: fixtureTransport(scenario) });
 }

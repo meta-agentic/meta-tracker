@@ -168,6 +168,28 @@ describe("cache layering", () => {
     expect(state.activeBoardId).toBe("board-1"); // UI tracking from localStorage
   });
 
+  it("hydrates a cached workspace only for that workspace", async () => {
+    const cache = new MemoryCache();
+    const first = createWorkspaceStore(cache);
+    first.getState().ingestSnapshot({
+      ...generateWorkspace({ boards: 1, epics: 1, issues: 10, seed: 5 }),
+      workspace: { key: "VEC", name: "Vectis" },
+    });
+    await new Promise((r) => setTimeout(r, 300)); // let debounced persist flush
+
+    const other = createWorkspaceStore(cache);
+    await other.getState().hydrate("OPS");
+    expect(other.getState().hydrated).toBe(true);
+    expect(other.getState().workspace).toBeNull();
+    expect(Object.keys(other.getState().issuesById)).toHaveLength(0);
+
+    // Left in the cache for its own workspace.
+    const same = createWorkspaceStore(cache);
+    await same.getState().hydrate("VEC");
+    expect(same.getState().workspace?.key).toBe("VEC");
+    expect(Object.keys(same.getState().issuesById)).toHaveLength(10);
+  });
+
   it("round-trips through a real IndexedDB adapter", async () => {
     const cache = new IndexedDbCache();
     await cache.set("k", { hello: "world" });

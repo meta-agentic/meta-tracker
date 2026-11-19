@@ -29,6 +29,11 @@
       <groupId>io.vectis</groupId>
       <artifactId>vectis-persistence</artifactId>
     </dependency>
+    <!-- VEC-16: the command layer every write of /api/v1 goes through (ADR-VEC-04 D8). -->
+    <dependency>
+      <groupId>io.vectis</groupId>
+      <artifactId>vectis-command</artifactId>
+    </dependency>
 
     <!-- VEC-54: the backlog source behind POST /api/v1/imports/vault. A community connector,
          plain Java against the SPI; the server is the composition root that wires it to the

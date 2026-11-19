@@ -4,7 +4,7 @@ import { App } from "../App";
 import { AppProviders } from "../providers/AppProviders";
 import { IndexedDbCache } from "../store/cache";
 import { createWorkspaceStore, workspaceStore } from "../store/workspaceStore";
-import { createWorkspaceApiClient } from "../api/client";
+import { createApiClient } from "../api/client";
 import { readApiConfig } from "../api/config";
 import { newestFirst } from "../api/useSprints";
 import type { WireSprint } from "../api/wire";
@@ -58,11 +58,7 @@ function mount(rec: Recording) {
   const recorded = createRecordedTransport(rec);
   render(
     <AppProviders>
-      <App
-        sync={{
-          createClient: () => createWorkspaceApiClient({ config, transport: recorded.transport }),
-        }}
-      />
+      <App createApi={() => createApiClient({ config, transport: recorded.transport })} />
     </AppProviders>,
   );
   return recorded;

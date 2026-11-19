@@ -13,6 +13,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -27,6 +28,11 @@ import java.util.UUID;
  * {@code null}. Every write is also scoped to the caller's {@code item.workspaceId()}: an item
  * that is not in that workspace is {@link ItemNotFoundException}, never a silent no-op, and a
  * board or column that does not belong where the item does is {@link PlacementException}.
+ *
+ * <p>The single-item writes are a client's, and a workspace bound to a backlog source refuses
+ * them with {@link SourceBoundWorkspaceException}, checked under the workspace lock. The bulk
+ * writes, {@link #insertAll} and {@link #upsertAll}, are the import's, which is how a bound
+ * workspace changes.
  */
 @ApplicationScoped
 public class ItemRepository {
@@ -58,26 +64,89 @@ public class ItemRepository {
      */
     public Uni<Item> insert(Item item, String origin) {
         return log.writeToBoard(item.boardId(), origin, scope -> {
-            if (!scope.workspaceId().equals(item.workspaceId())) {
-                return Uni.createFrom().failure(new PlacementException("board " + item.boardId()
-                        + " is in workspace " + scope.workspaceId() + ", not " + item.workspaceId()));
-            }
+            requireOwned(scope);
+            requireBoardIn(scope, item.boardId(), item.workspaceId());
+            return insertPlaced(scope, item);
+        });
+    }
+
+    /**
+     * Creates an item from {@code draft} at version 1 with the next key of its workspace,
+     * {@code <workspace key>-<n>}, and appends {@code item.created}. {@code n} comes from the
+     * workspace's counter, taken under the workspace lock: two creates never draw the same number,
+     * and a number is never drawn twice, even after its item is deleted. Every insert keeps the
+     * counter up with the keys it brings (V7's trigger), and the draw itself also steps past the
+     * highest number an item of the workspace holds, so a counter left behind by a load that
+     * skipped triggers still mints a free key. A draft without a rank takes the one its number gives
+     * it, zero-padded as the import ranks an item by its key, so that {@code -9} sorts before
+     * {@code -10}.
+     *
+     * <p>Fails with {@link PlacementException} if the board is not in the draft's workspace or the
+     * column not on the board, and with {@link SourceBoundWorkspaceException} if the workspace is
+     * bound to a backlog source; neither draws a number.
+     */
+    public Uni<Item> create(NewItem draft, String origin) {
+        return log.writeToBoard(draft.boardId(), origin, scope -> {
+            requireOwned(scope);
+            requireBoardIn(scope, draft.boardId(), draft.workspaceId());
             return scope.connection()
                     .preparedQuery("""
-                            insert into item (id, workspace_id, board_id, column_id, key, title, rank, fields, sprint_id)
-                            select $1, $2, $3, $4, $5, $6, $7, $8, $9
-                             where exists (select 1 from board_column c where c.id = $4 and c.board_id = $3)
-                            returning\s""" + SELECT_COLUMNS)
-                    .execute(bind(item))
-                    .map(rows -> {
-                        if (rows.rowCount() == 0) {
-                            throw new PlacementException(
-                                    "column " + item.columnId() + " is not on board " + item.boardId());
-                        }
-                        Item saved = map(rows.iterator().next());
-                        return Change.of(saved, ItemEvents.created(saved, scope.at()));
+                            update workspace w
+                               set item_seq = greatest(w.item_seq, coalesce((select max(item_key_number(i.key, w.key))
+                                                                              from item i
+                                                                             where i.workspace_id = w.id), 0)) + 1
+                             where w.id = $1
+                            returning w.key, w.item_seq
+                            """)
+                    .execute(Tuple.of(scope.workspaceId()))
+                    .chain(rows -> {
+                        Row row = rows.iterator().next();
+                        long number = row.getLong("item_seq");
+                        return insertPlaced(scope, new Item(TimeOrderedId.next(), draft.workspaceId(), draft.boardId(),
+                                draft.columnId(), row.getString("key") + "-" + number, draft.title(),
+                                draft.rank() == null ? rankOf(number) : draft.rank(), draft.fields(), null, 1));
                     });
         });
+    }
+
+    /** The rank an item takes from the number in its key when it is given none. */
+    static String rankOf(long number) {
+        return String.format(Locale.ROOT, "%08d", number);
+    }
+
+    private static void requireBoardIn(WorkspaceEventLog.Scope scope, UUID boardId, UUID workspaceId) {
+        if (!scope.workspaceId().equals(workspaceId)) {
+            throw new PlacementException("board " + boardId + " is in workspace " + scope.workspaceId() + ", not "
+                    + workspaceId);
+        }
+    }
+
+    /**
+     * A client's write on a workspace bound to a backlog source fails, read from the row the write
+     * path has just locked.
+     */
+    private static void requireOwned(WorkspaceEventLog.Scope scope) {
+        if (scope.source() != null) {
+            throw new SourceBoundWorkspaceException(scope.workspaceId(), scope.source());
+        }
+    }
+
+    /** Inserts {@code item} if its column is on its board, and describes it as created. */
+    private static Uni<Change<Item>> insertPlaced(WorkspaceEventLog.Scope scope, Item item) {
+        return scope.connection()
+                .preparedQuery("""
+                        insert into item (id, workspace_id, board_id, column_id, key, title, rank, fields, sprint_id)
+                        select $1, $2, $3, $4, $5, $6, $7, $8, $9
+                         where exists (select 1 from board_column c where c.id = $4 and c.board_id = $3)
+                        returning\s""" + SELECT_COLUMNS)
+                .execute(bind(item))
+                .map(rows -> {
+                    if (rows.rowCount() == 0) {
+                        throw new PlacementException("column " + item.columnId() + " is not on board " + item.boardId());
+                    }
+                    Item saved = map(rows.iterator().next());
+                    return Change.of(saved, ItemEvents.created(saved, scope.at()));
+                });
     }
 
     /**
@@ -233,6 +302,25 @@ public class ItemRepository {
     }
 
     /**
+     * The item with this key in this workspace, with the keys of its board, column and sprint, or
+     * empty if the workspace holds no item with that key: an item of another workspace is never
+     * found through this one.
+     */
+    public Uni<Optional<PlacedItem>> findPlaced(UUID workspaceId, String key) {
+        return pool.preparedQuery("select " + qualified("i") + PLACED_KEYS + """
+                          from item i
+                          join board b on b.id = i.board_id
+                          join board_column c on c.id = i.column_id
+                          left join sprint sp on sp.id = i.sprint_id
+                         where i.workspace_id = $1 and i.key = $2
+                        """)
+                .execute(Tuple.of(workspaceId, key))
+                .map(rows -> rows.rowCount() == 0
+                        ? Optional.<PlacedItem>empty()
+                        : Optional.of(placed(rows.iterator().next())));
+    }
+
+    /**
      * Every item in a column, in display order — the board read path, served by
      * {@code item_board_column_rank_idx} with no sort step.
      */
@@ -273,7 +361,7 @@ public class ItemRepository {
      * be on the item's board, or the move fails with {@link PlacementException}.
      */
     public Uni<Item> move(Item item, UUID targetColumnId, String newRank, String origin) {
-        return log.writeToItem(item.id(), origin, scope -> scope.connection()
+        return log.writeToItem(item.id(), origin, scope -> requiringOwned(scope).connection()
                 .preparedQuery("""
                         update item i set column_id = $1, rank = $2, version = i.version + 1, updated_at = now()
                           from board_column c
@@ -290,6 +378,32 @@ public class ItemRepository {
     }
 
     /**
+     * {@link #move(Item, UUID, String, String)} if the stored item is still at
+     * {@code expectedVersion}. Fails with {@link ItemVersionConflictException} if it is at another
+     * version, and writes nothing.
+     */
+    public Uni<Item> move(Item item, UUID targetColumnId, String newRank, long expectedVersion, String origin) {
+        return log.writeToItem(item.id(), origin, scope -> requiringOwned(scope).connection()
+                .preparedQuery("""
+                        update item i set column_id = $1, rank = $2, version = i.version + 1, updated_at = now()
+                          from board_column c
+                         where i.id = $3 and i.workspace_id = $4 and i.version = $5
+                           and c.id = $1 and c.board_id = i.board_id
+                        returning\s""" + qualified("i"))
+                .execute(Tuple.of(targetColumnId, newRank, item.id(), item.workspaceId(), expectedVersion))
+                .chain(rows -> rows.rowCount() == 1
+                        ? Uni.createFrom().item(map(rows.iterator().next()))
+                        : stored(scope, item).map(found -> {
+                            if (found.version() != expectedVersion) {
+                                throw new ItemVersionConflictException(item.id(), expectedVersion, found.version());
+                            }
+                            throw new PlacementException("column " + targetColumnId + " is not on the board of item "
+                                    + item.id());
+                        }))
+                .map(moved -> Change.of(moved, ItemEvents.moved(moved, scope.at()))));
+    }
+
+    /**
      * Assigns an item to a sprint, or returns it to the backlog if {@code sprintId} is
      * null. Mirrors {@link #move} for column moves: one row written regardless of scope.
      */
@@ -299,7 +413,7 @@ public class ItemRepository {
 
     /** {@link #moveToSprint(Item, UUID)}, appending {@code item.updated}. */
     public Uni<Item> moveToSprint(Item item, UUID sprintId, String origin) {
-        return log.writeToItem(item.id(), origin, scope -> scope.connection()
+        return log.writeToItem(item.id(), origin, scope -> requiringOwned(scope).connection()
                 .preparedQuery("""
                         update item set sprint_id = $1, version = version + 1, updated_at = now()
                          where id = $2 and workspace_id = $3
@@ -323,7 +437,7 @@ public class ItemRepository {
      */
     public Uni<Item> edit(Item edited, long expectedVersion, String origin) {
         JsonObject fields = new JsonObject(edited.fields());
-        return log.writeToItem(edited.id(), origin, scope -> scope.connection()
+        return log.writeToItem(edited.id(), origin, scope -> requiringOwned(scope).connection()
                 .preparedQuery("""
                         update item i
                            set title = $1, fields = $2, version = i.version + 1, updated_at = now()
@@ -354,17 +468,41 @@ public class ItemRepository {
      * the deletion takes the item to, one above its last.
      */
     public Uni<Void> delete(Item item, String origin) {
-        return log.writeToItem(item.id(), origin, scope -> scope.connection()
+        return log.writeToItem(item.id(), origin, scope -> requiringOwned(scope).connection()
                 .preparedQuery("delete from item where id = $1 and workspace_id = $2 returning key, version")
                 .execute(Tuple.of(item.id(), item.workspaceId()))
                 .map(rows -> {
                     if (rows.rowCount() == 0) {
                         throw new ItemNotFoundException(item.workspaceId(), item.id());
                     }
-                    Row row = rows.iterator().next();
-                    return Change.<Void>of(null, ItemEvents.deleted(
-                            item.id(), row.getString("key"), row.getLong("version") + 1));
+                    return tombstone(item, rows.iterator().next());
                 }));
+    }
+
+    /**
+     * {@link #delete(Item, String)} if the stored item is still at {@code expectedVersion}. Fails
+     * with {@link ItemVersionConflictException} if it is at another version, and deletes nothing.
+     */
+    public Uni<Void> delete(Item item, long expectedVersion, String origin) {
+        return log.writeToItem(item.id(), origin, scope -> requiringOwned(scope).connection()
+                .preparedQuery("""
+                        delete from item where id = $1 and workspace_id = $2 and version = $3 returning key, version
+                        """)
+                .execute(Tuple.of(item.id(), item.workspaceId(), expectedVersion))
+                .chain(rows -> rows.rowCount() == 1
+                        ? Uni.createFrom().item(tombstone(item, rows.iterator().next()))
+                        : stored(scope, item).map(found -> {
+                            throw new ItemVersionConflictException(item.id(), expectedVersion, found.version());
+                        })));
+    }
+
+    private static Change<Void> tombstone(Item item, Row deleted) {
+        return Change.of(null, ItemEvents.deleted(item.id(), deleted.getString("key"), deleted.getLong("version") + 1));
+    }
+
+    private static WorkspaceEventLog.Scope requiringOwned(WorkspaceEventLog.Scope scope) {
+        requireOwned(scope);
+        return scope;
     }
 
     /**
@@ -451,8 +589,7 @@ public class ItemRepository {
     /** {@link #pageNewestFirst(UUID, UUID, String, UUID, int)} narrowed to the items of the sprint with this key. */
     public Uni<List<PlacedItem>> pageNewestFirst(UUID workspaceId, UUID boardId, String columnKey, String sprintKey,
                                                  UUID before, int limit) {
-        return pool.preparedQuery("select " + qualified("i") + """
-                        , b.key as board_key, c.key as column_key, sp.key as sprint_key
+        return pool.preparedQuery("select " + qualified("i") + PLACED_KEYS + """
                           from item i
                           join board b on b.id = i.board_id
                           join board_column c on c.id = i.column_id
@@ -469,10 +606,16 @@ public class ItemRepository {
                 .execute(Tuple.of(workspaceId, boardId, columnKey, before, sprintKey, limit))
                 .map(rows -> {
                     List<PlacedItem> out = new ArrayList<>(rows.size());
-                    rows.forEach(row -> out.add(new PlacedItem(map(row), row.getString("board_key"),
-                            row.getString("column_key"), row.getString("sprint_key"))));
+                    rows.forEach(row -> out.add(placed(row)));
                     return List.copyOf(out);
                 });
+    }
+
+    private static final String PLACED_KEYS = ", b.key as board_key, c.key as column_key, sp.key as sprint_key\n";
+
+    private static PlacedItem placed(Row row) {
+        return new PlacedItem(map(row), row.getString("board_key"), row.getString("column_key"),
+                row.getString("sprint_key"));
     }
 
     /** Items whose open field set contains the given fragment (a GIN containment hit). */

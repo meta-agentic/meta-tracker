@@ -137,7 +137,7 @@ public class WorkspaceRepository {
     }
 
     private static final String SUMMARY = """
-            select w.id, w.key, w.name, t.key as template_key, w.template_version
+            select w.id, w.key, w.name, t.key as template_key, w.template_version, w.source
               from workspace w
               join workflow_template t on t.id = w.template_id
             """;
@@ -164,7 +164,19 @@ public class WorkspaceRepository {
 
     private static WorkspaceSummary summary(Row row) {
         return new WorkspaceSummary(row.getUUID("id"), row.getString("key"), row.getString("name"),
-                new TemplateRef(row.getString("template_key"), row.getInteger("template_version")));
+                new TemplateRef(row.getString("template_key"), row.getInteger("template_version")),
+                row.getString("source"));
+    }
+
+    /**
+     * Binds the workspace to the backlog source {@code source}, which from then on is its system of
+     * record: the import writes it, and a client's single-item write is refused
+     * ({@link SourceBoundWorkspaceException}). A workspace already bound keeps its source.
+     */
+    public Uni<Void> bindToSource(UUID workspaceId, String source) {
+        return pool.preparedQuery("update workspace set source = $2 where id = $1 and source is null")
+                .execute(Tuple.of(workspaceId, source))
+                .replaceWithVoid();
     }
 
     private static Workspace map(Row row) {

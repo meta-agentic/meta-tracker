@@ -13,15 +13,18 @@ import {
   createRecordedTransport,
   itemFixture,
   itemPage,
+  otherWorkspaceFixture,
   snapshotRecording,
+  twoWorkspacesRecording,
   workspaceFixture,
   type Recording,
 } from "../test/recordedTransport";
 
-const config = readApiConfig({ VITE_VECTIS_WORKSPACE_KEY: "VEC" });
+const config = readApiConfig({});
 
 function clientFactory(recorded: ReturnType<typeof createRecordedTransport>) {
-  return () => createWorkspaceApiClient({ config, transport: recorded.transport });
+  return (workspaceKey: string) =>
+    createWorkspaceApiClient({ config, workspaceKey, transport: recorded.transport });
 }
 
 function snapshotOf(items = [itemFixture()]): WorkspaceSnapshot {
@@ -48,7 +51,7 @@ function renderSync(cache: AsyncCache, recording: Recording) {
   const store = createWorkspaceStore(cache);
   const recorded = createRecordedTransport(recording);
   const view = renderHook(() =>
-    useWorkspaceSync({ store, createClient: clientFactory(recorded) }),
+    useWorkspaceSync({ workspaceKey: "VEC", store, createClient: clientFactory(recorded) }),
   );
   return { store, recorded, view };
 }
@@ -160,7 +163,7 @@ describe("useWorkspaceSync", () => {
       networkError: new TypeError("Failed to fetch"),
     });
     const view = renderHook(() =>
-      useWorkspaceSync({ store, createClient: clientFactory(recorded) }),
+      useWorkspaceSync({ workspaceKey: "VEC", store, createClient: clientFactory(recorded) }),
     );
 
     await waitFor(() => expect(view.result.current.status).toBe("error"));
@@ -177,6 +180,7 @@ describe("useWorkspaceSync", () => {
     const store = createWorkspaceStore(new MemoryCache());
     const view = renderHook(() =>
       useWorkspaceSync({
+        workspaceKey: "VEC",
         store,
         createClient: () => {
           throw readApiConfigError();
@@ -204,12 +208,69 @@ describe("useWorkspaceSync", () => {
   });
 });
 
-/** The error `readApiConfig` throws when the environment names no workspace. */
+describe("useWorkspaceSync across workspaces", () => {
+  function renderSwitchable(cache: AsyncCache, recording: Recording, workspaceKey: string | null) {
+    const store = createWorkspaceStore(cache);
+    const recorded = createRecordedTransport(recording);
+    const view = renderHook(
+      ({ key }: { key: string | null }) =>
+        useWorkspaceSync({ workspaceKey: key, store, createClient: clientFactory(recorded) }),
+      { initialProps: { key: workspaceKey } },
+    );
+    return { store, recorded, view };
+  }
+
+  it("fetches nothing while no workspace is chosen", async () => {
+    const { recorded, view } = renderSwitchable(new MemoryCache(), twoWorkspacesRecording(), null);
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(recorded.calls).toEqual([]);
+    expect(view.result.current.status).toBe("loading");
+  });
+
+  it("starts the next workspace over at loading, then holds only its data", async () => {
+    const { store, view } = renderSwitchable(new MemoryCache(), twoWorkspacesRecording(), "VEC");
+    await waitFor(() => expect(view.result.current.status).toBe("ready"));
+    expect(Object.keys(store.getState().boardsById)).toEqual(["VEC"]);
+
+    view.rerender({ key: "OPS" });
+    // From the very render that names it: not the previous workspace's "ready".
+    expect(view.result.current.status).toBe("loading");
+
+    await waitFor(() => expect(view.result.current.status).toBe("ready"));
+    expect(store.getState().workspace?.key).toBe("OPS");
+    expect(Object.keys(store.getState().boardsById)).toEqual(["OPS"]);
+    expect(Object.keys(store.getState().issuesById)).toEqual(["OPS-1"]);
+  });
+
+  it("does not paint a cached workspace under another one's name", async () => {
+    const cache = new MemoryCache();
+    await warmCache(cache, snapshotOf());
+
+    const gate = createGate();
+    const { store, view } = renderSwitchable(
+      cache,
+      { ...twoWorkspacesRecording(), gate: gate.promise },
+      otherWorkspaceFixture.key,
+    );
+
+    await waitFor(() => expect(store.getState().hydrated).toBe(true));
+    // The cache holds VEC, so OPS is a cold load: nothing to show yet.
+    expect(view.result.current.status).toBe("loading");
+    expect(Object.keys(store.getState().boardsById)).toEqual([]);
+
+    gate.release();
+    await waitFor(() => expect(view.result.current.status).toBe("ready"));
+    expect(Object.keys(store.getState().boardsById)).toEqual(["OPS"]);
+  });
+});
+
+/** The error `readApiConfig` throws for a timeout that is not one. */
 function readApiConfigError(): unknown {
   try {
-    readApiConfig({});
+    readApiConfig({ VITE_VECTIS_API_TIMEOUT_MS: "soon" });
   } catch (error) {
     return error;
   }
-  throw new Error("expected readApiConfig to reject an empty environment");
+  throw new Error("expected readApiConfig to reject an unusable timeout");
 }

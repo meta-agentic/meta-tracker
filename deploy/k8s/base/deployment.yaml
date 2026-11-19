@@ -47,6 +47,11 @@ spec:
             - configMapRef:
                 name: vectis-db
           env:
+            # Optional, documented in vectis-server's application.properties: VECTIS_DB_SSL_MODE
+            # (disable | require | verify-full), VECTIS_DB_SSL_ROOT_CERT (a PEM bundle; the image's
+            # operating-system CAs by default) and VECTIS_DB_MIGRATOR_USER / _PASSWORD (a login for
+            # Flyway that owns the tables, so this one needs no DDL right). The in-cluster PostgreSQL
+            # of components/postgres needs none of them.
             - name: VECTIS_DB_PASSWORD
               valueFrom:
                 secretKeyRef:

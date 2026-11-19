@@ -130,7 +130,7 @@ jobs:
     # explicit, which means CI has to supply the database rather than conjure one.
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:18-alpine
         env:
           POSTGRES_USER: vectis
           POSTGRES_PASSWORD: vectis
@@ -231,6 +231,10 @@ jobs:
           check "GET /api/unknown status" 404 "$(code /api/unknown)"
           check "GET $asset status" 200 "$(code "$asset")"
           check "GET $asset cache" "public, max-age=31536000, immutable" "$(header "$asset" cache-control)"
+          # The client is built here without VITE_VECTIS_WORKSPACE_KEY and picks its workspace at
+          # run time. A script that still refused to start without the key would carry that refusal
+          # as a string, so the script the shell names must not.
+          check "script starts without a build-time workspace" 0 "$(curl -s "http://localhost:8080$asset" | grep -c 'VITE_VECTIS_WORKSPACE_KEY is not set')"
           # VEC-88: the probes deploy/k8s/base calls, never answered with the shell.
           for probe in started ready live; do
             check "GET /q/health/$probe status" 200 "$(code /q/health/$probe)"
@@ -244,6 +248,68 @@ jobs:
           path: deploy/docker/app/application
           if-no-files-found: error
           retention-days: 7
+
+      - name: Smoke-test verified TLS, the migration login and the vault import on the native runner
+        # A hosted PostgreSQL is reached over TLS with the certificate and the host name checked,
+        # and the tables belong to a migration login the server does not run as. The JVM tests
+        # cover both; this runs them in the binary that ships, where the CA bundle comes from the
+        # operating system rather than a JVM trust store. It also imports the connector's fixture
+        # vault, which only the JVM had done, and checks that a CA which did not sign the
+        # database's certificate stops the boot.
+        run: |
+          set -euo pipefail
+          check() { if [ "$2" = "$3" ]; then echo "ok   $1: $3"; else echo "::error::$1: expected '$2', got '$3'"; cat "$RUNNER_TEMP/tls-runner.log" 2>/dev/null || true; exit 1; fi; }
+          tls="$RUNNER_TEMP/tls"
+          mkdir -p "$tls"
+          (
+            cd "$tls"
+            printf 'subjectAltName=DNS:localhost\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n' > server.ext
+            openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj "/CN=smoke test CA" -keyout ca.key -out ca.crt \
+              -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign" 2>/dev/null
+            openssl req -newkey rsa:2048 -nodes -subj "/CN=localhost" -keyout server.key -out server.csr 2>/dev/null
+            openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -days 2 -extfile server.ext -out server.crt 2>/dev/null
+          )
+          # The key must belong to the server's user with mode 0600; a mounted file does not, so
+          # the entrypoint installs both files before starting PostgreSQL.
+          docker run -d --name tls-db -p 5433:5432 -e POSTGRES_USER=admin -e POSTGRES_PASSWORD=admin \
+            -v "$tls:/tls:ro" --entrypoint sh postgres:18-alpine -c \
+            'install -o postgres -g postgres -m 0644 /tls/server.crt /var/lib/postgresql/server.crt && install -o postgres -g postgres -m 0600 /tls/server.key /var/lib/postgresql/server.key && exec docker-entrypoint.sh postgres -c ssl=on -c ssl_cert_file=/var/lib/postgresql/server.crt -c ssl_key_file=/var/lib/postgresql/server.key' >/dev/null
+          # Over TCP: the image's first-start server listens on its socket only, so this waits for the real one.
+          for _ in $(seq 1 60); do docker exec tls-db pg_isready -h 127.0.0.1 -U admin >/dev/null 2>&1 && break; sleep 1; done
+          docker exec -i tls-db psql -q -v ON_ERROR_STOP=1 -U admin -d postgres <<'SQL'
+          create role migrator login password 'migrator';
+          create role app login password 'app';
+          create database tracker owner migrator;
+          \c tracker
+          alter default privileges for role migrator in schema public grant select, insert, update, delete on tables to app;
+          alter default privileges for role migrator in schema public grant usage, select on sequences to app;
+          SQL
+
+          export VECTIS_DB_HOST=localhost VECTIS_DB_PORT=5433 VECTIS_DB_NAME=tracker VECTIS_DB_USER=app VECTIS_DB_PASSWORD=app
+          export VECTIS_DB_MIGRATOR_USER=migrator VECTIS_DB_MIGRATOR_PASSWORD=migrator
+          export VECTIS_DB_SSL_MODE=verify-full VECTIS_DB_SSL_ROOT_CERT="$tls/ca.crt"
+          export VECTIS_IMPORT_VAULT_ROOT="$GITHUB_WORKSPACE/vectis-connector-vault/src/test/resources/vaults/mapping/vault"
+          export VECTIS_IMPORT_VAULT_SPACE=demo
+          QUARKUS_HTTP_PORT=8081 ./deploy/docker/app/application > "$RUNNER_TEMP/tls-runner.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true; docker rm -f tls-db >/dev/null 2>&1 || true' EXIT
+          for _ in $(seq 1 60); do curl -fs -o /dev/null http://localhost:8081/q/health/ready && break; sleep 1; done
+          check "readiness over verify-full" 200 "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8081/q/health/ready)"
+          sql() { docker exec tls-db psql -U admin -d tracker -Atc "$1"; }
+          check "the server's connections are all encrypted" 0 "$(sql "select count(*) from pg_stat_activity a join pg_stat_ssl s using (pid) where a.usename = 'app' and not s.ssl")"
+          check "the server is connected as the runtime login" 1 "$([ "$(sql "select count(*) from pg_stat_activity where usename = 'app'")" -gt 0 ] && echo 1 || echo 0)"
+          check "the migration login owns every table" migrator "$(sql "select string_agg(distinct tableowner, ',') from pg_tables where schemaname = 'public'")"
+          report="$(curl -s -X POST http://localhost:8081/api/v1/imports/vault)"
+          echo "import: $report"
+          check "the fixture vault imports" 15 "$(echo "$report" | jq -r .created)"
+          check "a second import changes nothing" 0 "$(curl -s -X POST http://localhost:8081/api/v1/imports/vault | jq -r '.created + .updated')"
+          kill "$pid"; wait "$pid" 2>/dev/null || true
+
+          status=0
+          VECTIS_DB_SSL_ROOT_CERT=/etc/ssl/certs/ca-certificates.crt QUARKUS_HTTP_PORT=8082 timeout 90 \
+            ./deploy/docker/app/application > "$RUNNER_TEMP/refused.log" 2>&1 || status=$?
+          check "an untrusted CA stops the boot" 1 "$([ "$status" -ne 0 ] && [ "$status" -ne 124 ] && echo 1 || echo 0)"
+          check "the refusal names the database" 1 "$(grep -q 'localhost:5433/tracker' "$RUNNER_TEMP/refused.log" && echo 1 || echo 0)"
 
   image:
     name: distroless image

@@ -174,13 +174,68 @@ export function workspaceNotFound(key: string): RecordedResponse {
   };
 }
 
-/** The three-route recording a healthy snapshot fetch replays. */
+/**
+ * The recording a healthy snapshot fetch replays: the three reads of the
+ * workspace, and the list of workspaces, which holds only it.
+ */
 export function snapshotRecording(items: WireItem[] = [itemFixture()]): Recording {
   return {
     routes: {
       "/boards": { body: [boardFixture] },
       "/items": { body: itemPage(items) },
       "/workspaces/VEC": { body: workspaceFixture },
+      "/workspaces": { body: [workspaceFixture] },
+    },
+  };
+}
+
+/** A second workspace, for choosing and switching between two. */
+export const otherWorkspaceFixture: WireWorkspace = {
+  key: "OPS",
+  name: "Operations",
+  template: { key: "scrum", version: 1 },
+};
+
+export const otherBoardFixture: WireBoard = {
+  key: "OPS",
+  name: "Run",
+  columns: [{ key: "queued", name: "Queued", ordinal: 0, onBoard: true }],
+};
+
+export function otherItemFixture(overrides: Partial<WireItem> = {}): WireItem {
+  return {
+    key: "OPS-1",
+    title: "Rotate the keys",
+    board: otherBoardFixture.key,
+    column: "queued",
+    rank: "m",
+    fields: {},
+    version: 1,
+    ...overrides,
+  };
+}
+
+/** One workspace's three reads under its own path, so several can share a recording. */
+export function workspaceRoutes(
+  workspace: WireWorkspace,
+  boards: WireBoard[],
+  items: WireItem[],
+): Recording["routes"] {
+  const path = `/workspaces/${workspace.key}`;
+  return {
+    [path]: { body: workspace },
+    [`${path}/boards`]: { body: boards },
+    [`${path}/items`]: { body: itemPage(items) },
+  };
+}
+
+/** Both workspaces, and a list that holds both. */
+export function twoWorkspacesRecording(): Recording {
+  return {
+    routes: {
+      ...workspaceRoutes(workspaceFixture, [boardFixture], [itemFixture()]),
+      ...workspaceRoutes(otherWorkspaceFixture, [otherBoardFixture], [otherItemFixture()]),
+      "/workspaces": { body: [otherWorkspaceFixture, workspaceFixture] },
     },
   };
 }

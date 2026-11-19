@@ -7,8 +7,8 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 
 /**
- * Test-only: the 409 and 412 of the {@code /api/v1} conventions have no production producer
- * until the write endpoints (VEC-93), so these routes throw them and
+ * Test-only: these routes throw the 409 and 412 of the {@code /api/v1} conventions directly, apart
+ * from any endpoint that produces them (the item writes of VEC-16 do), and
  * {@link ConfigurationApiTest} pins that the one mapper shapes them like every other problem.
  */
 @Path("/api/v1/probe/problem")
