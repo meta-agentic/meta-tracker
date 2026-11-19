@@ -95,15 +95,17 @@ public class WorkspaceEventLog {
 
     /**
      * What a change runs on: the transaction's connection, already holding the workspace row
-     * lock; the workspace that lock resolved, which is the stream the events go to; and the
+     * lock; the workspace that lock resolved, which is the stream the events go to; the
      * transaction's time ({@code now()}), which is the event's {@code at} and the
-     * {@code updated_at} the change writes.
+     * {@code updated_at} the change writes; and the backlog source the workspace is bound to,
+     * null for a workspace Vectis owns, read under the same lock so that a change can refuse a
+     * bound workspace without a race against the import that binds it.
      */
-    public record Scope(SqlConnection connection, UUID workspaceId, OffsetDateTime at) {}
+    public record Scope(SqlConnection connection, UUID workspaceId, OffsetDateTime at, String source) {}
 
-    private record Head(UUID workspaceId, StreamCursor cursor, OffsetDateTime at) {}
+    private record Head(UUID workspaceId, StreamCursor cursor, OffsetDateTime at, String source) {}
 
-    private static final String HEAD_COLUMNS = "w.id, w.event_seq, w.stream_epoch, now() as at";
+    private static final String HEAD_COLUMNS = "w.id, w.event_seq, w.stream_epoch, w.source, now() as at";
 
     /**
      * Runs {@code change} on the named workspace and appends its events, in one transaction.
@@ -158,9 +160,9 @@ public class WorkspaceEventLog {
                     var row = rows.iterator().next();
                     return new Head(row.getUUID("id"),
                             new StreamCursor(row.getUUID("stream_epoch"), row.getLong("event_seq")),
-                            row.getOffsetDateTime("at"));
+                            row.getOffsetDateTime("at"), row.getString("source"));
                 })
-                .chain(head -> change.apply(new Scope(conn, head.workspaceId(), head.at()))
+                .chain(head -> change.apply(new Scope(conn, head.workspaceId(), head.at(), head.source()))
                         .chain(done -> append(conn, head.workspaceId(), tag, head, done.events())
                                 .replaceWith(done.result()))));
     }
