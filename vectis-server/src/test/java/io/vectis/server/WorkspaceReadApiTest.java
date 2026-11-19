@@ -57,7 +57,8 @@ class WorkspaceReadApiTest {
                 .body("name", equalTo("Workspace " + ws.key()))
                 .body("template.key", equalTo("kanban"))
                 .body("template.version", equalTo(1))
-                .body("keySet()", containsInAnyOrder("key", "name", "template"));
+                .body("readOnly", equalTo(false))
+                .body("keySet()", containsInAnyOrder("key", "name", "template", "readOnly"));
     }
 
     @Test

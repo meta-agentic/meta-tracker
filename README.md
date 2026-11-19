@@ -69,7 +69,8 @@ What the import does, and does not:
 
 - `POST /api/v1/imports/vault` reads the vault the server is configured with (`vectis.import.vault.root`, environment `VECTIS_IMPORT_VAULT_ROOT`; `vectis.import.vault.space`, default `vec`) through the vault connector. A request never names a path. With no root configured the endpoint answers 404, so a deployment that does not ask for the import does not have it.
 - It provisions the workspace `VEC` from the plain Scrum template if it does not exist, and upserts the items by key. Running it again changes nothing; an edited file updates that item and no other.
-- It only reads: nothing is written to `.vault/`. An item deleted from the vault is not deleted from the board, and a card moved on the board is moved back by the next import.
+- It only reads: nothing is written to `.vault/`. An item deleted from the vault is not deleted from the board.
+- The workspace it fills is bound to the vault, which stays the system of record: until write-back exists, every item write through `/api/v1` there (create, edit, move, delete) answers 409, and `GET /api/v1/workspaces/VEC` says `"readOnly": true`.
 - There is no sign-in yet (VEC-35), so do not switch the import on for a server that others can reach.
 
 Native image: the connector parses front-matter with SnakeYAML. Whether that parser works inside the native executable is not verified: the import has been run on the JVM only, and nothing in CI runs the native executable against a vault. The import is off unless `vectis.import.vault.root` is set, so the native image the pipeline builds does not use it, but its code is compiled into the image, and the first native build with it failed on `TimeOrderedId`, whose `SecureRandom` was initialized at build time; `vectis-domain` now declares that class run-time initialized in `META-INF/native-image`.

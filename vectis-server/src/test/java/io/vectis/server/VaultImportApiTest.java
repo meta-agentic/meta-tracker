@@ -201,6 +201,31 @@ class VaultImportApiTest {
         assertEquals(before, digests(VAULT));
     }
 
+    // --- the imported workspace is the vault's projection (VEC-16) --------------------------------
+
+    @Test
+    void theImportedWorkspaceSaysItIsReadOnly() {
+        post("vault").then().statusCode(200);
+        given().get("/api/v1/workspaces/VEC").then().statusCode(200).body("readOnly", equalTo(true));
+    }
+
+    @Test
+    void theImportedWorkspaceRefusesAClientsWrite() {
+        post("vault").then().statusCode(200);
+        given().contentType("application/json").body("{\"title\": \"Not in the vault\"}")
+                .post("/api/v1/workspaces/VEC/items")
+                .then().statusCode(409).contentType(startsWith("application/problem+json"))
+                .body("detail", startsWith("workspace VEC is read-only until write-back"));
+    }
+
+    @Test
+    void anImportIntoAnExistingWorkspaceBindsIt() {
+        post("vault").then().statusCode(200);
+        update("update workspace set source = null where key = 'VEC'");
+        post("vault").then().statusCode(200);
+        given().get("/api/v1/workspaces/VEC").then().statusCode(200).body("readOnly", equalTo(true));
+    }
+
     // --- errors, as problem+json ------------------------------------------------------------------
 
     @Test

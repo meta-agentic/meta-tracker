@@ -25,8 +25,12 @@ import java.util.stream.Collectors;
 
 /**
  * The vault import (VEC-54): reads the configured vault through the connector, provisions the
- * workspace named by the vault's key prefix if it does not exist, and upserts the sprints and the items into
- * its board. The vault is only read.
+ * workspace named by the vault's key prefix if it does not exist, binds it to the vault, and upserts
+ * the sprints and the items into its board. The vault is only read. Bound, the workspace is the
+ * vault's projection (ADR-VEC-04 D1): a client's item write there is refused until write-back.
+ *
+ * <p>This is the one writer outside the command layer that {@code CommandLayerArchitectureTest}
+ * allows: it does not carry a client's command but reconciles the workspace with its source.
  */
 @ApplicationScoped
 public class VaultImport {
@@ -93,6 +97,7 @@ public class VaultImport {
         return workspaces.findByKey(key)
                 .chain(found -> found.map(ws -> Uni.createFrom().item(new Provisioned(ws, false)))
                         .orElseGet(() -> provision(key)))
+                .call(target -> workspaces.bindToSource(target.workspace().id(), VaultBacklogSource.ID))
                 .chain(target -> boards.findByWorkspace(target.workspace().id())
                         .chain(all -> {
                             if (all.isEmpty()) {
