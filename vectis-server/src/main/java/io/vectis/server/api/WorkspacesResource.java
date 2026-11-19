@@ -162,10 +162,14 @@ public class WorkspacesResource {
         }
     }
 
-    record WorkspaceView(String key, String name, TemplateRefView template) {
+    /**
+     * {@code readOnly} is true for a workspace bound to a backlog source, whose items come from
+     * that source: until write-back, every item write there answers 409 (ADR-VEC-04 D4).
+     */
+    record WorkspaceView(String key, String name, TemplateRefView template, boolean readOnly) {
         static WorkspaceView of(WorkspaceSummary ws) {
             return new WorkspaceView(ws.key(), ws.name(),
-                    new TemplateRefView(ws.template().key(), ws.template().version()));
+                    new TemplateRefView(ws.template().key(), ws.template().version()), ws.readOnly());
         }
     }
 
@@ -188,6 +192,10 @@ public class WorkspacesResource {
     /** {@code version} is the revision a later write takes back as {@code If-Match}. */
     record ItemView(String key, String title, String board, String column, String rank, Map<String, Object> fields,
                     long version, String sprint) {
+        static ItemView of(PlacedItem p) {
+            return new ItemView(p.item().key(), p.item().title(), p.boardKey(), p.columnKey(), p.item().rank(),
+                    p.item().fields(), p.item().version(), p.sprintKey());
+        }
     }
 
     record ItemPage(List<ItemView> items, String next) {
@@ -195,8 +203,7 @@ public class WorkspacesResource {
         static ItemPage of(List<PlacedItem> page, int size) {
             List<PlacedItem> shown = page.size() > size ? page.subList(0, size) : page;
             String next = page.size() > size ? Cursor.encode(shown.get(size - 1).item().id()) : null;
-            return new ItemPage(shown.stream().map(p -> new ItemView(p.item().key(), p.item().title(),
-                    p.boardKey(), p.columnKey(), p.item().rank(), p.item().fields(), p.item().version(), p.sprintKey())).toList(), next);
+            return new ItemPage(shown.stream().map(ItemView::of).toList(), next);
         }
     }
 
