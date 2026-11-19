@@ -74,9 +74,12 @@ public class ItemRepository {
      * Creates an item from {@code draft} at version 1 with the next key of its workspace,
      * {@code <workspace key>-<n>}, and appends {@code item.created}. {@code n} comes from the
      * workspace's counter, taken under the workspace lock: two creates never draw the same number,
-     * and a number is never drawn twice, even after its item is deleted. A draft without a rank
-     * takes the one its number gives it, zero-padded as the import ranks an item by its key, so
-     * that {@code -9} sorts before {@code -10}.
+     * and a number is never drawn twice, even after its item is deleted. Every insert keeps the
+     * counter up with the keys it brings (V7's trigger), and the draw itself also steps past the
+     * highest number an item of the workspace holds, so a counter left behind by a load that
+     * skipped triggers still mints a free key. A draft without a rank takes the one its number gives
+     * it, zero-padded as the import ranks an item by its key, so that {@code -9} sorts before
+     * {@code -10}.
      *
      * <p>Fails with {@link PlacementException} if the board is not in the draft's workspace or the
      * column not on the board, and with {@link SourceBoundWorkspaceException} if the workspace is
@@ -87,7 +90,14 @@ public class ItemRepository {
             requireOwned(scope);
             requireBoardIn(scope, draft.boardId(), draft.workspaceId());
             return scope.connection()
-                    .preparedQuery("update workspace set item_seq = item_seq + 1 where id = $1 returning key, item_seq")
+                    .preparedQuery("""
+                            update workspace w
+                               set item_seq = greatest(w.item_seq, coalesce((select max(item_key_number(i.key, w.key))
+                                                                              from item i
+                                                                             where i.workspace_id = w.id), 0)) + 1
+                             where w.id = $1
+                            returning w.key, w.item_seq
+                            """)
                     .execute(Tuple.of(scope.workspaceId()))
                     .chain(rows -> {
                         Row row = rows.iterator().next();
