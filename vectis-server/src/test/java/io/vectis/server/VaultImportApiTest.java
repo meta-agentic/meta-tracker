@@ -15,6 +15,10 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
 import io.restassured.path.json.JsonPath;
 import io.restassured.response.Response;
+import io.vectis.domain.Workspace;
+import io.vectis.persistence.TemplateRef;
+import io.vectis.persistence.WorkspaceRepository;
+import jakarta.inject.Inject;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -23,6 +27,7 @@ import java.security.MessageDigest;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -49,6 +54,8 @@ import org.junit.jupiter.api.Test;
 @TestProfile(ImportTestProfile.class)
 @QuarkusTestResource(value = DatabaseResource.class, restrictToAnnotatedClass = true)
 class VaultImportApiTest {
+
+    @Inject WorkspaceRepository workspaces;
 
     /** Relative to the module, where Maven runs the tests, as ImportTestProfile's target directory is. */
     private static final Path FIXTURE_VAULT = Path.of("src", "test", "resources", "import-vault").toAbsolutePath();
@@ -226,6 +233,29 @@ class VaultImportApiTest {
         given().get("/api/v1/workspaces/VEC").then().statusCode(200).body("readOnly", equalTo(true));
     }
 
+    // --- the key counter keeps up with the import (VEC-16) ----------------------------------------
+
+    @Test
+    void aCreateAfterTheImportMintsTheNumberAfterTheVaultsHighest() throws IOException {
+        post("vault").then().statusCode(200);
+        update("update workspace set source = null where key = 'VEC'"); // as write-back would unbind it
+        given().contentType("application/json").body("{\"title\": \"After the import\"}")
+                .post("/api/v1/workspaces/VEC/items")
+                .then().statusCode(201).body("key", equalTo("VEC-" + (highestNumber() + 1)));
+    }
+
+    @Test
+    void anImportIntoAWorkspaceWithNativeItemsMovesItsCounterToTheVaultsHighest() throws IOException {
+        workspaces.provision(Workspace.create("VEC", "Native"), null, TemplateRef.parse("scrum@1"), null)
+                .await().indefinitely();
+        given().contentType("application/json").body("{\"title\": \"Native\"}").post("/api/v1/workspaces/VEC/items")
+                .then().statusCode(201).body("key", equalTo("VEC-1"));
+
+        post("vault").then().statusCode(200);
+
+        assertEquals(highestNumber(), counter());
+    }
+
     // --- errors, as problem+json ------------------------------------------------------------------
 
     @Test
@@ -369,6 +399,28 @@ class VaultImportApiTest {
             }
         } catch (UncheckedIOException e) {
             throw e.getCause();
+        }
+    }
+
+    /** The highest number among the fixture vault's item keys. */
+    private static long highestNumber() throws IOException {
+        return expectedStatuses().keySet().stream().mapToLong(key -> Long.parseLong(key.substring("VEC-".length())))
+                .max().orElseThrow();
+    }
+
+    /** The VEC workspace's key counter. */
+    private static long counter() {
+        Config config = ConfigProvider.getConfig();
+        try (Connection c = DriverManager.getConnection(
+                config.getValue("quarkus.datasource.jdbc.url", String.class),
+                config.getValue("quarkus.datasource.username", String.class),
+                config.getValue("quarkus.datasource.password", String.class));
+             PreparedStatement st = c.prepareStatement("select item_seq from workspace where key = 'VEC'");
+             ResultSet rs = st.executeQuery()) {
+            assertTrue(rs.next());
+            return rs.getLong(1);
+        } catch (SQLException e) {
+            throw new IllegalStateException(e);
         }
     }
 

@@ -160,6 +160,19 @@ class ItemWriteApiTest {
         assertEquals(ws.key() + "-2", create(ws, "Second"));
     }
 
+    /**
+     * A counter behind a key the workspace already holds, as a load that skipped triggers would leave
+     * it, is the one way a minted key could collide: the create mints past it instead.
+     */
+    @Test
+    void aCreateWhoseCounterIsBehindAnExistingKeyMintsTheNextFreeNumberNotA500() {
+        Seeded ws = workspace();
+        create(ws, "First");
+        sql("update workspace set item_seq = 0 where id = ?", ws.workspaceId());
+        json().body("{\"title\": \"Second\"}").post(itemsPath(ws.key())).then().statusCode(201)
+                .body("key", equalTo(ws.key() + "-2"));
+    }
+
     @Test
     void createPutsTheItemOnTheFirstBoardInItsFirstColumnUnlessTold() {
         Seeded ws = workspace();
