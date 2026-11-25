@@ -23,7 +23,7 @@ Not there yet: sign-in, so do not expose a Vectis server to a network you do not
 
 ## Run it
 
-You need Docker, JDK 25, Maven and Node.js. From the repository root:
+You need Docker, JDK 25, Maven and Node.js. The short way is `scripts/run-local.sh`, which runs the steps below in one go and leaves the server in the foreground. Step by step, from the repository root:
 
 ```sh
 # A throwaway PostgreSQL
