@@ -31,7 +31,7 @@ class ItemRulesTest {
     @NullSource
     @ValueSource(strings = {"", " ", "\t", "\n", " "})
     void aMissingOrBlankTitleIsRefused(String title) {
-        assertEquals(List.of(new Violation("title", "workspace", "an item has a title that is not blank")), title(title));
+        assertEquals(List.of(new Violation("title", "workspace", "an item has a title that is not blank", "required")), title(title));
     }
 
     @Test
@@ -41,7 +41,7 @@ class ItemRulesTest {
 
     @Test
     void aTitleOneCharacterTooLongIsRefused() {
-        assertEquals(List.of(new Violation("title", "workspace", "a title has at most 500 characters")),
+        assertEquals(List.of(new Violation("title", "workspace", "a title has at most 500 characters", "tooLong")),
                 title("t".repeat(ItemRules.TITLE_MAX + 1)));
     }
 

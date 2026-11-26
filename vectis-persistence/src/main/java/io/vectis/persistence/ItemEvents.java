@@ -42,6 +42,13 @@ final class ItemEvents {
         return itemEvent(MOVED, item, at, List.of("columnId", "rank"));
     }
 
+    /** A move that also set fields: the column and rank, and each field that changed. */
+    static Event movedWithFields(Item item, Map<String, Object> oldFields, OffsetDateTime at) {
+        List<String> changed = new ArrayList<>(List.of("columnId", "rank"));
+        changed.addAll(changedFields(oldFields, item.fields()));
+        return itemEvent(MOVED, item, at, changed);
+    }
+
     static Event sprintAssigned(Item item, OffsetDateTime at) {
         return itemEvent(UPDATED, item, at, List.of("sprintId"));
     }
@@ -52,14 +59,20 @@ final class ItemEvents {
         if (!item.title().equals(oldTitle)) {
             changed.add("title");
         }
-        var keys = new TreeSet<>(oldFields.keySet());
-        keys.addAll(item.fields().keySet());
+        changed.addAll(changedFields(oldFields, item.fields()));
+        return itemEvent(UPDATED, item, at, changed);
+    }
+
+    private static List<String> changedFields(Map<String, Object> before, Map<String, Object> after) {
+        List<String> changed = new ArrayList<>();
+        var keys = new TreeSet<>(before.keySet());
+        keys.addAll(after.keySet());
         for (String key : keys) {
-            if (!Objects.equals(oldFields.get(key), item.fields().get(key))) {
+            if (!Objects.equals(before.get(key), after.get(key))) {
                 changed.add("fields." + escapeKey(key));
             }
         }
-        return itemEvent(UPDATED, item, at, changed);
+        return changed;
     }
 
     /**

@@ -28,16 +28,16 @@ final class ItemRules {
 
     static void title(String title, List<Violation> out) {
         if (title == null || title.isBlank()) {
-            out.add(violation("title", "an item has a title that is not blank"));
+            out.add(violation("title", "required", "an item has a title that is not blank"));
         } else if (title.codePointCount(0, title.length()) > TITLE_MAX) {
-            out.add(violation("title", "a title has at most " + TITLE_MAX + " characters"));
+            out.add(violation("title", "tooLong", "a title has at most " + TITLE_MAX + " characters"));
         }
     }
 
     /** A rank, if one is given. */
     static void rank(String rank, List<Violation> out) {
         if (rank != null && !RANK.matcher(rank).matches()) {
-            out.add(violation("rank", "a rank is 1 to 128 digits and lower-case letters, which sort the same"
+            out.add(violation("rank", "pattern", "a rank is 1 to 128 digits and lower-case letters, which sort the same"
                     + " everywhere; got '" + rank + "'"));
         }
     }
@@ -51,5 +51,10 @@ final class ItemRules {
 
     static Violation violation(String field, String message) {
         return new Violation(field, LEVEL, message);
+    }
+
+    /** A violation with the code a client translates (ADR-VEC-05). */
+    static Violation violation(String field, String code, String message) {
+        return new Violation(field, LEVEL, message, code);
     }
 }

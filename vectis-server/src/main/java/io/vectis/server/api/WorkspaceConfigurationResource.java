@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import io.smallrye.mutiny.Uni;
 import io.vectis.domain.template.Resolution;
 import io.vectis.persistence.PublishedTemplate;
+import io.vectis.persistence.TemplateChains;
 import io.vectis.persistence.TemplateNotFoundException;
 import io.vectis.persistence.TemplateRepository;
 import io.vectis.persistence.WorkspaceConfiguration;

@@ -14,6 +14,7 @@ import io.vectis.persistence.NewItem;
 import io.vectis.persistence.PlacedItem;
 import io.vectis.persistence.PlacementException;
 import io.vectis.persistence.SourceBoundWorkspaceException;
+import io.vectis.persistence.TemplateChains;
 import io.vectis.persistence.WorkspaceRepository;
 import io.vectis.persistence.WorkspaceSummary;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -32,7 +33,9 @@ import java.util.function.Function;
  * ({@link UnknownKeyException}); it is not bound to a backlog source ({@link ReadOnlyWorkspaceException});
  * a change to an existing item names its version ({@link VersionRequiredException}); the item
  * exists ({@link UnknownKeyException}); it is still at that version ({@link StaleVersionException});
- * the command keeps the rules ({@link CommandRejectedException}, with every violation). The write
+ * the command keeps the rules ({@link CommandRejectedException}, with every violation): an item's own
+ * rules ({@link ItemRules}) and the ones the workspace's effective configuration sets on its fields
+ * ({@link FieldRules}). The write
  * itself checks the binding and the version again under the workspace lock, so a change that lands
  * between the check and the write is refused the same way.
  *
@@ -45,46 +48,59 @@ public class ItemCommands {
     private final WorkspaceRepository workspaces;
     private final BoardRepository boards;
     private final ItemRepository items;
+    private final TemplateChains chains;
 
-    public ItemCommands(WorkspaceRepository workspaces, BoardRepository boards, ItemRepository items) {
+    public ItemCommands(WorkspaceRepository workspaces, BoardRepository boards, ItemRepository items,
+                        TemplateChains chains) {
         this.workspaces = workspaces;
         this.boards = boards;
         this.items = items;
+        this.chains = chains;
     }
 
     /** Creates the item and answers it as written, at version 1. */
     public Uni<PlacedItem> create(CreateItem command) {
         return writable(command.workspace())
-                .chain(ws -> boards.findByWorkspace(ws.id()).chain(all -> {
+                .chain(ws -> effective(ws.key()).chain(effective -> boards.findByWorkspace(ws.id()).chain(all -> {
                     List<Violation> violations = new ArrayList<>();
                     ItemRules.title(command.title(), violations);
                     ItemRules.rank(command.rank(), violations);
                     ItemRules.fieldNames(command.fields(), violations);
                     Optional<KeyedBoard> board = board(ws.key(), all, command.board(), violations);
                     Optional<BoardColumn> column = board.flatMap(b -> column(b, command.column(), violations));
+                    effective.ifPresent(cfg -> column.ifPresent(c -> violations.addAll(
+                            FieldRules.create(cfg, c.key(), command.fields()))));
                     if (!violations.isEmpty()) {
                         throw new CommandRejectedException(violations);
                     }
+                    Map<String, Object> fields = effective.map(cfg -> FieldRules.created(cfg, command.fields()))
+                            .orElseGet(() -> MergePatch.apply(Map.of(), command.fields()));
                     NewItem draft = new NewItem(ws.id(), board.orElseThrow().board().id(), column.orElseThrow().id(),
-                            command.title(), command.rank(), MergePatch.apply(Map.of(), command.fields()));
+                            command.title(), command.rank(), fields);
                     return items.create(draft, command.origin())
                             .map(saved -> new PlacedItem(saved, board.get().key(), column.get().key(), null));
-                }))
+                })))
                 .onFailure().transform(refusal(command.workspace(), null, null));
     }
 
     /** Edits the item's title and fields and answers it as written. */
     public Uni<PlacedItem> edit(EditItem command) {
         return current(command.workspace(), command.item(), command.expectedVersion())
-                .chain(target -> {
+                .chain(target -> effective(command.workspace()).map(effective -> {
                     List<Violation> violations = new ArrayList<>();
                     if (command.title() != null) {
                         ItemRules.title(command.title(), violations);
                     }
                     ItemRules.fieldNames(command.fields(), violations);
+                    Item item = target.placed().item();
+                    effective.ifPresent(cfg -> violations.addAll(FieldRules.edit(cfg, target.placed().columnKey(),
+                            item.fields(), command.fields())));
                     if (!violations.isEmpty()) {
                         throw new CommandRejectedException(violations);
                     }
+                    return target;
+                }))
+                .chain(target -> {
                     Item item = target.placed().item();
                     Item edited = item.withTitle(command.title() == null ? item.title() : command.title())
                             .withFields(MergePatch.apply(item.fields(), command.fields()));
@@ -97,10 +113,12 @@ public class ItemCommands {
     /** Moves the item to a column of its board, at a rank, and answers it as written. */
     public Uni<PlacedItem> move(MoveItem command) {
         return current(command.workspace(), command.item(), command.expectedVersion())
-                .chain(target -> boards.findByWorkspace(target.workspace().id()).chain(all -> {
+                .chain(target -> effective(command.workspace()).chain(effective -> boards.findByWorkspace(
+                        target.workspace().id()).chain(all -> {
                     Item item = target.placed().item();
                     List<Violation> violations = new ArrayList<>();
                     ItemRules.rank(command.rank(), violations);
+                    ItemRules.fieldNames(command.fields(), violations);
                     KeyedBoard board = all.stream().filter(b -> b.board().id().equals(item.boardId())).findFirst()
                             .orElseThrow();
                     Optional<BoardColumn> column = Optional.empty();
@@ -109,14 +127,19 @@ public class ItemCommands {
                     } else {
                         column = column(board, command.column(), violations);
                     }
+                    Optional<BoardColumn> into = column;
+                    effective.ifPresent(cfg -> into.ifPresent(c -> violations.addAll(
+                            FieldRules.move(cfg, c.key(), item.fields(), command.fields()))));
                     if (!violations.isEmpty()) {
                         throw new CommandRejectedException(violations);
                     }
                     String rank = command.rank() == null ? item.rank() : command.rank();
                     BoardColumn to = column.orElseThrow();
-                    return items.move(item, to.id(), rank, command.expectedVersion(), command.origin())
+                    Map<String, Object> fields = command.fields() == null || command.fields().isEmpty()
+                            ? null : MergePatch.apply(item.fields(), command.fields());
+                    return items.move(item, to.id(), rank, fields, command.expectedVersion(), command.origin())
                             .map(saved -> target.placedAs(saved, to.key()));
-                }))
+                })))
                 .onFailure().transform(refusal(command.workspace(), command.item(), command.expectedVersion()));
     }
 
@@ -125,6 +148,16 @@ public class ItemCommands {
         return current(command.workspace(), command.item(), command.expectedVersion())
                 .chain(target -> items.delete(target.placed().item(), command.expectedVersion(), command.origin()))
                 .onFailure().transform(refusal(command.workspace(), command.item(), command.expectedVersion()));
+    }
+
+    /**
+     * The workspace's effective configuration, against which its items' fields are checked; empty
+     * for a workspace that has none.
+     */
+    private Uni<Optional<Map<String, Object>>> effective(String workspace) {
+        return workspaces.findConfiguration(workspace).chain(found -> found.isEmpty()
+                ? Uni.createFrom().item(Optional.<Map<String, Object>>empty())
+                : chains.effective(found.get()).map(Optional::of));
     }
 
     /** The workspace, if it exists and a client may write to it. */

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted (2026-10-28), approved by the PO as written |
+| **Status** | Accepted (2026-10-28), approved by the PO as written; amendment 1, violation codes (VEC-70), proposed 2026-11-26 for the PO's approval |
 | **Date** | 2026-10-28 |
 | **Deciders** | Product Owner |
 | **Requirement** | [ADR-VEC-01](./ADR-VEC-01-product-requirements-and-features.md) R-CORE-5 (template → instance); [ADR-VEC-03](./ADR-VEC-03-workflow-and-template-model.md), whose resolver reports the violations this record carries |
@@ -36,3 +36,26 @@
 
 - A client needs machine-readable error kinds beyond the status and the violation `field`: add a `code` member rather than a new `type`.
 - A resource cannot be addressed by one key.
+
+## Amendment 1 — violation codes and field violations on a conflict (VEC-70, proposed 2026-11-26)
+
+### Background
+
+The web client now draws item forms from the configuration and shows each refusal beside the input it is about, in English or Italian. With only `field` and an English `message`, it could place a violation but not say it in the reader's language. The *Reopen if* above foresaw this: add a `code` member rather than a new `type`.
+
+### Decision
+
+1. **`code`.** A violation may carry a `code`, from a closed set that a client translates:
+   - `required`, `requiredToEnter`, `tooLong`, `pattern`, `type`, `scale`, `option`, `unknownType` and `notOnType`, used by the item writes now;
+   - `taken`, for VEC-10's `POST /workspaces`;
+   - `parent`, reserved for the parent check of a later story.
+
+   `message` stays the English sentence a client shows when it does not know the code. The member is left out when a violation has none; the resolver's violations have none yet.
+2. **`field` on an item write** is the path of the request member the violation is about: `title`, `fields.<key>`, `column` or `rank`.
+3. **Field violations on a 409.** `violations` may also be present on a 409 that is about one field, such as a workspace key that is already taken (`{field: "key", code: "taken"}`), so that a form can show the conflict beside the field. On any other 409 it is absent.
+
+### Consequences
+
+- A new code is an amendment to this record, appended to the list in D1.
+- The mapper stays the one class of D5. `ProblemDetail` writes each violation without its null members.
+

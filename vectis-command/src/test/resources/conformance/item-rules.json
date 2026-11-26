@@ -1,0 +1,723 @@
+{
+  "about": "One set of item-field rules, two evaluators: the command layer (FieldRulesConformanceTest) and the web client (src/forms/rules.test.ts) must give exactly these violations, as [field, code] pairs in this order. A case's template is a shipped built-in, read from its golden resolution in vectis-domain's test resources; an optional delta is merged over it as a workspace delta would be.",
+  "cases": [
+    {
+      "name": "C1 a story with points on the scale and a priority",
+      "template": "scrum",
+      "write": {
+        "op": "create",
+        "state": "todo",
+        "title": "Sign in",
+        "fields": {
+          "type": "story",
+          "storyPoints": 5,
+          "priority": "high"
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "C2 points off the scale",
+      "template": "scrum",
+      "write": {
+        "op": "create",
+        "state": "todo",
+        "title": "Sign in",
+        "fields": {
+          "type": "story",
+          "storyPoints": 4
+        }
+      },
+      "expect": [
+        [
+          "fields.storyPoints",
+          "scale"
+        ]
+      ]
+    },
+    {
+      "name": "C3 a bug needs a description, always",
+      "template": "scrum",
+      "write": {
+        "op": "create",
+        "state": "backlog",
+        "title": "Crash",
+        "fields": {
+          "type": "bug"
+        }
+      },
+      "expect": [
+        [
+          "fields.description",
+          "required"
+        ]
+      ]
+    },
+    {
+      "name": "C4 a task has no story points",
+      "template": "scrum",
+      "write": {
+        "op": "create",
+        "state": "todo",
+        "title": "Wire it",
+        "fields": {
+          "type": "task",
+          "storyPoints": 3
+        }
+      },
+      "expect": [
+        [
+          "fields.storyPoints",
+          "notOnType"
+        ]
+      ]
+    },
+    {
+      "name": "C5 with no type the workspace's default type is used",
+      "template": "scrum",
+      "write": {
+        "op": "create",
+        "state": "todo",
+        "title": "Sign in"
+      },
+      "expect": []
+    },
+    {
+      "name": "C6 a type the workspace does not have",
+      "template": "scrum",
+      "write": {
+        "op": "create",
+        "state": "todo",
+        "title": "Sign in",
+        "fields": {
+          "type": "feature"
+        }
+      },
+      "expect": [
+        [
+          "fields.type",
+          "unknownType"
+        ]
+      ]
+    },
+    {
+      "name": "C7 a priority that is not an option",
+      "template": "scrum",
+      "write": {
+        "op": "create",
+        "state": "todo",
+        "title": "Sign in",
+        "fields": {
+          "type": "story",
+          "priority": "urgent"
+        }
+      },
+      "expect": [
+        [
+          "fields.priority",
+          "option"
+        ]
+      ]
+    },
+    {
+      "name": "C8 points that are not a number",
+      "template": "scrum",
+      "write": {
+        "op": "create",
+        "state": "todo",
+        "title": "Sign in",
+        "fields": {
+          "type": "story",
+          "storyPoints": "5"
+        }
+      },
+      "expect": [
+        [
+          "fields.storyPoints",
+          "type"
+        ]
+      ]
+    },
+    {
+      "name": "C9 a blank title",
+      "template": "scrum",
+      "write": {
+        "op": "create",
+        "state": "todo",
+        "title": "  ",
+        "fields": {
+          "type": "story"
+        }
+      },
+      "expect": [
+        [
+          "title",
+          "required"
+        ]
+      ]
+    },
+    {
+      "name": "C10 a title and a field broken together are both named",
+      "template": "scrum",
+      "write": {
+        "op": "create",
+        "state": "todo",
+        "title": "",
+        "fields": {
+          "type": "bug",
+          "storyPoints": 4
+        }
+      },
+      "expect": [
+        [
+          "title",
+          "required"
+        ],
+        [
+          "fields.storyPoints",
+          "scale"
+        ],
+        [
+          "fields.description",
+          "required"
+        ]
+      ]
+    },
+    {
+      "name": "C11 undeclared fields are the open long tail and pass",
+      "template": "scrum",
+      "write": {
+        "op": "create",
+        "state": "todo",
+        "title": "Sign in",
+        "fields": {
+          "type": "story",
+          "labels": [
+            "web"
+          ]
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "C12 an edit of the points to a value on the scale",
+      "template": "scrum",
+      "write": {
+        "op": "edit",
+        "fields": {
+          "storyPoints": 8
+        },
+        "item": {
+          "state": "todo",
+          "fields": {
+            "type": "story",
+            "storyPoints": 5
+          }
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "C13 an edit of the points off the scale",
+      "template": "scrum",
+      "write": {
+        "op": "edit",
+        "fields": {
+          "storyPoints": 7
+        },
+        "item": {
+          "state": "todo",
+          "fields": {
+            "type": "story",
+            "storyPoints": 5
+          }
+        }
+      },
+      "expect": [
+        [
+          "fields.storyPoints",
+          "scale"
+        ]
+      ]
+    },
+    {
+      "name": "C14 the type is set at creation only",
+      "template": "scrum",
+      "write": {
+        "op": "edit",
+        "fields": {
+          "type": "bug"
+        },
+        "item": {
+          "state": "todo",
+          "fields": {
+            "type": "story"
+          }
+        }
+      },
+      "expect": [
+        [
+          "fields.type",
+          "type"
+        ]
+      ]
+    },
+    {
+      "name": "C15 a bug from before descriptions were required can still be renamed",
+      "template": "scrum",
+      "write": {
+        "op": "edit",
+        "title": "Crash on start",
+        "item": {
+          "state": "todo",
+          "fields": {
+            "type": "bug"
+          }
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "C15b and its points can be changed without one",
+      "template": "scrum",
+      "write": {
+        "op": "edit",
+        "fields": {
+          "storyPoints": 3
+        },
+        "item": {
+          "state": "todo",
+          "fields": {
+            "type": "bug"
+          }
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "C16 but its description, once touched, cannot be emptied",
+      "template": "scrum",
+      "write": {
+        "op": "edit",
+        "fields": {
+          "description": ""
+        },
+        "item": {
+          "state": "todo",
+          "fields": {
+            "type": "bug",
+            "description": "Boom"
+          }
+        }
+      },
+      "expect": [
+        [
+          "fields.description",
+          "required"
+        ]
+      ]
+    },
+    {
+      "name": "C17 nor removed",
+      "template": "scrum",
+      "write": {
+        "op": "edit",
+        "fields": {
+          "description": null
+        },
+        "item": {
+          "state": "todo",
+          "fields": {
+            "type": "bug",
+            "description": "Boom"
+          }
+        }
+      },
+      "expect": [
+        [
+          "fields.description",
+          "required"
+        ]
+      ]
+    },
+    {
+      "name": "C18 a workspace that needs points to start: creating a story straight into In Progress",
+      "template": "scrum",
+      "delta": {
+        "states": {
+          "in-progress": {
+            "requires": [
+              "storyPoints"
+            ]
+          }
+        }
+      },
+      "write": {
+        "op": "create",
+        "state": "in-progress",
+        "title": "Sign in",
+        "fields": {
+          "type": "story"
+        }
+      },
+      "expect": [
+        [
+          "fields.storyPoints",
+          "requiredToEnter"
+        ]
+      ]
+    },
+    {
+      "name": "C19 a task enters In Progress freely: it has no points field",
+      "template": "scrum",
+      "delta": {
+        "states": {
+          "in-progress": {
+            "requires": [
+              "storyPoints"
+            ]
+          }
+        }
+      },
+      "write": {
+        "op": "create",
+        "state": "in-progress",
+        "title": "Wire it",
+        "fields": {
+          "type": "task"
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "C20 moving an unestimated story into In Progress",
+      "template": "scrum",
+      "delta": {
+        "states": {
+          "in-progress": {
+            "requires": [
+              "storyPoints"
+            ]
+          }
+        }
+      },
+      "write": {
+        "op": "move",
+        "to": "in-progress",
+        "item": {
+          "state": "todo",
+          "fields": {
+            "type": "story"
+          }
+        }
+      },
+      "expect": [
+        [
+          "fields.storyPoints",
+          "requiredToEnter"
+        ]
+      ]
+    },
+    {
+      "name": "C21 the same move, with the points sent along",
+      "template": "scrum",
+      "delta": {
+        "states": {
+          "in-progress": {
+            "requires": [
+              "storyPoints"
+            ]
+          }
+        }
+      },
+      "write": {
+        "op": "move",
+        "to": "in-progress",
+        "fields": {
+          "storyPoints": 3
+        },
+        "item": {
+          "state": "todo",
+          "fields": {
+            "type": "story"
+          }
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "C22 the same move, with points off the scale",
+      "template": "scrum",
+      "delta": {
+        "states": {
+          "in-progress": {
+            "requires": [
+              "storyPoints"
+            ]
+          }
+        }
+      },
+      "write": {
+        "op": "move",
+        "to": "in-progress",
+        "fields": {
+          "storyPoints": 4
+        },
+        "item": {
+          "state": "todo",
+          "fields": {
+            "type": "story"
+          }
+        }
+      },
+      "expect": [
+        [
+          "fields.storyPoints",
+          "scale"
+        ]
+      ]
+    },
+    {
+      "name": "C23 the same story moving to In Review needs nothing",
+      "template": "scrum",
+      "delta": {
+        "states": {
+          "in-progress": {
+            "requires": [
+              "storyPoints"
+            ]
+          }
+        }
+      },
+      "write": {
+        "op": "move",
+        "to": "in-review",
+        "item": {
+          "state": "todo",
+          "fields": {
+            "type": "story"
+          }
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "C24 clearing the points of a story in In Progress",
+      "template": "scrum",
+      "delta": {
+        "states": {
+          "in-progress": {
+            "requires": [
+              "storyPoints"
+            ]
+          }
+        }
+      },
+      "write": {
+        "op": "edit",
+        "fields": {
+          "storyPoints": null
+        },
+        "item": {
+          "state": "in-progress",
+          "fields": {
+            "type": "story",
+            "storyPoints": 3
+          }
+        }
+      },
+      "expect": [
+        [
+          "fields.storyPoints",
+          "requiredToEnter"
+        ]
+      ]
+    },
+    {
+      "name": "C25 a story from before the rule stays editable where the edit does not touch it",
+      "template": "scrum",
+      "delta": {
+        "states": {
+          "in-progress": {
+            "requires": [
+              "storyPoints"
+            ]
+          }
+        }
+      },
+      "write": {
+        "op": "edit",
+        "title": "Renamed",
+        "item": {
+          "state": "in-progress",
+          "fields": {
+            "type": "story"
+          }
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "C26 a project needs a business case to enter Gate 1",
+      "template": "stage-gate",
+      "write": {
+        "op": "move",
+        "to": "gate-1",
+        "item": {
+          "state": "scoping",
+          "fields": {
+            "type": "project"
+          }
+        }
+      },
+      "expect": [
+        [
+          "fields.businessCase",
+          "requiredToEnter"
+        ]
+      ]
+    },
+    {
+      "name": "C27 and enters it with one",
+      "template": "stage-gate",
+      "write": {
+        "op": "move",
+        "to": "gate-1",
+        "fields": {
+          "businessCase": "A market worth entering"
+        },
+        "item": {
+          "state": "scoping",
+          "fields": {
+            "type": "project"
+          }
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "C28 the same project enters Scoping with nothing more",
+      "template": "stage-gate",
+      "write": {
+        "op": "move",
+        "to": "scoping",
+        "item": {
+          "state": "idea",
+          "fields": {
+            "type": "project"
+          }
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "C29 a milestone has no business case, so Gate 1 asks it for none",
+      "template": "stage-gate",
+      "write": {
+        "op": "move",
+        "to": "gate-1",
+        "item": {
+          "state": "scoping",
+          "fields": {
+            "type": "milestone",
+            "targetLaunch": "2027-03-01"
+          }
+        }
+      },
+      "expect": []
+    },
+    {
+      "name": "C30 a milestone always has a target date",
+      "template": "stage-gate",
+      "write": {
+        "op": "create",
+        "state": "idea",
+        "title": "Pilot",
+        "fields": {
+          "type": "milestone"
+        }
+      },
+      "expect": [
+        [
+          "fields.targetLaunch",
+          "required"
+        ]
+      ]
+    },
+    {
+      "name": "C31 a date that is not a date",
+      "template": "stage-gate",
+      "write": {
+        "op": "create",
+        "state": "idea",
+        "title": "New market",
+        "fields": {
+          "type": "project",
+          "targetLaunch": "2027-13-40"
+        }
+      },
+      "expect": [
+        [
+          "fields.targetLaunch",
+          "type"
+        ]
+      ]
+    },
+    {
+      "name": "C32 February 30th is not a day (JavaScript's Date.parse alone accepts it)",
+      "template": "stage-gate",
+      "write": {
+        "op": "create",
+        "state": "idea",
+        "title": "Pilot",
+        "fields": {
+          "type": "milestone",
+          "targetLaunch": "2027-02-30"
+        }
+      },
+      "expect": [
+        [
+          "fields.targetLaunch",
+          "type"
+        ]
+      ]
+    },
+    {
+      "name": "C33 the business case of a project in Gate 1 cannot be emptied",
+      "template": "stage-gate",
+      "write": {
+        "op": "edit",
+        "fields": {
+          "businessCase": " "
+        },
+        "item": {
+          "state": "gate-1",
+          "fields": {
+            "type": "project",
+            "businessCase": "Grow"
+          }
+        }
+      },
+      "expect": [
+        [
+          "fields.businessCase",
+          "requiredToEnter"
+        ]
+      ]
+    },
+    {
+      "name": "C34 a risk that is an option",
+      "template": "stage-gate",
+      "write": {
+        "op": "create",
+        "state": "idea",
+        "title": "New market",
+        "fields": {
+          "type": "project",
+          "risk": "high"
+        }
+      },
+      "expect": []
+    }
+  ]
+}

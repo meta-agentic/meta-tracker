@@ -53,7 +53,7 @@ class ConfigurationApiTest {
             {"states": {"refined": {"name": "Refined", "category": "START_STATE", "after": "backlog"}}}""";
 
     private final List<LogRecord> warnings = new CopyOnWriteArrayList<>();
-    private final Logger chainLog = Logger.getLogger("io.vectis.server.api.TemplateChains");
+    private final Logger chainLog = Logger.getLogger("io.vectis.persistence.TemplateChains");
     private final Handler capture = new Handler() {
         @Override
         public void publish(LogRecord r) {

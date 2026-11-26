@@ -51,7 +51,7 @@ public class ItemsResource {
 
     private static final Set<String> CREATE = Set.of("title", "board", "column", "rank", "fields");
     private static final Set<String> EDIT = Set.of("title", "fields");
-    private static final Set<String> MOVE = Set.of("column", "rank");
+    private static final Set<String> MOVE = Set.of("column", "rank", "fields");
 
     private final ItemCommands commands;
     private final WorkspaceRepository workspaces;
@@ -111,7 +111,10 @@ public class ItemsResource {
         return commands.edit(command).map(placed -> ok(placed).build());
     }
 
-    /** Moves the item to a column of its board, from {@code {column, rank?}}. */
+    /**
+     * Moves the item to a column of its board, from {@code {column, rank?, fields?}}: {@code fields}
+     * is a JSON merge patch written with the move, for what the target state needs.
+     */
     @POST
     @Path("/{item}/move")
     public Uni<Response> move(@PathParam("key") String key, @PathParam("item") String item,
@@ -121,7 +124,7 @@ public class ItemsResource {
         Long version = ItemRequests.version(ifMatch);
         ObjectNode request = ItemRequests.object(json, type, body, MOVE);
         MoveItem command = new MoveItem(key, item, version, ItemRequests.text(request, "column"),
-                ItemRequests.text(request, "rank"), origin(origin));
+                ItemRequests.text(request, "rank"), ItemRequests.object(json, request, "fields"), origin(origin));
         return commands.move(command).map(placed -> ok(placed).build());
     }
 
