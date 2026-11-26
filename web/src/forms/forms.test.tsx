@@ -12,6 +12,7 @@ import {
   ScaleKindIcon,
   TextKindIcon,
 } from "../components/icons";
+import { TOOLTIP_DELAY_MS } from "../components/useTooltip";
 import { AppProviders } from "../providers/AppProviders";
 import { workspaceStore } from "../store/workspaceStore";
 import { ConfiguredForm } from "./ConfiguredForm";
@@ -153,10 +154,10 @@ describe("the configured form's accessibility", () => {
     expect(document.activeElement).toBe(screen.getByLabelText(/^Description/));
   });
 
-  it("draws an icon-only option with its name as accessible name and tooltip", () => {
+  it("draws an icon-only option with its name as accessible name, and no native title", () => {
     renderForm([]);
     const high = screen.getByRole("radio", { name: "High" });
-    expect(high.closest("label")).toHaveAttribute("title", "High");
+    expect(high.closest("label")).not.toHaveAttribute("title");
     expect(high.closest("label")).not.toHaveTextContent("High");
     expect(screen.getByRole("radio", { name: "Bug" })).toBeChecked();
     expect(screen.getByRole("group", { name: /Priority/ })).toBeInTheDocument();
@@ -170,6 +171,62 @@ describe("the configured form's accessibility", () => {
     ]);
     expect(screen.getByLabelText(/^Description/)).toHaveAccessibleDescription("Description è obbligatorio.");
     expect(screen.getByLabelText(/^Titolo/)).toHaveAccessibleDescription("the server's own words");
+  });
+});
+
+describe("the tooltip of an icon-only option", () => {
+  const renderBug = () =>
+    render(
+      <AppProviders>
+        <ConfiguredForm definition={itemForm(scrum, "bug", "create")} values={{ "fields.type": "bug" }} violations={[]}
+          submitLabel="Create" onChange={() => {}} onSubmit={() => {}} onCancel={() => {}} />
+      </AppProviders>,
+    );
+
+  afterEach(() => vi.useRealTimers());
+
+  it("shows on focus, describes the option, and leaves its accessible name alone", () => {
+    renderBug();
+    const high = screen.getByRole("radio", { name: "High" });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    act(() => high.focus());
+    expect(screen.getByRole("tooltip")).toHaveTextContent("High");
+    expect(high).toHaveAttribute("aria-describedby", screen.getByRole("tooltip").id);
+    expect(high).toHaveAccessibleName("High");
+    act(() => high.blur());
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(high).not.toHaveAttribute("aria-describedby");
+  });
+
+  it("shows on hover after the delay, not before, and hides when the pointer leaves", () => {
+    vi.useFakeTimers();
+    renderBug();
+    const bug = screen.getByRole("radio", { name: "Bug" }).closest("label")!;
+    fireEvent.mouseEnter(bug);
+    act(() => vi.advanceTimersByTime(TOOLTIP_DELAY_MS - 1));
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    act(() => vi.advanceTimersByTime(1));
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Bug");
+    fireEvent.mouseLeave(bug);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  it("hides on Escape, which goes no further while it shows", () => {
+    renderBug();
+    const reached = vi.fn();
+    document.addEventListener("keydown", reached);
+    const high = screen.getByRole("radio", { name: "High" });
+    act(() => high.focus());
+    fireEvent.keyDown(high, { key: "Escape" });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(reached).not.toHaveBeenCalled();
+    fireEvent.keyDown(high, { key: "Escape" });
+    expect(reached).toHaveBeenCalledTimes(1);
+    document.removeEventListener("keydown", reached);
+  });
+
+  it("waits half of Chromium's 500 ms tooltip delay", () => {
+    expect(TOOLTIP_DELAY_MS).toBe(250);
   });
 });
 

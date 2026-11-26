@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import type { FieldSpec, FormDefinition } from "./definition";
+import { Tooltip } from "../components/Tooltip";
+import { useTooltip } from "../components/useTooltip";
+import type { Choice, FieldSpec, FormDefinition } from "./definition";
 import { FieldIcon, FieldKindIcon } from "./FieldIcon";
 import { FIELD_ICONS } from "./fieldIcons";
 import type { FieldViolation } from "./rules";
@@ -28,13 +30,38 @@ function iconChoice(field: FieldSpec): boolean {
 }
 
 /**
+ * An option drawn as its icon alone: the radio's accessible name is the
+ * option's name, and the app's tooltip shows that name on hover and on focus.
+ */
+function IconOption(props: { option: Choice; name: string; checked: boolean; onChoose: (key: string) => void }) {
+  const { option } = props;
+  const tip = useTooltip();
+  return (
+    <label className="vec-form__icon-option" {...tip.triggerProps}>
+      <input
+        type="radio"
+        name={props.name}
+        value={option.key}
+        aria-label={option.name}
+        aria-describedby={tip.describedBy}
+        checked={props.checked}
+        onChange={() => props.onChoose(option.key)}
+      />
+      <FieldIcon name={option.icon} />
+      <Tooltip id={tip.id} open={tip.open} text={option.name} />
+    </label>
+  );
+}
+
+/**
  * Any form the configuration defines (VEC-70): one component for New Item,
  * Edit Item and the prompt a move shows. Native inputs on the shell's tokens;
  * every input has a bound label that says "required" in words, an invalid one
  * says why through `aria-describedby`, the summary links each problem to its
  * input, and after a refused submit focus lands on the first wrong input. An
- * option drawn as an icon alone keeps its name as its accessible name and its
- * tooltip. Each label starts with the glyph of its field's kind, decorative.
+ * option drawn as an icon alone keeps its name as its accessible name and shows
+ * it in the app's tooltip. Each label starts with the glyph of its field's
+ * kind, decorative.
  */
 export function ConfiguredForm(props: ConfiguredFormProps) {
   const { definition, values, violations } = props;
@@ -135,17 +162,7 @@ export function ConfiguredForm(props: ConfiguredFormProps) {
                   </label>
                 )}
                 {(f.options ?? []).map((o) => (
-                  <label key={o.key} className="vec-form__icon-option" title={o.name}>
-                    <input
-                      type="radio"
-                      name={field}
-                      value={o.key}
-                      aria-label={o.name}
-                      checked={value === o.key}
-                      onChange={() => change(o.key)}
-                    />
-                    <FieldIcon name={o.icon} />
-                  </label>
+                  <IconOption key={o.key} option={o} name={field} checked={value === o.key} onChoose={change} />
                 ))}
               </div>
               {after}
