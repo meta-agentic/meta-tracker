@@ -56,7 +56,7 @@ done
 
 # After the server is up: it creates the schema and the built-in templates at start.
 echo "== demo data (e2e/seed)"
-for seed in boards filter workspaces; do
+for seed in boards filter workspaces forms; do
   docker exec -i "$db_container" psql -q -v ON_ERROR_STOP=1 -U "$VECTIS_DB_USER" -d "$VECTIS_DB_NAME" \
     < "e2e/seed/$seed.sql"
 done
