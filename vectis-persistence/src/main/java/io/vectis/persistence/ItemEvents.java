@@ -9,8 +9,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.TreeSet;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 /**
  * The item events of the real-time transport's event contract.
@@ -44,9 +44,8 @@ final class ItemEvents {
 
     /** A move that also set fields: the column and rank, and each field that changed. */
     static Event movedWithFields(Item item, Map<String, Object> oldFields, OffsetDateTime at) {
-        List<String> changed = new ArrayList<>(List.of("columnId", "rank"));
-        changed.addAll(changedFields(oldFields, item.fields()));
-        return itemEvent(MOVED, item, at, changed);
+        return itemEvent(MOVED, item, at,
+                Stream.concat(Stream.of("columnId", "rank"), changedFields(oldFields, item.fields())).toList());
     }
 
     static Event sprintAssigned(Item item, OffsetDateTime at) {
@@ -55,24 +54,17 @@ final class ItemEvents {
 
     /** A title or field edit; {@code changed} is worked out from the row as it was before. */
     static Event edited(Item item, String oldTitle, Map<String, Object> oldFields, OffsetDateTime at) {
-        List<String> changed = new ArrayList<>();
-        if (!item.title().equals(oldTitle)) {
-            changed.add("title");
-        }
-        changed.addAll(changedFields(oldFields, item.fields()));
-        return itemEvent(UPDATED, item, at, changed);
+        Stream<String> title = item.title().equals(oldTitle) ? Stream.empty() : Stream.of("title");
+        return itemEvent(UPDATED, item, at, Stream.concat(title, changedFields(oldFields, item.fields())).toList());
     }
 
-    private static List<String> changedFields(Map<String, Object> before, Map<String, Object> after) {
-        List<String> changed = new ArrayList<>();
-        var keys = new TreeSet<>(before.keySet());
-        keys.addAll(after.keySet());
-        for (String key : keys) {
-            if (!Objects.equals(before.get(key), after.get(key))) {
-                changed.add("fields." + escapeKey(key));
-            }
-        }
-        return changed;
+    /** {@code fields.<key>} for each open field whose value differs between the two, in key order. */
+    private static Stream<String> changedFields(Map<String, Object> before, Map<String, Object> after) {
+        return Stream.concat(before.keySet().stream(), after.keySet().stream())
+                .distinct()
+                .sorted()
+                .filter(key -> !Objects.equals(before.get(key), after.get(key)))
+                .map(key -> "fields." + escapeKey(key));
     }
 
     /**

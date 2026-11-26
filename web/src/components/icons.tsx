@@ -49,19 +49,27 @@ export function LogoMark({ size = 22 }: { size?: number }) {
   );
 }
 
+/** A written page with a folded corner and three lines of text. */
 export function StoryIcon(props: IconProps) {
   return (
     <Icon {...props}>
-      <path d="M4.5 2.5h7v11L8 11l-3.5 2.5z" />
+      <path d="M9.5 1.75H5a1.5 1.5 0 0 0-1.5 1.5v9.5A1.5 1.5 0 0 0 5 14.25h6a1.5 1.5 0 0 0 1.5-1.5v-8z" />
+      <path d="M9.5 1.75v3h3M6 6.75h4M6 9h4M6 11.25h2.5" />
     </Icon>
   );
 }
 
+/**
+ * A beetle, as the PO drew it: a D-shaped body, flat at the top and round at the
+ * bottom, split down the middle; a semicircular head on the flat side; two
+ * antennae from the head; three legs a side.
+ */
 export function BugIcon(props: IconProps) {
   return (
     <Icon {...props}>
-      <circle cx="8" cy="8" r="5.5" />
-      <circle cx="8" cy="8" r="1.75" fill="currentColor" />
+      <path d="M4 7.25h8a4 5.75 0 0 1-8 0zM8 7.25V13" />
+      <path d="M6 7.25a2 2 0 0 1 4 0M6.6 5.85 5.25 3.5M9.4 5.85l1.35-2.35" />
+      <path d="M4.15 8.75 2.25 7.75M4.8 10.75H2.5M5.6 12.1 3.75 13.75M11.85 8.75l1.9-1M11.2 10.75h2.3M10.4 12.1l1.85 1.65" />
     </Icon>
   );
 }
@@ -246,10 +254,12 @@ export function ProjectIcon(props: IconProps) {
   );
 }
 
+/** A flag with a check in its cloth: a square cloth, where the plain flag's is notched. */
 export function MilestoneIcon(props: IconProps) {
   return (
     <Icon {...props}>
-      <path d="M8 2.25 13.75 8 8 13.75 2.25 8z" />
+      <path d="M3 14.25V2.25M3 2.75h9a1.5 1.5 0 0 1 1.5 1.5v4.5a1.5 1.5 0 0 1-1.5 1.5H3" />
+      <path d="m5.75 6.5 1.5 1.5 3-3" />
     </Icon>
   );
 }
@@ -291,6 +301,67 @@ export function FlagIcon(props: IconProps) {
   return (
     <Icon {...props}>
       <path d="M3.5 14V2.5M3.5 3h8l-1.75 3L11.5 9h-8" />
+    </Icon>
+  );
+}
+
+/* ---------- Field kinds (VEC-70): drawn beside a field's label in the forms ---------- */
+
+/** A letter T: one line of text. */
+export function TextKindIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M3.5 3.5h9M8 3.5v9M6.25 12.5h3.5" />
+    </Icon>
+  );
+}
+
+/** The Markdown mark, an M and a down arrow in a frame: text over several lines, shown as Markdown. */
+export function MarkdownKindIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="1.5" y="3.5" width="13" height="9" rx="2" />
+      <path d="M4 10V6l2 2 2-2v4M11 6v4M9.5 8.5 11 10l1.5-1.5" />
+    </Icon>
+  );
+}
+
+/** A number sign. */
+export function NumberKindIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M6.5 2.5 5 13.5M11 2.5 9.5 13.5M3 5.75h10.5M2.5 10.25H13" />
+    </Icon>
+  );
+}
+
+/** Rising bars: a number on a point scale. */
+export function ScaleKindIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M3 13v-2M6.33 13V9M9.67 13V6.5M13 13V3.5" />
+    </Icon>
+  );
+}
+
+/** A calendar page. */
+export function DateKindIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="2.5" y="3.5" width="11" height="10" rx="2" />
+      <path d="M2.5 7h11M5.5 2v3M10.5 2v3" />
+    </Icon>
+  );
+}
+
+/** Two options, the first chosen: one of a list. */
+export function ChoiceKindIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="4.5" cy="5" r="2" />
+      <circle cx="4.5" cy="5" r="0.75" fill="currentColor" stroke="none" />
+      <circle cx="4.5" cy="11" r="2" />
+      <path d="M8.5 5h5M8.5 11h5" />
     </Icon>
   );
 }

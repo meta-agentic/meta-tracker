@@ -12,6 +12,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Function;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 /**
  * Validation of a merged, order-normalised configuration document. It checks meaning only; the
@@ -53,6 +56,7 @@ final class TemplateValidator {
     static void validate(Map<String, Object> doc, List<Violation> v) {
         members("", doc, "document", v);
         Map<String, Object> states = obj(doc.get("states"));
+        Map<String, Object> fields = obj(doc.get("fields"));
         boolean start = false;
         boolean delivered = false;
         for (Map.Entry<String, Object> e : states.entrySet()) {
@@ -95,7 +99,7 @@ final class TemplateValidator {
             if (st.containsKey("gate")) {
                 gate(p + ".gate", st, v);
             }
-            fieldKeys(p + ".requires", st.get("requires"), obj(doc.get("fields")).keySet(), v);
+            fieldKeys(p + ".requires", st.get("requires"), fields.keySet()).forEach(v::add);
         }
         if (!start || !delivered) {
             v.add(Violation.of("states", "needs at least one START_STATE state and one END_STATE state with outcome DELIVERED"));
@@ -112,7 +116,6 @@ final class TemplateValidator {
             members("itemTypes." + k + ".", obj(x), "itemTypes", v);
         });
         itemTypeHierarchy(types, v);
-        Map<String, Object> fields = obj(doc.get("fields"));
         fields.forEach((k, x) -> {
             Map<String, Object> f = obj(x);
             String p = "fields." + k;
@@ -127,28 +130,9 @@ final class TemplateValidator {
             if (f.containsKey("scale") && !("number".equals(f.get("type")) && in(SCALES, f.get("scale")))) {
                 v.add(Violation.of(p + ".scale", "must be one of " + SCALES + " on a number field"));
             }
-            if ("choice".equals(f.get("type"))) {
-                options(p + ".options", f.get("options"), v);
-            } else if (f.containsKey("options")) {
-                v.add(Violation.of(p + ".options", "only a choice field has options"));
-            }
-            if (f.get("default") != null && in(FIELD_TYPES, f.get("type")) && FieldValues.problem(f, f.get("default")) != null) {
-                v.add(Violation.of(p + ".default", "is not a value of this field: " + compact(f.get("default"))));
-            }
+            Stream.concat(options(p + ".options", f), defaultValue(p + ".default", f)).forEach(v::add);
         });
-        types.forEach((k, x) -> {
-            Map<String, Object> t = obj(x);
-            String p = "itemTypes." + k;
-            icon(p + ".icon", t, v);
-            fieldKeys(p + ".fields", t.get("fields"), fields.keySet(), v);
-            Set<String> own = t.get("fields") == null ? fields.keySet() : new HashSet<>(strings(t.get("fields")));
-            fieldKeys(p + ".required", t.get("required"), fields.keySet(), v);
-            for (String r : t.get("required") instanceof List<?> ? strings(t.get("required")) : List.<String>of()) {
-                if (fields.containsKey(r) && !own.contains(r)) {
-                    v.add(Violation.of(p + ".required", "'" + r + "' is not one of this type's fields"));
-                }
-            }
-        });
+        types.forEach((k, x) -> typeForm("itemTypes." + k, obj(x), fields.keySet()).forEach(v::add));
         Object def = obj(doc.get("settings")).get("defaultItemType");
         if (!(def instanceof String d && types.containsKey(d))) {
             v.add(Violation.of("settings.defaultItemType", "references unknown item type " + compact(def)));
@@ -159,68 +143,107 @@ final class TemplateValidator {
         gatedDelivery(doc, v);
     }
 
+    /*
+     * The form vocabulary (ADR-VEC-03, amendment 1). Each rule answers its violations as a stream,
+     * in the order a reader meets the members; validate() adds them where the element is checked.
+     */
+
+    /** An item type's form members: its icon, its field list, and its required fields, each one it has. */
+    private static Stream<Violation> typeForm(String path, Map<String, Object> type, Set<String> declared) {
+        Collection<String> own = type.get("fields") == null ? declared : strings(type.get("fields"));
+        return Stream.of(
+                icon(path + ".icon", type),
+                fieldKeys(path + ".fields", type.get("fields"), declared),
+                fieldKeys(path + ".required", type.get("required"), declared),
+                strings(type.get("required")).stream()
+                        .filter(r -> declared.contains(r) && !own.contains(r))
+                        .map(r -> Violation.of(path + ".required", "'" + r + "' is not one of this type's fields")))
+                .flatMap(Function.identity());
+    }
+
     /**
      * A list of declared field keys ({@code itemTypes.<t>.fields}, {@code itemTypes.<t>.required},
      * {@code states.<s>.requires}): an array of keys, each a field the document declares, none twice.
      * Absent is allowed.
      */
-    private static void fieldKeys(String path, Object list, Set<String> declared, List<Violation> v) {
+    private static Stream<Violation> fieldKeys(String path, Object list, Set<String> declared) {
         if (list == null) {
-            return;
+            return Stream.empty();
         }
         if (!isKeyList(list)) {
-            v.add(Violation.of(path, "must be an array of field keys"));
-            return;
+            return Stream.of(Violation.of(path, "must be an array of field keys"));
         }
-        Set<String> seen = new HashSet<>();
-        for (String k : strings(list)) {
+        List<String> keys = strings(list);
+        return IntStream.range(0, keys.size()).boxed().flatMap(i -> {
+            String k = keys.get(i);
             if (!declared.contains(k)) {
-                v.add(Violation.of(path, "references unknown field '" + k + "'"));
-            } else if (!seen.add(k)) {
-                v.add(Violation.of(path, "lists '" + k + "' twice"));
+                return Stream.of(Violation.of(path, "references unknown field '" + k + "'"));
             }
-        }
+            return keys.indexOf(k) < i ? Stream.of(Violation.of(path, "lists '" + k + "' twice")) : Stream.empty();
+        });
     }
 
-    /** A choice's options: at least one, each {@code {key, name, icon?}}, keys in the key format and distinct. */
-    private static void options(String path, Object options, List<Violation> v) {
-        if (!(options instanceof List<?> list) || list.isEmpty()) {
-            v.add(Violation.of(path, "a choice field has an array of at least one option"));
-            return;
+    /** A choice field has at least one option, each {@code {key, name, icon?}}; no other field has options. */
+    private static Stream<Violation> options(String path, Map<String, Object> field) {
+        if (!"choice".equals(field.get("type"))) {
+            return field.containsKey("options")
+                    ? Stream.of(Violation.of(path, "only a choice field has options"))
+                    : Stream.empty();
         }
-        Set<Object> keys = new HashSet<>();
-        for (int i = 0; i < list.size(); i++) {
-            String p = path + "[" + i + "]";
-            if (!(list.get(i) instanceof Map<?, ?>)) {
-                v.add(Violation.of(p, "must be an object {key, name}"));
-                continue;
-            }
-            Map<String, Object> o = obj(list.get(i));
-            members(p + ".", o, "option", v);
-            if (!(o.get("key") instanceof String key && LevelResolver.KEY.matcher(key).matches())) {
-                v.add(Violation.of(p + ".key", "must match " + LevelResolver.KEY.pattern()));
-            } else if (!keys.add(key)) {
-                v.add(Violation.of(p + ".key", "'" + key + "' is already an option"));
-            }
-            requireName(p, o, v);
-            icon(p + ".icon", o, v);
+        if (!(field.get("options") instanceof List<?> list) || list.isEmpty()) {
+            return Stream.of(Violation.of(path, "a choice field has an array of at least one option"));
         }
+        return IntStream.range(0, list.size()).boxed()
+                .flatMap(i -> option(path + "[" + i + "]", list.get(i), list.subList(0, i)));
+    }
+
+    /** One option: an object, its key in the key format and no {@code earlier} option's, named, its icon known. */
+    private static Stream<Violation> option(String path, Object option, List<?> earlier) {
+        if (!(option instanceof Map<?, ?>)) {
+            return Stream.of(Violation.of(path, "must be an object {key, name}"));
+        }
+        Map<String, Object> o = obj(option);
+        return Stream.of(
+                unknownMembers(path + ".", o, "option"),
+                optionKey(path + ".key", o.get("key"), earlier),
+                missingName(path, o),
+                icon(path + ".icon", o))
+                .flatMap(Function.identity());
+    }
+
+    private static Stream<Violation> optionKey(String path, Object key, List<?> earlier) {
+        if (!(key instanceof String k && LevelResolver.KEY.matcher(k).matches())) {
+            return Stream.of(Violation.of(path, "must match " + LevelResolver.KEY.pattern()));
+        }
+        return earlier.stream().anyMatch(e -> e instanceof Map<?, ?> m && k.equals(m.get("key")))
+                ? Stream.of(Violation.of(path, "'" + k + "' is already an option"))
+                : Stream.empty();
+    }
+
+    /** A default, where one is given on a field of a known kind, is a value of the field. */
+    private static Stream<Violation> defaultValue(String path, Map<String, Object> field) {
+        Object d = field.get("default");
+        return d != null && in(FIELD_TYPES, field.get("type")) && FieldValues.problem(field, d) != null
+                ? Stream.of(Violation.of(path, "is not a value of this field: " + compact(d)))
+                : Stream.empty();
     }
 
     /** An icon, where one is given, names one of the icons every client draws. */
-    private static void icon(String path, Map<String, Object> el, List<Violation> v) {
-        if (el.containsKey("icon") && !in(FieldValues.ICONS, el.get("icon"))) {
-            v.add(Violation.of(path, "must be one of " + FieldValues.ICONS + ", was " + compact(el.get("icon"))));
-        }
+    private static Stream<Violation> icon(String path, Map<String, Object> el) {
+        return el.containsKey("icon") && !in(FieldValues.ICONS, el.get("icon"))
+                ? Stream.of(Violation.of(path, "must be one of " + FieldValues.ICONS + ", was " + compact(el.get("icon"))))
+                : Stream.empty();
     }
 
     /** Members outside the closed set are rejected, one violation per unknown member. */
     private static void members(String path, Map<String, Object> el, String kind, List<Violation> v) {
-        for (String m : el.keySet()) {
-            if (!MEMBERS.get(kind).contains(m)) {
-                v.add(Violation.of(path + m, "unknown member; allowed: " + MEMBERS.get(kind)));
-            }
-        }
+        unknownMembers(path, el, kind).forEach(v::add);
+    }
+
+    private static Stream<Violation> unknownMembers(String path, Map<String, Object> el, String kind) {
+        return el.keySet().stream()
+                .filter(m -> !MEMBERS.get(kind).contains(m))
+                .map(m -> Violation.of(path + m, "unknown member; allowed: " + MEMBERS.get(kind)));
     }
 
     /**
@@ -374,8 +397,12 @@ final class TemplateValidator {
     }
 
     private static void requireName(String path, Map<String, Object> el, List<Violation> v) {
-        if (!(el.get("name") instanceof String n) || n.isBlank()) {
-            v.add(Violation.of(path + ".name", "required"));
-        }
+        missingName(path, el).forEach(v::add);
+    }
+
+    private static Stream<Violation> missingName(String path, Map<String, Object> el) {
+        return el.get("name") instanceof String n && !n.isBlank()
+                ? Stream.empty()
+                : Stream.of(Violation.of(path + ".name", "required"));
     }
 }

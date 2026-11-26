@@ -23,7 +23,8 @@ test('scrum: create a story with points and priority, then edit its points', asy
   const sheet = page.getByRole('dialog', { name: 'New item' });
   await expect(sheet.getByRole('radio', { name: 'Story' })).toBeChecked();
   await sheet.getByLabel(/^Title/).fill(title);
-  await sheet.getByLabel(/^Story points/).selectOption('5');
+  await sheet.getByRole('combobox', { name: /^Story points/ }).click();
+  await sheet.getByRole('option', { name: '5', exact: true }).click();
   await sheet.getByRole('radio', { name: 'High' }).check();
   await sheet.getByRole('button', { name: 'Create' }).click();
   await expect(sheet).toBeHidden();
@@ -31,8 +32,9 @@ test('scrum: create a story with points and priority, then edit its points', asy
 
   const detail = await openCard(page, title);
   await detail.getByRole('button', { name: 'Edit' }).click();
-  await expect(detail.getByLabel(/^Story points/)).toHaveValue('5');
-  await detail.getByLabel(/^Story points/).selectOption('8');
+  await expect(detail.getByRole('combobox', { name: /^Story points/ })).toHaveText('5');
+  await detail.getByRole('combobox', { name: /^Story points/ }).click();
+  await detail.getByRole('option', { name: '8', exact: true }).click();
   await detail.getByRole('button', { name: 'Save' }).click();
   await expect(detail.getByRole('button', { name: 'Edit' })).toBeVisible();
   const read = await page.request.get(`${vectis}/api/v1/workspaces/FRM/items?limit=200`);

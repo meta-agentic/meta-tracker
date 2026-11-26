@@ -43,23 +43,29 @@ public final class FieldValues {
      * checked here: whether a field may be empty is a rule of the item type or the state.
      */
     public static String problem(Map<String, Object> decl, Object value) {
-        Object type = decl.get("type");
-        if (type == null) {
-            return null;
-        }
-        return switch ((String) type) {
-            case "number" -> {
-                if (!(value instanceof Number n) || !finite(n)) {
-                    yield "type";
-                }
-                Object scale = decl.get("scale");
-                yield scale == null || SCALES.getOrDefault((String) scale, List.of()).stream()
-                        .anyMatch(s -> new BigDecimal(n.toString()).compareTo(BigDecimal.valueOf(s)) == 0) ? null : "scale";
-            }
+        Object kind = decl.get("type");
+        return kind == null ? null : switch (String.valueOf(kind)) {
+            case "number" -> number(decl.get("scale"), value);
             case "text", "markdown" -> value instanceof String ? null : "type";
             case "date" -> value instanceof String s && isDate(s) ? null : "type";
             case "choice" -> optionKeys(decl).contains(value) ? null : "option";
             default -> "type";
+        };
+    }
+
+    /**
+     * What a value of the field {@code decl} is, in the words a violation's message puts after the
+     * field's name: "is a number", "is one of [low, medium, high]". The English fallback of the
+     * codes {@link #problem} answers.
+     */
+    public static String expected(Map<String, Object> decl) {
+        return switch (String.valueOf(decl.get("type"))) {
+            case "number" -> decl.get("scale") != null
+                    ? "is one of " + SCALES.get(String.valueOf(decl.get("scale")))
+                    : "is a number";
+            case "date" -> "is a date, YYYY-MM-DD";
+            case "choice" -> "is one of " + optionKeys(decl);
+            default -> "is text";
         };
     }
 
@@ -87,6 +93,19 @@ public final class FieldValues {
     /** Absent, null, or text with nothing but blanks: the field has no value. */
     public static boolean isEmpty(Object value) {
         return value == null || value instanceof String s && s.isBlank();
+    }
+
+    /** A finite number, and on {@code scale}, where there is one, one of its points. */
+    private static String number(Object scale, Object value) {
+        if (!(value instanceof Number n) || !finite(n)) {
+            return "type";
+        }
+        if (scale == null) {
+            return null;
+        }
+        BigDecimal v = new BigDecimal(n.toString());
+        return SCALES.getOrDefault(String.valueOf(scale), List.of()).stream()
+                .anyMatch(point -> v.compareTo(BigDecimal.valueOf(point)) == 0) ? null : "scale";
     }
 
     private static boolean finite(Number n) {

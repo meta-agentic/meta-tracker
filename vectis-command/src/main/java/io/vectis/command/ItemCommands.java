@@ -68,8 +68,8 @@ public class ItemCommands {
                     ItemRules.fieldNames(command.fields(), violations);
                     Optional<KeyedBoard> board = board(ws.key(), all, command.board(), violations);
                     Optional<BoardColumn> column = board.flatMap(b -> column(b, command.column(), violations));
-                    effective.ifPresent(cfg -> column.ifPresent(c -> violations.addAll(
-                            FieldRules.create(cfg, c.key(), command.fields()))));
+                    effective.flatMap(cfg -> column.map(c -> FieldRules.create(cfg, c.key(), command.fields())))
+                            .ifPresent(violations::addAll);
                     if (!violations.isEmpty()) {
                         throw new CommandRejectedException(violations);
                     }
@@ -93,8 +93,8 @@ public class ItemCommands {
                     }
                     ItemRules.fieldNames(command.fields(), violations);
                     Item item = target.placed().item();
-                    effective.ifPresent(cfg -> violations.addAll(FieldRules.edit(cfg, target.placed().columnKey(),
-                            item.fields(), command.fields())));
+                    effective.map(cfg -> FieldRules.edit(cfg, target.placed().columnKey(), item.fields(), command.fields()))
+                            .ifPresent(violations::addAll);
                     if (!violations.isEmpty()) {
                         throw new CommandRejectedException(violations);
                     }
@@ -121,15 +121,13 @@ public class ItemCommands {
                     ItemRules.fieldNames(command.fields(), violations);
                     KeyedBoard board = all.stream().filter(b -> b.board().id().equals(item.boardId())).findFirst()
                             .orElseThrow();
-                    Optional<BoardColumn> column = Optional.empty();
                     if (command.column() == null) {
                         violations.add(ItemRules.violation("column", "a move names the column the item moves to"));
-                    } else {
-                        column = column(board, command.column(), violations);
                     }
-                    Optional<BoardColumn> into = column;
-                    effective.ifPresent(cfg -> into.ifPresent(c -> violations.addAll(
-                            FieldRules.move(cfg, c.key(), item.fields(), command.fields()))));
+                    Optional<BoardColumn> column = Optional.ofNullable(command.column())
+                            .flatMap(key -> column(board, key, violations));
+                    effective.flatMap(cfg -> column.map(c -> FieldRules.move(cfg, c.key(), item.fields(), command.fields())))
+                            .ifPresent(violations::addAll);
                     if (!violations.isEmpty()) {
                         throw new CommandRejectedException(violations);
                     }
@@ -155,9 +153,9 @@ public class ItemCommands {
      * for a workspace that has none.
      */
     private Uni<Optional<Map<String, Object>>> effective(String workspace) {
-        return workspaces.findConfiguration(workspace).chain(found -> found.isEmpty()
-                ? Uni.createFrom().item(Optional.<Map<String, Object>>empty())
-                : chains.effective(found.get()).map(Optional::of));
+        return workspaces.findConfiguration(workspace).chain(found -> found
+                .map(config -> chains.effective(config).map(Optional::of))
+                .orElseGet(() -> Uni.createFrom().item(Optional.empty())));
     }
 
     /** The workspace, if it exists and a client may write to it. */
