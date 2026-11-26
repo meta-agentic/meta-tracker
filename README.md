@@ -4,6 +4,72 @@
 boards, sprints, and real-time collaboration, built on
 [Quarkus](https://quarkus.io) and a virtualized web client.**
 
+## What works today
+
+Vectis is early, but it runs: a Quarkus server on PostgreSQL that serves its own web client and a REST API.
+
+- **Boards.** One column per workflow state, the cards in rank order, columns that a team keeps off the board left out, and a board larger than one page of the API loaded in full.
+- **Sprint.** The active sprint under a header with its goal, dates and points; a switcher for past and planned sprints.
+- **Backlog.** Epics and their items as a tree, with the item count and points per epic.
+- **Roadmap.** The same tree as a ledger beside a calendar grid.
+- **Item detail.** Status, parent epics, story points, labels, description and dependencies, opened from any card.
+- **Filter.** By text, epic, label, kind and priority; the filter is kept in the address, so it survives a reload and can be shared.
+- **Workspaces.** Several workspaces on one server, switched from the top bar.
+- **Preferences.** English or Italian; light, dark or system theme.
+- **REST API under `/api/v1`.** Read workspaces, boards, sprints, items, templates and a workspace's configuration; create, edit, move and delete items, each change checked against the item's version (`If-Match`).
+- **Import.** A server can read a backlog kept as Markdown files with YAML front matter and show it as a workspace (see below).
+
+Not there yet: sign-in, so do not expose a Vectis server to a network you do not trust; editing in the browser, which is read-only today (items change through the API); live updates between open browsers.
+
+## Run it
+
+You need Docker, JDK 25, Maven and Node.js. From the repository root:
+
+```sh
+# A throwaway PostgreSQL
+docker run -d --name vectis-demo-db -e POSTGRES_USER=vectis -e POSTGRES_PASSWORD=vectis \
+  -e POSTGRES_DB=vectis -p 127.0.0.1:5432:5432 postgres:18-alpine
+
+# The web client, opening the demo workspace by default, then the server that serves it
+(cd web && npm ci && VITE_VECTIS_WORKSPACE_KEY=E2E npm run build)
+mvn -B -ntp -pl vectis-server -am package -DskipTests
+
+# Start the server: it creates the schema at start and listens on port 8080
+VECTIS_DB_PASSWORD=vectis java -jar vectis-server/target/quarkus-app/quarkus-run.jar
+```
+
+Once the server is up, load the demo data from a second terminal:
+
+```sh
+for f in boards filter workspaces; do
+  docker exec -i vectis-demo-db psql -q -v ON_ERROR_STOP=1 -U vectis -d vectis < e2e/seed/$f.sql
+done
+```
+
+Open <http://localhost:8080>. The demo has two workspaces: `E2E`, with one board, three sprints, two epics and a little over two hundred items, and `TWO`, a small second workspace. These are the data the browser tests in `e2e/` run against; loading them again replaces them.
+
+Ctrl-C stops the server. `docker rm -f vectis-demo-db` removes the database. `QUARKUS_HTTP_PORT` moves the server, and `VECTIS_DB_HOST`, `VECTIS_DB_PORT`, `VECTIS_DB_NAME` and `VECTIS_DB_USER` point it at another database.
+
+### Import a Markdown backlog
+
+The server can also read a backlog kept as Markdown files with YAML front matter: one file per item in a folder per status tier, and the sprints in a folder of their own. The vault connector's test data is a small example. To import it, start the server with its location and run the import:
+
+```sh
+VECTIS_DB_PASSWORD=vectis \
+VECTIS_IMPORT_VAULT_ROOT="$PWD/vectis-connector-vault/src/test/resources/vaults/mapping/vault" \
+VECTIS_IMPORT_VAULT_SPACE=demo \
+  java -jar vectis-server/target/quarkus-app/quarkus-run.jar
+
+curl -X POST http://localhost:8080/api/v1/imports/vault
+```
+
+The import fills a workspace named after the items' key prefix (`DEMO` here) and answers with what it created, updated and left unchanged, and with every file it could not map cleanly; that example is built to carry a few.
+
+- A request never names a path: the server reads only the directory it was started with. Without one, the endpoint answers 404.
+- The import only reads. Running it again changes nothing unless a file changed, and an edited file updates that item and no other. An item deleted from the files is not deleted from the board.
+- The files stay the system of record: in an imported workspace every item write through the API answers 409, and the workspace reports `"readOnly": true`.
+- It has been run on the JVM only, not in the native executable.
+
 ## The name
 
 **Vectis** is the Latin word for a **lever** — the bar you set against a fulcrum
@@ -16,12 +82,6 @@ a small, well-placed instrument that lets a team move a large body of work with
 will move the Earth."* The *vehere* root carries the second half of the idea: a
 board's whole job is to **convey work forward**, from intent to done. Vectis is
 built to be that lever: light in the hand, heavy in what it moves.
-
-> **Status: bootstrap / planning.** This repository currently holds the project
-> scaffolding, governance, and contribution harness. The application modules
-> described below are being implemented against the roadmap; the build, CI, and
-> code-scanning workflows activate as the first code lands. Not yet usable as a
-> running product.
 
 ## Why
 
@@ -49,33 +109,9 @@ Product requirements and architectural decisions are recorded as ADRs under
 [`docs/adr/`](./docs/adr/) — start with
 [ADR-VEC-01 — product requirements & feature model](./docs/adr/ADR-VEC-01-product-requirements-and-features.md).
 
-**The backlog ships with the source.** The whole of it — open items, finished
-work, rejected proposals and the reasoning behind each — lives in
-[`.vault/`](./.vault/README.md) as plain Markdown under version control. Nothing
-is kept in a tracker you cannot see. An issue tracker whose own backlog is
-private would be a poor advertisement for itself.
-
-### Run Vectis on its own backlog
-
-One command brings up a throwaway PostgreSQL in Docker, builds the web client and the server, starts the server with the vault import switched on, imports this repository's own `.vault/vec` and leaves the server running. It needs Docker, JDK 25, Maven and Node.
-
-```sh
-scripts/run-local.sh
-```
-
-Open <http://localhost:8080>: the Boards tab shows the project's real backlog, one card per item, in the column its status maps to (`TO DO` and `REFINED` in Backlog, where a `refined` label tells the refined items apart, `PLANNED` in To Do, then `IN PROGRESS`, `IN REVIEW`, `DONE`, and `NO GO` kept off the board). Ctrl-C stops the server. The database keeps its data between runs, so running the command again imports again and changes nothing unless a file under `.vault/` changed; `docker rm -f vectis-local-db` removes it. `VECTIS_PORT` and `VECTIS_DB_PORT` move the ports.
-
-What the import does, and does not:
-
-- `POST /api/v1/imports/vault` reads the vault the server is configured with (`vectis.import.vault.root`, environment `VECTIS_IMPORT_VAULT_ROOT`; `vectis.import.vault.space`, default `vec`) through the vault connector. A request never names a path. With no root configured the endpoint answers 404, so a deployment that does not ask for the import does not have it.
-- It provisions the workspace `VEC` from the plain Scrum template if it does not exist, and upserts the items by key. Running it again changes nothing; an edited file updates that item and no other.
-- It only reads: nothing is written to `.vault/`. An item deleted from the vault is not deleted from the board.
-- The workspace it fills is bound to the vault, which stays the system of record: until write-back exists, every item write through `/api/v1` there (create, edit, move, delete) answers 409, and `GET /api/v1/workspaces/VEC` says `"readOnly": true`.
-- There is no sign-in yet (VEC-35), so do not switch the import on for a server that others can reach.
-
-Native image: the connector parses front-matter with SnakeYAML. Whether that parser works inside the native executable is not verified: the import has been run on the JVM only, and nothing in CI runs the native executable against a vault. The import is off unless `vectis.import.vault.root` is set, so the native image the pipeline builds does not use it, but its code is compiled into the image, and the first native build with it failed on `TimeOrderedId`, whose `SecureRandom` was initialized at build time; `vectis-domain` now declares that class run-time initialized in `META-INF/native-image`.
-
 ### Principles
+
+The principles below are the design Vectis is built towards; [What works today](#what-works-today) says how far it has come.
 
 - **Reactive, non-blocking core.** Every request path is asynchronous end to end
   (Quarkus + Mutiny over a reactive PostgreSQL client), so throughput is bounded
@@ -107,22 +143,23 @@ Native image: the connector parses front-matter with SnakeYAML. Whether that par
   contract at the centre; REST, persistence, and real-time concerns kept at the
   edges; only the composition root knows the concrete adapters.
 
-### Architecture (planned)
+### Architecture
 
-Vectis is structured as a four-module hexagon plus a thin composition root and a
-separate web client:
+A hexagon of Maven modules, a runnable composition root and a separate web client:
 
 | Module | Role |
 |--------|------|
-| `vectis-domain` | Pure-Java domain model: workspaces, boards, items, workflows, sprints. No framework imports. |
-| `vectis-api` | Application contract: inbound use cases + outbound ports. Depends on the domain only. |
-| `vectis-persistence` | Outbound adapter: reactive PostgreSQL (Hibernate Reactive / reactive pg-client); migrations own the schema and row-level security. |
-| `vectis-rest` | Inbound adapter: reactive REST resources, real-time (SSE) endpoints, OpenAPI. |
-| `vectis-server` | Composition root — the runnable Quarkus application. |
-| `web/` | The virtualized single-page client (React + a cache-layered store), built into `vectis-server` and served on the API's origin. |
+| `vectis-domain` | The domain model: workspaces, boards, columns, items, sprints, and time-ordered identity. No framework imports. |
+| `vectis-extension-spi` | The stable, framework-free contract that plugins and backlog sources implement. |
+| `vectis-core` | Extension discovery and the community fallback implementations. |
+| `vectis-persistence` | Schema, migrations and non-blocking repositories on the reactive PostgreSQL client. |
+| `vectis-command` | The one command layer every channel changes state through, free of JAX-RS. |
+| `vectis-connector-vault` | Reads a backlog kept as Markdown files into the import. |
+| `vectis-plugin-audit-enterprise` | An example of a separately packaged plugin, kept here to prove runtime plugin loading. |
+| `vectis-server` | The runnable Quarkus application: REST resources, the import, and the web client on the API's origin. |
+| `web/` | The single-page client (React with a cache-layered store), built into `vectis-server`. |
 
-The `domain` and `api` modules are framework-free by construction; architectural
-boundaries are enforced by tests so they cannot erode silently.
+The domain and the extension contract carry no framework dependency, and a build-time test fails any server class that writes to the database without going through the command layer.
 
 ### Technology
 
