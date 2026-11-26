@@ -49,10 +49,12 @@ export function LogoMark({ size = 22 }: { size?: number }) {
   );
 }
 
+/** A written page with a folded corner and three lines of text. */
 export function StoryIcon(props: IconProps) {
   return (
     <Icon {...props}>
-      <path d="M4.5 2.5h7v11L8 11l-3.5 2.5z" />
+      <path d="M9.5 1.75H5a1.5 1.5 0 0 0-1.5 1.5v9.5A1.5 1.5 0 0 0 5 14.25h6a1.5 1.5 0 0 0 1.5-1.5v-8z" />
+      <path d="M9.5 1.75v3h3M6 6.75h4M6 9h4M6 11.25h2.5" />
     </Icon>
   );
 }
@@ -72,11 +74,11 @@ export function BugIcon(props: IconProps) {
   );
 }
 
+/** A bookmark. */
 export function TaskIcon(props: IconProps) {
   return (
     <Icon {...props}>
-      <rect x="2.5" y="2.5" width="11" height="11" rx="2.5" />
-      <path d="m5.5 8 1.75 1.75L10.5 6.5" />
+      <path d="M4.5 2.5h7v11L8 11l-3.5 2.5z" />
     </Icon>
   );
 }
@@ -252,10 +254,12 @@ export function ProjectIcon(props: IconProps) {
   );
 }
 
+/** A flag with a check in its cloth: a square cloth, where the plain flag's is notched. */
 export function MilestoneIcon(props: IconProps) {
   return (
     <Icon {...props}>
-      <path d="M8 2.25 13.75 8 8 13.75 2.25 8z" />
+      <path d="M3 14.25V2.25M3 2.75h9a1.5 1.5 0 0 1 1.5 1.5v4.5a1.5 1.5 0 0 1-1.5 1.5H3" />
+      <path d="m5.75 6.5 1.5 1.5 3-3" />
     </Icon>
   );
 }
