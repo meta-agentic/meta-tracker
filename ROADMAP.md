@@ -1,6 +1,6 @@
 # Vectis Roadmap
 
-This is the public roadmap for the **Vectis Community edition**. It is maintained in the open for full visibility into where the project is heading, and the full backlog behind it ships with the repository under [`.vault/`](./.vault/README.md).
+This is the public roadmap for the **Vectis Community edition**. It is maintained in the open for full visibility into where the project is heading. The item-level backlog behind it is not published with the source.
 
 It mirrors our internal planning and is intentionally directional, not a dated
 commitment: scope and ordering can change as we learn. The roadmap covers the
@@ -8,7 +8,7 @@ open-source Community edition only — the separately licensed
 [Enterprise edition](./README.md#editions) is developed out of tree and is not
 part of this roadmap.
 
-> **Status: M1 mostly delivered** (as of 2026-09-29). The reactive core, time-ordered identifiers, native build and delivery, the extension model, the first persistence slice, continuous integration and the web client's API client are in. Template provisioning is next: its template-to-instance model spike is in progress. Live re-tagging and the multi-tenant blueprint are still planned. The backlog in `.vault/` is the item-level view, and this file is the narrative summary.
+> **Status: M1 mostly delivered** (as of 2026-09-29). The reactive core, time-ordered identifiers, native build and delivery, the extension model, the first persistence slice, continuous integration and the web client's API client are in. Template provisioning is next: its template-to-instance model spike is in progress. Live re-tagging and the multi-tenant blueprint are still planned. This file is the narrative summary.
 
 **Legend:** ⬜ planned · 🟡 in progress · ✅ done
 
@@ -46,7 +46,7 @@ Get work in and out, and open the seams.
 
 - ⬜ **Streaming import** of large backlogs without timeouts or memory spikes
 - ⬜ **Bidirectional mapping/export** against external trackers
-- 🟡 **Tracker adapter contract** — one read-only contract any backlog can be imported through, with this repository's own `.vault/` backlog as the first source (design done, read side in progress)
+- 🟡 **Tracker adapter contract** — one read-only contract any backlog can be imported through, with a backlog kept as Markdown files as the first source (design done, read side in progress)
 - ✅ **Client store optimization** with cache layering for instant board switching
 - ⬜ **Model Context Protocol (MCP) endpoint** so AI agents can safely read and
   update the backlog through the same rules as the UI
@@ -94,7 +94,7 @@ for this Community roadmap; see [Editions](./README.md#editions).
 
 ## How this roadmap is maintained
 
-- The backlog in [`.vault/`](./.vault/README.md) is the item-level view — one file per item, its directory is its status; this file is the human-readable summary, updated as milestones progress.
+- The item-level backlog is not published with the source; this file is the human-readable summary, updated as milestones progress.
 - Have a request or a strong opinion on ordering? Open a
   [feature request](./.github/ISSUE_TEMPLATE/feature_request.yml) or start a
   discussion — community input genuinely shapes this list.
