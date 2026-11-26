@@ -11,6 +11,8 @@ export interface Choice {
   name: string;
   /** One of the shared icons; drawn alone, with `name` as its accessible name and tooltip. */
   icon?: string;
+  /** Text drawn after the name, which describes the option without naming it: a parent's item key. */
+  detail?: string;
 }
 
 export interface FieldSpec {

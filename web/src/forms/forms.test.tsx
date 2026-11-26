@@ -7,6 +7,7 @@ import { ApiError, type WireItem, type WorkspaceApiClient } from "../api";
 import {
   ChoiceKindIcon,
   DateKindIcon,
+  EpicIcon,
   MarkdownKindIcon,
   NumberKindIcon,
   ScaleKindIcon,
@@ -16,7 +17,7 @@ import { TOOLTIP_DELAY_MS } from "../components/useTooltip";
 import { AppProviders } from "../providers/AppProviders";
 import { workspaceStore } from "../store/workspaceStore";
 import { ConfiguredForm } from "./ConfiguredForm";
-import { enterForm, itemForm, toBody, type FieldSpec } from "./definition";
+import { enterForm, itemForm, toBody, type Choice, type FieldSpec } from "./definition";
 import { FIELD_ICONS, KIND_ICONS, kindOf, type FieldKind, type Glyph } from "./fieldIcons";
 import { EditItemForm, MoveItemControl, NewItemControl } from "./ItemForms";
 import { ItemWritesProvider } from "./ItemWrites";
@@ -67,6 +68,12 @@ beforeEach(() => {
 });
 
 afterEach(() => vi.restoreAllMocks());
+
+/** Chooses `option` in the picker named `label`, as a pointer would. */
+function choose(label: RegExp, option: string) {
+  fireEvent.click(screen.getByRole("combobox", { name: label }));
+  fireEvent.click(screen.getByRole("option", { name: option }));
+}
 
 describe("the form definition", () => {
   it("draws a Scrum story: title, type, parent, then its own fields in its order", () => {
@@ -230,6 +237,69 @@ describe("the tooltip of an icon-only option", () => {
   });
 });
 
+describe("every option a ListEntry, and the parent picker", () => {
+  const parents: Choice[] = [
+    { key: "W-7", name: "Accounts", icon: "epic", detail: "W-7" },
+    { key: "W-9", name: "Billing", icon: "epic", detail: "W-9" },
+  ];
+  const risk: FieldSpec = {
+    path: "fields.risk", label: "Risk", kind: "choice", required: false,
+    options: [{ key: "low", name: "Low" }, { key: "high", name: "High risk" }],
+  };
+  const renderStory = (onChange = vi.fn()) => {
+    const definition = itemForm(scrum, "story", "create", parents);
+    render(
+      <AppProviders>
+        <ConfiguredForm definition={{ fields: [...definition.fields, risk] }} values={{ "fields.type": "story" }}
+          violations={[]} submitLabel="Create" onChange={onChange} onSubmit={() => {}} onCancel={() => {}} />
+      </AppProviders>,
+    );
+    return onChange;
+  };
+
+  it("draws every option list of a form with ListEntry: icons alone as radios, the others as pickers", () => {
+    renderStory();
+    const form = document.querySelector("form")!;
+    expect(form.querySelectorAll("select")).toHaveLength(0);
+    const radios = [...form.querySelectorAll<HTMLInputElement>('input[type="radio"]')].filter((r) => r.value !== "");
+    expect(radios.length).toBeGreaterThan(0);
+    for (const radio of radios) expect(radio.closest("label")!.querySelector('.vec-entry[data-show="icon"]')).not.toBeNull();
+    const pickers = screen.getAllByRole("combobox");
+    expect(pickers.map((c) => c.closest("[data-path]")!.getAttribute("data-path"))).toEqual([
+      "fields.parentId", "fields.storyPoints", "fields.risk",
+    ]);
+    for (const picker of pickers) {
+      fireEvent.click(picker);
+      const options = screen.getAllByRole("option");
+      expect(options.length).toBeGreaterThan(1);
+      for (const option of options) expect(option.querySelector(".vec-entry")).not.toBeNull();
+      fireEvent.click(picker);
+    }
+  });
+
+  it("shows each parent with its type's icon, its title, and its key after it", () => {
+    renderStory();
+    fireEvent.click(screen.getByRole("combobox", { name: "Parent" }));
+    const accounts = screen.getByRole("option", { name: "Accounts" });
+    expect(accounts).toHaveAccessibleDescription("W-7");
+    expect(accounts.querySelector(".vec-entry__label")).toHaveTextContent("Accounts");
+    expect(accounts.querySelector(".vec-entry__decorator")).toHaveTextContent("W-7");
+    const drawn = render(<EpicIcon />).container.querySelector("svg")!.innerHTML;
+    expect(accounts.querySelector(".vec-entry__icon svg")!.innerHTML).toBe(drawn);
+  });
+
+  it("chooses a parent from the keyboard: Down opens, End moves, Enter chooses", () => {
+    const onChange = renderStory();
+    const parent = screen.getByRole("combobox", { name: "Parent" });
+    act(() => parent.focus());
+    fireEvent.keyDown(parent, { key: "ArrowDown" });
+    fireEvent.keyDown(parent, { key: "End" });
+    expect(document.getElementById(parent.getAttribute("aria-activedescendant")!)).toHaveAccessibleName("Billing");
+    fireEvent.keyDown(parent, { key: "Enter" });
+    expect(onChange).toHaveBeenCalledWith("fields.parentId", "W-9");
+  });
+});
+
 describe("the glyph of each field's kind", () => {
   const kinds: { kind: FieldKind; field: FieldSpec; glyph: Glyph }[] = [
     { kind: "text", glyph: TextKindIcon, field: { path: "fields.summary", label: "Summary", kind: "text", required: false } },
@@ -289,7 +359,7 @@ describe("New item, Edit and Move against the API", () => {
     renderWith(client, <NewItemControl boardKey="W" columnKey="todo" />, refresh);
     fireEvent.click(await screen.findByRole("button", { name: "New item" }));
     fireEvent.change(screen.getByLabelText(/^Title/), { target: { value: "Sign in" } });
-    fireEvent.change(screen.getByLabelText(/^Story points/), { target: { value: "5" } });
+    choose(/^Story points/, "5");
     fireEvent.click(screen.getByRole("radio", { name: "High" }));
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
     await waitFor(() => expect(refresh).toHaveBeenCalled());
@@ -326,7 +396,8 @@ describe("New item, Edit and Move against the API", () => {
     const client = fakeClient(scrum);
     const done = vi.fn();
     renderWith(client, <EditItemForm itemKey="W-1" onDone={done} />);
-    fireEvent.change(await screen.findByLabelText(/^Story points/), { target: { value: "8" } });
+    await screen.findByRole("combobox", { name: /^Story points/ });
+    choose(/^Story points/, "8");
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(done).toHaveBeenCalled());
     expect(client.editItem).toHaveBeenCalledWith("W-1", 1, { fields: { storyPoints: 8 } });
@@ -339,7 +410,8 @@ describe("New item, Edit and Move against the API", () => {
       }),
     });
     renderWith(client, <EditItemForm itemKey="W-1" onDone={() => {}} />);
-    fireEvent.change(await screen.findByLabelText(/^Story points/), { target: { value: "8" } });
+    await screen.findByRole("combobox", { name: /^Story points/ });
+    choose(/^Story points/, "8");
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByText(/Someone else changed this item/)).toBeInTheDocument();
     expect(client.getItem).toHaveBeenCalledTimes(2);

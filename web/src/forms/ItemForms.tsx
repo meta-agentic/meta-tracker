@@ -20,7 +20,11 @@ function refusal(error: unknown, t: (key: string) => string): { violations: Fiel
   return { violations: [], message: error instanceof Error ? error.message : String(error) };
 }
 
-/** Items of the open workspace that an item of `type` may sit under, from what the board already holds. */
+/**
+ * Items of the open workspace that an item of `type` may sit under, from what
+ * the board already holds: each drawn with its type's icon, its title, and its
+ * key after it.
+ */
 function useParentChoices(cfg: Effective | null, type: string): Choice[] {
   const issuesById = useWorkspaceStore((s) => s.issuesById);
   const epicsById = useWorkspaceStore((s) => s.epicsById);
@@ -34,7 +38,7 @@ function useParentChoices(cfg: Effective | null, type: string): Choice[] {
     return rows
       .filter((r) => r.type !== null && allowed.includes(r.type))
       .sort((a, b) => a.key.localeCompare(b.key, undefined, { numeric: true }))
-      .map((r) => ({ key: r.key, name: `${r.key} ${r.title}` }));
+      .map((r) => ({ key: r.key, name: r.title, icon: cfg?.itemTypes[r.type as string]?.icon, detail: r.key }));
   }, [cfg, type, issuesById, epicsById]);
 }
 

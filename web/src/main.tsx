@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles/tokens.css";
 import "./styles/shell.css";
+import "./styles/controls.css";
 import "./styles/board.css";
 import "./styles/tree.css";
 import "./styles/roadmap.css";

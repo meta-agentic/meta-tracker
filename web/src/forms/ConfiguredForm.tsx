@@ -1,5 +1,7 @@
 import { useEffect, useId, useRef, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { ListEntry } from "../components/ListEntry";
+import { Picker, type PickerEntry } from "../components/Picker";
 import { Tooltip } from "../components/Tooltip";
 import { useTooltip } from "../components/useTooltip";
 import type { Choice, FieldSpec, FormDefinition } from "./definition";
@@ -23,15 +25,36 @@ export interface ConfiguredFormProps {
   onCancel: () => void;
 }
 
-/** A choice drawn as icons alone: every option has an icon the client knows, and there are few. */
-function iconChoice(field: FieldSpec): boolean {
-  const options = field.options ?? [];
-  return options.length > 0 && options.length <= 8 && options.every((o) => o.icon && FIELD_ICONS[o.icon]);
+/** The entries a choice offers in its picker: none first, then each option with its icon and its detail. */
+function pickerEntries(field: FieldSpec, none: string): PickerEntry[] {
+  return [
+    { value: "", label: none },
+    ...(field.options ?? []).map((o) => ({
+      value: o.key,
+      label: o.name,
+      icon: o.icon && FIELD_ICONS[o.icon] ? <FieldIcon name={o.icon} /> : undefined,
+      decorator: o.detail,
+    })),
+  ];
 }
 
 /**
- * An option drawn as its icon alone: the radio's accessible name is the
- * option's name, and the app's tooltip shows that name on hover and on focus.
+ * A choice drawn as icons alone: every option has an icon the client knows and
+ * no detail the icon alone would hide (a parent's key), and there are few.
+ */
+function iconChoice(field: FieldSpec): boolean {
+  const options = field.options ?? [];
+  return (
+    options.length > 0 &&
+    options.length <= 8 &&
+    options.every((o) => o.icon && FIELD_ICONS[o.icon] && o.detail === undefined)
+  );
+}
+
+/**
+ * An option drawn as its icon alone, a `ListEntry` showing only its icon: the
+ * radio's accessible name is the option's name, and the app's tooltip shows
+ * that name on hover and on focus.
  */
 function IconOption(props: { option: Choice; name: string; checked: boolean; onChoose: (key: string) => void }) {
   const { option } = props;
@@ -47,7 +70,7 @@ function IconOption(props: { option: Choice; name: string; checked: boolean; onC
         checked={props.checked}
         onChange={() => props.onChoose(option.key)}
       />
-      <FieldIcon name={option.icon} />
+      <ListEntry icon={<FieldIcon name={option.icon} />} label={option.name} show="icon" />
       <Tooltip id={tip.id} open={tip.open} text={option.name} />
     </label>
   );
@@ -61,7 +84,8 @@ function IconOption(props: { option: Choice; name: string; checked: boolean; onC
  * input, and after a refused submit focus lands on the first wrong input. An
  * option drawn as an icon alone keeps its name as its accessible name and shows
  * it in the app's tooltip. Each label starts with the glyph of its field's
- * kind, decorative.
+ * kind, decorative. Every option, whether a radio drawn as its icon or an entry
+ * of a picker, is a `ListEntry`.
  */
 export function ConfiguredForm(props: ConfiguredFormProps) {
   const { definition, values, violations } = props;
@@ -180,20 +204,22 @@ export function ConfiguredForm(props: ConfiguredFormProps) {
         } as const;
         return (
           <div key={f.path} className="vec-form__field" data-path={f.path}>
-            <label htmlFor={field}>
+            <label htmlFor={field} id={`${field}-label`}>
               <FieldKindIcon field={f} />
               {name}
               {required}
             </label>
             {f.kind === "choice" ? (
-              <select {...common} className="vec-form__input" onChange={(e) => change(e.target.value)}>
-                <option value="">{t("form.none")}</option>
-                {(f.options ?? []).map((o) => (
-                  <option key={o.key} value={o.key}>
-                    {o.name}
-                  </option>
-                ))}
-              </select>
+              <Picker
+                id={field}
+                entries={pickerEntries(f, t("form.none"))}
+                value={value}
+                onChange={change}
+                labelledBy={`${field}-label`}
+                describedBy={describedBy}
+                invalid={!!violation}
+                required={f.required}
+              />
             ) : f.kind === "markdown" ? (
               <textarea {...common} className="vec-form__input" rows={5} onChange={(e) => change(e.target.value)} />
             ) : (

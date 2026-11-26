@@ -1,0 +1,125 @@
+/*
+ * Small controls shared across the SPA: the tooltip, the list entry (an icon, a
+ * label and a decorator) and the picker that lists entries.
+ */
+
+/* ---------- Tooltip ---------- */
+
+/*
+ * The app's own tooltip (useTooltip): over its trigger, which is positioned, so
+ * it shifts no layout. The colours invert the surface's in either theme. The
+ * fade is an animation, which the reduced-motion rule in panels.css shortens.
+ */
+.vec-tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--vec-text);
+  color: var(--vec-surface);
+  box-shadow: var(--vec-shadow-md);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: vec-fade 120ms ease-out;
+}
+
+/* ---------- List entry ---------- */
+
+/* An icon of fixed width, the label taking the rest and ending in an ellipsis, a decorator that never wraps. */
+.vec-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.vec-entry[data-show="icon"] {
+  flex: 0 0 auto;
+}
+
+.vec-entry__icon {
+  display: inline-flex;
+  flex: 0 0 16px;
+  justify-content: center;
+  width: 16px;
+}
+
+.vec-entry__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vec-entry__decorator {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--vec-text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------- Picker ---------- */
+
+.vec-picker {
+  position: relative;
+  min-width: 0;
+}
+
+.vec-picker__trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.vec-picker__chevron {
+  flex: 0 0 auto;
+  transform: rotate(90deg);
+  color: var(--vec-text-muted);
+}
+
+.vec-picker__list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  max-height: 240px;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--vec-border-strong);
+  border-radius: 8px;
+  background: var(--vec-surface);
+  color: var(--vec-text);
+  box-shadow: var(--vec-shadow-lg);
+}
+
+.vec-picker__option {
+  display: flex;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.vec-picker__option[data-active] {
+  background: var(--vec-accent-soft);
+  color: var(--vec-accent-text);
+}
+
+.vec-picker__option[aria-selected="true"] {
+  font-weight: 600;
+}
