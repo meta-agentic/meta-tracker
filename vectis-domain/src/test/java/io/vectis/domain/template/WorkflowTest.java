@@ -41,7 +41,7 @@ class WorkflowTest {
         assertEquals(states(sg).keySet(), TemplateJson.obj(flow.get("states")).keySet());
         assertEquals(List.of("states", "initial", "transitions"), List.copyOf(flow.keySet()));
         assertEquals(flow, Workflow.definition(TemplateHierarchy.derive(r.res("base@1"),
-                reversed(Registry.h("stage-gate.v1.json")), "x").effective()));
+                reversed(Fixtures.load("stage-gate.v1.json")), "x").effective()));
     }
 
     @Test

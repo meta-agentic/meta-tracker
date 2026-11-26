@@ -230,16 +230,16 @@ class ProvisionTest {
         TemplateRef own = publishTenantTemplate(tenant, "tenant" + SEQ.incrementAndGet());
 
         List<TemplateSummary> builtIns = templates.findVisible(null).await().indefinitely();
-        assertEquals(List.of("base@1", "hybrid@1", "kanban@1", "scrum@1"),
+        assertEquals(List.of("base@1", "hybrid@1", "kanban@1", "scrum@1", "stage-gate@1"),
                 builtIns.stream().map(t -> t.latest().toString()).toList());
         assertTrue(builtIns.stream().allMatch(TemplateSummary::builtIn));
-        assertEquals(List.of("-", "scrum@1", "base@1", "base@1"),
+        assertEquals(List.of("-", "scrum@1", "base@1", "base@1", "base@1"),
                 builtIns.stream().map(t -> t.parent() == null ? "-" : t.parent().toString()).toList());
         assertTrue(builtIns.stream().allMatch(t -> t.follow().equals("manual")));
 
         List<TemplateSummary> visible = templates.findVisible(tenant).await().indefinitely();
-        assertEquals(builtIns, visible.subList(0, 4));
-        assertEquals(List.of(own), visible.subList(4, visible.size()).stream().map(TemplateSummary::latest).toList());
+        assertEquals(builtIns, visible.subList(0, builtIns.size()));
+        assertEquals(List.of(own), visible.subList(builtIns.size(), visible.size()).stream().map(TemplateSummary::latest).toList());
         assertEquals(TemplateRef.parse("scrum@1"), visible.getLast().parent());
         assertEquals(tenant, visible.getLast().tenantId());
 

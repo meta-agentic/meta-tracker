@@ -25,9 +25,12 @@ class PublishedBuiltInsTest {
 
     static {
         PUBLISHED_DIGESTS.put("base.v1", "8b8ed6f0313549ff122f5961b7b16083f2f4630e5617a93f8bcdd04323a39299");
-        PUBLISHED_DIGESTS.put("scrum.v1", "2f6e3370081ed00d07cad0f196c13fd91c7b1ed5c61f4ae93cd887f5b24df645");
+        // Revised in place by the PO's decision for VEC-70, before any customer depended on it; was
+        // 2f6e3370081ed00d07cad0f196c13fd91c7b1ed5c61f4ae93cd887f5b24df645. V8 overwrites it.
+        PUBLISHED_DIGESTS.put("scrum.v1", "2fba41b2f934fe1f185a978e61783b06abe8b3ea13a217a78b6841e1ecfa200b");
         PUBLISHED_DIGESTS.put("kanban.v1", "c7ee531e9ed2a920c33c3ff0dbff321adbd1dfc04f33215902cd3a7d26230c56");
         PUBLISHED_DIGESTS.put("hybrid.v1", "29505e03a5a8ce41c5f123415e73d80658e26be200d3c3a9fb554a06e5163e9f");
+        PUBLISHED_DIGESTS.put("stage-gate.v1", "6f3551dca8683239124d52777dba34d1a1a9d427051228d5615705c94d838997");
     }
 
     @Test

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted (2026-10-07, by the PO) |
+| **Status** | Accepted (2026-10-07, by the PO); amendment 1, the form vocabulary (VEC-70), proposed 2026-11-26 for the PO's approval |
 | **Date** | 2026-10-07 |
 | **Deciders** | Product Owner |
 | **Requirement** | [ADR-VEC-01](./ADR-VEC-01-product-requirements-and-features.md) **R-CORE-5** (template → instance), **R-CORE-3** (workflows are data); **R-SEC-2** as a constraint |
@@ -72,3 +72,50 @@ The forces: a change at a high level must reach many workspaces without anyone r
 - **Q6** Annotations: `description` members are the surviving annotation; YAML comments are throwaway.
 - **Q7** The definition adapter (VEC-76): parked until a second consumer needs it.
 - **Q8** One organisation, several methodologies: the duplication is accepted for v1; reopen with a lock-and-invariant-only tenant overlay when a real organisation needs it.
+
+## Amendment 1 — the form vocabulary (VEC-70, proposed 2026-11-26)
+
+### Background
+
+The forms for creating, editing and moving an item are drawn from the workspace's effective configuration, as the VEC-67 spike proposed ([`item-forms.md`](../spikes/item-forms.md)) and the PO decided for VEC-70. Until now the document said which fields exist, but not which item type has which, what an item must always have, or what a state needs before an item enters it. A form could not be drawn from it, and the server checked no field of an item at all.
+
+### Decision
+
+These additions extend D1 and D5. They inherit, override and lock like every other member.
+
+1. **Two more field kinds.** `fields.<k>.type` gains `markdown` (text over several lines, shown as Markdown) and `choice`. A `choice` has `options`: an ordered array of `{key, name, icon?}`, whose keys are in the key format and distinct. The stored value is the key, and a lower level replaces the array whole. Any field may carry a `default`, which must be a value of that field. The server writes it on create when the request leaves the field out.
+2. **Fields per item type.** `itemTypes.<t>.fields` lists the declared fields an item of that type has, in form order; when it is absent, the type has every declared field. `itemTypes.<t>.required` lists the fields an item of that type always has a value for, and must be a subset of the type's fields. Both are arrays and are replaced whole.
+3. **What a state needs.** `states.<s>.requires` lists the fields an item must have a value for to enter the state, by any way in, creation into the state included. It applies only to item types that have the field. Requirements hang on the entered state because the document has no authored transitions (D8).
+4. **Icons.** An item type and a choice option may carry an `icon`. It names one of a closed set every client draws: `story`, `bug`, `task`, `epic`, `spike`, `enabler`, `project`, `milestone`, `deliverable`, `high`, `medium`, `low`, `flag`, `warning`. A client may draw the icon alone; the element's `name` stays its accessible name and its tooltip.
+5. **Reserved keys.** Vectis keeps `type` and `parentId` on every item, so no template may declare a field with either key.
+6. **Validation.** Resolution checks all of the above and reports each problem by its dotted path, as for every other member:
+   - a field list, required list or state requirement that names an undeclared field, or names one twice;
+   - a required field the type does not have;
+   - options on a field that is not a choice, or a choice with no options;
+   - a duplicate or malformed option key;
+   - a default that is not a value of its field;
+   - an unknown icon.
+7. **Applied to every write.** The command layer applies these rules to every item write, from every channel:
+   - a create is checked whole;
+   - an edit is checked only on the fields it changes, and cannot empty a field that the item's type or current state needs;
+   - a move is checked against what the target state requires, after the move's own fields are applied, which it writes as one version and one event.
+
+   The web client runs the same rules before it sends. One conformance fixture, `vectis-command/src/test/resources/conformance/item-rules.json`, is read by both test suites and holds the two to the same answers.
+8. **Point scales** are closed lists: `fibonacci` is 0, 1, 2, 3, 5, 8, 13, 21; `linear` is 0 to 10.
+9. **Built-ins.**
+   - `scrum@1` is revised in place by the PO's decision, because no workspace depended on it yet. It gains per-type field lists, a `description` (Markdown, required for a bug) and a `priority` (a choice with icons, default `medium`), and no `requires`. This is the one exception to D6's rule that a change is a new version, made before any customer depended on the version. The V8 migration rewrites the stored row, together with `hybrid@1`, which resolves through it.
+   - `stage-gate@1`, until now a test fixture of the hierarchy, ships as a built-in with `requires: ["businessCase"]` on Gate 1.
+
+### Consequences
+
+- The open `fields` document stays open. Undeclared members, such as labels, links and whatever an import brings, pass unchecked.
+- An item written before a rule existed stays editable wherever an edit does not touch that rule.
+- Conditional rules, such as a field that is required when another field has a value, are not in this vocabulary; they are VEC-134's.
+- Names are template data in one language. There is no per-locale `name`.
+
+### Reopen if
+
+- A state entered from two sources needs different inputs: that needs authored transitions.
+- Forms need conditional fields or repeating groups.
+- Templates need names per locale.
+

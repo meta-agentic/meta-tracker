@@ -17,7 +17,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 /**
- * The four built-ins shipped in {@code src/main/resources/templates}: each resolves cleanly, its
+ * The five built-ins shipped in {@code src/main/resources/templates}: each resolves cleanly, its
  * authored and resolved forms conform to {@code template.schema.json}, and its resolved form
  * equals the committed golden file. After a deliberate change to the resolution rules (and a
  * {@link TemplateResolver#RESOLVER_VERSION} bump), regenerate the golden files with
@@ -29,7 +29,8 @@ class BuiltInTemplatesTest {
             "base", List.of("base"),
             "kanban", List.of("base", "kanban"),
             "scrum", List.of("base", "scrum"),
-            "hybrid", List.of("base", "scrum", "hybrid"));
+            "hybrid", List.of("base", "scrum", "hybrid"),
+            "stage-gate", List.of("base", "stage-gate"));
 
     static final SchemaCheck SCHEMA = new SchemaCheck(load("template.schema.json"));
 
@@ -38,7 +39,7 @@ class BuiltInTemplatesTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"base", "kanban", "scrum", "hybrid"})
+    @ValueSource(strings = {"base", "kanban", "scrum", "hybrid", "stage-gate"})
     @DisplayName("a built-in resolves cleanly and matches its golden file")
     void golden(String key) throws IOException {
         Resolution r = resolve(key);
@@ -54,7 +55,7 @@ class BuiltInTemplatesTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"base", "kanban", "scrum", "hybrid"})
+    @ValueSource(strings = {"base", "kanban", "scrum", "hybrid", "stage-gate"})
     @DisplayName("a built-in, authored and resolved, conforms to template.schema.json")
     void schema(String key) {
         assertEquals(List.of(), SCHEMA.check(load(key + ".v1.json")));

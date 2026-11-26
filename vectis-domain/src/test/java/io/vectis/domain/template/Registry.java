@@ -13,16 +13,16 @@ import java.util.TreeMap;
  */
 final class Registry implements TemplateVersion.Catalog {
 
-    static final List<String> BUILT_INS = List.of("base.v1.json", "kanban.v1.json", "scrum.v1.json", "hybrid.v1.json");
+    static final List<String> BUILT_INS = List.of("base.v1.json", "kanban.v1.json", "scrum.v1.json", "hybrid.v1.json",
+            "stage-gate.v1.json");
 
     final List<TemplateVersion> versions = new ArrayList<>();
     final Map<String, Map<String, Object>> resolved = new TreeMap<>();
 
-    /** The shipped hierarchy: the four built-ins, stage-gate as a fifth system template, and Acme's organisation and team levels. */
+    /** The shipped hierarchy: the five built-ins, and Acme's organisation and team levels. */
     static Registry shipped() {
         Registry r = new Registry();
         BUILT_INS.forEach(f -> r.require(TemplateResolver.SYSTEM, Fixtures.load(f)));
-        r.require(TemplateResolver.SYSTEM, h("stage-gate.v1.json"));
         r.require("acme", h("acme.v1.json"));
         r.require("acme", h("acme-platform.v1.json"));
         return r;

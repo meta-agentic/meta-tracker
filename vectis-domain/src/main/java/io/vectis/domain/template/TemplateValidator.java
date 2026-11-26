@@ -26,8 +26,10 @@ final class TemplateValidator {
     static final List<String> CATEGORIES = List.of("START_STATE", "IN_PROGRESS", "END_STATE");
     /** DISCONTINUED: work stopped without completion and with no viable path forward (a no go). */
     static final List<String> OUTCOMES = List.of("DELIVERED", "DISCONTINUED");
-    static final List<String> FIELD_TYPES = List.of("number", "text", "date");
+    static final List<String> FIELD_TYPES = FieldValues.TYPES;
     static final List<String> SCALES = List.of("fibonacci", "linear");
+    /** Members of {@code fields} that Vectis itself gives every item: no template may declare them. */
+    static final List<String> RESERVED_FIELDS = List.of("type", "parentId");
     /** How work is paced: sprints (Scrum), continuous flow (Kanban), or phases separated by gates (stage-gate). */
     static final List<String> CADENCES = List.of("sprint", "flow", "phase");
 
@@ -40,9 +42,10 @@ final class TemplateValidator {
             "document", List.of("template", "version", "name", "description", "extends", "locks",
                     "states", "stateOrder", "itemTypes", "fields", "settings", "cadence", "deliveryGates"),
             "states", List.of("name", "description", "category", "outcome", "onBoard", "after", "before",
-                    "wipLimit", "enterFrom", "gate"),
-            "itemTypes", List.of("name", "description", "parents"),
-            "fields", List.of("name", "description", "type", "scale"),
+                    "wipLimit", "enterFrom", "gate", "requires"),
+            "itemTypes", List.of("name", "description", "parents", "icon", "fields", "required"),
+            "fields", List.of("name", "description", "type", "scale", "options", "default"),
+            "option", List.of("key", "name", "icon"),
             "settings", List.of("defaultItemType", "gatedDelivery"),
             "cadence", List.of("mode", "sprintDays"),
             "gate", List.of("approvals"));
@@ -92,6 +95,7 @@ final class TemplateValidator {
             if (st.containsKey("gate")) {
                 gate(p + ".gate", st, v);
             }
+            fieldKeys(p + ".requires", st.get("requires"), obj(doc.get("fields")).keySet(), v);
         }
         if (!start || !delivered) {
             v.add(Violation.of("states", "needs at least one START_STATE state and one END_STATE state with outcome DELIVERED"));
@@ -108,15 +112,41 @@ final class TemplateValidator {
             members("itemTypes." + k + ".", obj(x), "itemTypes", v);
         });
         itemTypeHierarchy(types, v);
-        obj(doc.get("fields")).forEach((k, x) -> {
+        Map<String, Object> fields = obj(doc.get("fields"));
+        fields.forEach((k, x) -> {
             Map<String, Object> f = obj(x);
-            requireName("fields." + k, f, v);
-            members("fields." + k + ".", f, "fields", v);
+            String p = "fields." + k;
+            requireName(p, f, v);
+            members(p + ".", f, "fields", v);
+            if (RESERVED_FIELDS.contains(k)) {
+                v.add(Violation.of(p, "'" + k + "' is a member Vectis keeps on every item; declare the field under another key"));
+            }
             if (!in(FIELD_TYPES, f.get("type"))) {
-                v.add(Violation.of("fields." + k + ".type", "must be one of " + FIELD_TYPES));
+                v.add(Violation.of(p + ".type", "must be one of " + FIELD_TYPES));
             }
             if (f.containsKey("scale") && !("number".equals(f.get("type")) && in(SCALES, f.get("scale")))) {
-                v.add(Violation.of("fields." + k + ".scale", "must be one of " + SCALES + " on a number field"));
+                v.add(Violation.of(p + ".scale", "must be one of " + SCALES + " on a number field"));
+            }
+            if ("choice".equals(f.get("type"))) {
+                options(p + ".options", f.get("options"), v);
+            } else if (f.containsKey("options")) {
+                v.add(Violation.of(p + ".options", "only a choice field has options"));
+            }
+            if (f.get("default") != null && in(FIELD_TYPES, f.get("type")) && FieldValues.problem(f, f.get("default")) != null) {
+                v.add(Violation.of(p + ".default", "is not a value of this field: " + compact(f.get("default"))));
+            }
+        });
+        types.forEach((k, x) -> {
+            Map<String, Object> t = obj(x);
+            String p = "itemTypes." + k;
+            icon(p + ".icon", t, v);
+            fieldKeys(p + ".fields", t.get("fields"), fields.keySet(), v);
+            Set<String> own = t.get("fields") == null ? fields.keySet() : new HashSet<>(strings(t.get("fields")));
+            fieldKeys(p + ".required", t.get("required"), fields.keySet(), v);
+            for (String r : t.get("required") instanceof List<?> ? strings(t.get("required")) : List.<String>of()) {
+                if (fields.containsKey(r) && !own.contains(r)) {
+                    v.add(Violation.of(p + ".required", "'" + r + "' is not one of this type's fields"));
+                }
             }
         });
         Object def = obj(doc.get("settings")).get("defaultItemType");
@@ -127,6 +157,61 @@ final class TemplateValidator {
         cadence(obj(doc.get("cadence")), v);
         locks(doc, v);
         gatedDelivery(doc, v);
+    }
+
+    /**
+     * A list of declared field keys ({@code itemTypes.<t>.fields}, {@code itemTypes.<t>.required},
+     * {@code states.<s>.requires}): an array of keys, each a field the document declares, none twice.
+     * Absent is allowed.
+     */
+    private static void fieldKeys(String path, Object list, Set<String> declared, List<Violation> v) {
+        if (list == null) {
+            return;
+        }
+        if (!isKeyList(list)) {
+            v.add(Violation.of(path, "must be an array of field keys"));
+            return;
+        }
+        Set<String> seen = new HashSet<>();
+        for (String k : strings(list)) {
+            if (!declared.contains(k)) {
+                v.add(Violation.of(path, "references unknown field '" + k + "'"));
+            } else if (!seen.add(k)) {
+                v.add(Violation.of(path, "lists '" + k + "' twice"));
+            }
+        }
+    }
+
+    /** A choice's options: at least one, each {@code {key, name, icon?}}, keys in the key format and distinct. */
+    private static void options(String path, Object options, List<Violation> v) {
+        if (!(options instanceof List<?> list) || list.isEmpty()) {
+            v.add(Violation.of(path, "a choice field has an array of at least one option"));
+            return;
+        }
+        Set<Object> keys = new HashSet<>();
+        for (int i = 0; i < list.size(); i++) {
+            String p = path + "[" + i + "]";
+            if (!(list.get(i) instanceof Map<?, ?>)) {
+                v.add(Violation.of(p, "must be an object {key, name}"));
+                continue;
+            }
+            Map<String, Object> o = obj(list.get(i));
+            members(p + ".", o, "option", v);
+            if (!(o.get("key") instanceof String key && LevelResolver.KEY.matcher(key).matches())) {
+                v.add(Violation.of(p + ".key", "must match " + LevelResolver.KEY.pattern()));
+            } else if (!keys.add(key)) {
+                v.add(Violation.of(p + ".key", "'" + key + "' is already an option"));
+            }
+            requireName(p, o, v);
+            icon(p + ".icon", o, v);
+        }
+    }
+
+    /** An icon, where one is given, names one of the icons every client draws. */
+    private static void icon(String path, Map<String, Object> el, List<Violation> v) {
+        if (el.containsKey("icon") && !in(FieldValues.ICONS, el.get("icon"))) {
+            v.add(Violation.of(path, "must be one of " + FieldValues.ICONS + ", was " + compact(el.get("icon"))));
+        }
     }
 
     /** Members outside the closed set are rejected, one violation per unknown member. */
