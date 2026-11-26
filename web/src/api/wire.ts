@@ -1,4 +1,4 @@
-import { ApiError, type Problem } from "./errors";
+import { ApiError, type Problem, type ProblemViolation } from "./errors";
 
 /**
  * The transport shapes, and the narrowing that turns an untrusted `unknown`
@@ -38,6 +38,15 @@ export interface WireWorkspace {
   key: string;
   name: string;
   template: WireTemplateRef;
+  /** True for a workspace bound to a backlog source: no client may write to it (VEC-16). */
+  readOnly: boolean;
+}
+
+/** `GET /workspaces/{key}/configuration`: the effective configuration and its revision (VEC-69). */
+export interface WireConfiguration {
+  revision: number;
+  /** The resolved document; its form vocabulary is read by `src/forms`, which types it. */
+  effective: Record<string, WireJsonValue>;
 }
 
 /** A column of `WorkspacesResource.BoardView`. Its key is unique within its board only. */
@@ -201,6 +210,7 @@ export function decodeWorkspace(value: unknown, path = "workspace"): WireWorkspa
   return {
     key: asString(record, "key", path),
     name: asString(record, "name", path),
+    readOnly: record.readOnly === true,
     template: {
       key: asString(template, "key", `${path}.template`),
       version: asInteger(template, "version", `${path}.template`),
@@ -271,7 +281,7 @@ export function decodeItemPage(value: unknown, path = "items"): WireItemPage {
 export function readProblem(value: unknown): Problem | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
-  const { type, title, status, detail } = record;
+  const { type, title, status, detail, violations } = record;
   if (typeof title !== "string" || typeof status !== "number" || !Number.isInteger(status)) {
     return null;
   }
@@ -280,7 +290,24 @@ export function readProblem(value: unknown): Problem | null {
     title,
     status,
     detail: typeof detail === "string" ? detail : null,
+    violations: Array.isArray(violations) ? violations.flatMap(readViolation) : [],
   };
+}
+
+/** One violation, or nothing for an entry that is not one: lenient, like the problem it sits in. */
+function readViolation(value: unknown): ProblemViolation[] {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return [];
+  const { field, message, code } = value as Record<string, unknown>;
+  if (typeof field !== "string" || typeof message !== "string") return [];
+  return [{ field, message, code: typeof code === "string" ? code : null }];
+}
+
+export function decodeConfiguration(value: unknown, path = "configuration"): WireConfiguration {
+  const record = asRecord(value, path);
+  const effective = asFields(record, "effective", path);
+  asRecord(effective.itemTypes, `${path}.effective.itemTypes`);
+  asRecord(effective.states, `${path}.effective.states`);
+  return { revision: asInteger(record, "revision", path), effective };
 }
 
 function asNumber(record: Record<string, unknown>, key: string, path: string): number {

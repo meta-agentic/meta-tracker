@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useModal } from "./useModal";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useWorkspaceStore } from "../store/workspaceStore";
@@ -7,6 +8,8 @@ import type { ID } from "../store/types";
 import { EpicChip, TypeBadge } from "./IssueCard";
 import { CloseIcon, LinkIcon } from "./icons";
 import { Markdown } from "./Markdown";
+import { EditItemForm, MoveItemControl, ReadOnlyNote } from "../forms/ItemForms";
+import { useItemWrites } from "../forms/itemWritesContext";
 import { ancestorChain, epicAsIssue, linkGroups, type ItemIndex, type ItemNode, type LinkRow } from "../lib/itemTree";
 
 export interface IssueDetailProps {
@@ -16,81 +19,12 @@ export interface IssueDetailProps {
   onNavigate: (issueId: ID) => void;
 }
 
-const FOCUSABLE =
-  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
 /** `YYYY-MM-DD` read as a local calendar date, so no timezone shifts the day. */
 function parseDay(value: string): Date | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!match) return null;
   const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
   return Number.isNaN(date.getTime()) ? null : date;
-}
-
-/**
- * Makes the sheet modal for as long as it is mounted.
- *
- * Everything else on the page is made `inert` — not focusable, not clickable,
- * hidden from assistive technology — so focus cannot leave the sheet by a click
- * or a Tab. Escape and Tab are handled at the document, not on the sheet, so
- * they still work when focus sits somewhere a keydown on the sheet would never
- * see. Only the `inert` attributes this added are removed again.
- */
-function useModal(
-  rootRef: RefObject<HTMLElement | null>,
-  panelRef: RefObject<HTMLElement | null>,
-  onClose: () => void,
-) {
-  const onCloseRef = useRef(onClose);
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  });
-
-  useEffect(() => {
-    const root = rootRef.current;
-    // Nothing rendered (the item vanished and the panel is about to close).
-    if (!root) return;
-    const made: Element[] = [];
-    for (const element of Array.from(document.body.children)) {
-      if (element !== root && !element.hasAttribute("inert")) {
-        element.setAttribute("inert", "");
-        made.push(element);
-      }
-    }
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      const panel = panelRef.current;
-      if (!panel) return;
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onCloseRef.current();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const focusable = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE));
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const inside = panel.contains(document.activeElement);
-      // The panel itself takes focus when its text is clicked. It sits before
-      // the first control, so Shift+Tab from there leaves the sheet unless it
-      // is caught here too.
-      const atStart = document.activeElement === first || document.activeElement === panel;
-      if (!inside || (event.shiftKey && atStart)) {
-        event.preventDefault();
-        (event.shiftKey ? last : first).focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      for (const element of made) element.removeAttribute("inert");
-    };
-  }, [rootRef, panelRef]);
 }
 
 /**
@@ -132,6 +66,12 @@ export function IssueDetail({ issueId, onClose, onNavigate }: IssueDetailProps) 
     [issuesById, epicsById, boardsById],
   );
   const ancestors = useMemo(() => ancestorChain(index, issueId), [index, issueId]);
+  const writes = useItemWrites();
+  const writable = writes !== null && writes.readOnly === false && writes.configuration !== null;
+  // The item being edited: following a link to another item leaves the form.
+  const [editingId, setEditingId] = useState<ID | null>(null);
+  const editing = editingId === issueId;
+  const setEditing = (on: boolean) => setEditingId(on ? issueId : null);
   const groups = useMemo(() => linkGroups(index, issueId), [index, issueId]);
 
   // A revalidation can remove the item under an open panel. Closing beats
@@ -204,6 +144,28 @@ export function IssueDetail({ issueId, onClose, onNavigate }: IssueDetailProps) 
           <h2 id={titleId} className="vec-sheet__title">
             {issue.title}
           </h2>
+
+          {writes?.readOnly === true && <ReadOnlyNote />}
+          {writable && !editing && (
+            <div className="vec-form__item-actions">
+              <button type="button" className="vec-button" onClick={() => setEditing(true)}>
+                {t("form.edit")}
+              </button>
+              {board && (
+                <MoveItemControl
+                  key={issue.id}
+                  itemKey={issue.key}
+                  columns={board.columns.map((c) => ({ key: c.id, name: c.name }))}
+                  current={issue.columnId}
+                />
+              )}
+            </div>
+          )}
+          {writable && editing && (
+            <section className="vec-sheet__section" aria-label={t("form.editItem")}>
+              <EditItemForm itemKey={issue.key} onDone={() => setEditing(false)} />
+            </section>
+          )}
 
           <dl className="vec-props">
             <div>

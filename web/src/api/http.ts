@@ -22,12 +22,17 @@ export interface HttpClientOptions {
 export interface HttpClient {
   /** GETs `path` relative to the base URL and returns the parsed JSON body. */
   getJson(path: string, signal?: AbortSignal): Promise<unknown>;
+  /**
+   * Sends `body` as JSON with `method` and returns the parsed response body.
+   * `ifMatch` is the version a write to an existing item is made against.
+   */
+  sendJson(method: "POST" | "PATCH", path: string, body: unknown, ifMatch?: number): Promise<unknown>;
 }
 
-function buildHeaders(): HeadersInit {
+function buildHeaders(extra: Record<string, string> = {}): HeadersInit {
   // VEC-35 adds the Authorization header here. Nothing else in the client
   // constructs headers, so that stays a one-line change.
-  return { Accept: "application/json, application/problem+json" };
+  return { Accept: "application/json, application/problem+json", ...extra };
 }
 
 /** The problem+json body of a failed response, or null when it carries none. */
@@ -87,27 +92,22 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
   const { baseUrl, timeoutMs } = options;
   const transport = options.transport ?? defaultTransport;
 
-  return {
-    async getJson(path, signal) {
+  async function request(method: string, path: string, init: RequestInit, signal?: AbortSignal): Promise<unknown> {
       const url = `${baseUrl}${path}`;
       const bound = withTimeout(timeoutMs, signal);
 
       let response: Response;
       try {
-        response = await transport(url, {
-          method: "GET",
-          headers: buildHeaders(),
-          signal: bound.signal,
-        });
+        response = await transport(url, { ...init, method, signal: bound.signal });
       } catch (cause) {
         if (bound.timedOut()) {
-          throw new ApiError("timeout", `GET ${url} timed out after ${timeoutMs}ms`, {
+          throw new ApiError("timeout", `${method} ${url} timed out after ${timeoutMs}ms`, {
             cause,
           });
         }
         // An outer abort is the caller's own decision, not a failure to report.
         if (signal?.aborted) throw cause;
-        throw new ApiError("network", `GET ${url} could not reach the server`, { cause });
+        throw new ApiError("network", `${method} ${url} could not reach the server`, { cause });
       } finally {
         bound.done();
       }
@@ -119,7 +119,7 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
         // something is.
         const message = problem
           ? `${problem.status} ${problem.title}${problem.detail ? `: ${problem.detail}` : ""}`
-          : `GET ${url} returned ${response.status} ${response.statusText}`.trimEnd();
+          : `${method} ${url} returned ${response.status} ${response.statusText}`.trimEnd();
         throw new ApiError("http", message, {
           status: response.status,
           problem: problem ?? undefined,
@@ -129,10 +129,21 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
       try {
         return (await response.json()) as unknown;
       } catch (cause) {
-        throw new ApiError("format", `GET ${url} returned a body that is not JSON`, {
+        throw new ApiError("format", `${method} ${url} returned a body that is not JSON`, {
           cause,
         });
       }
-    },
+  }
+
+  return {
+    getJson: (path, signal) => request("GET", path, { headers: buildHeaders() }, signal),
+    sendJson: (method, path, body, ifMatch) =>
+      request(method, path, {
+        headers: buildHeaders({
+          "Content-Type": "application/json",
+          ...(ifMatch === undefined ? {} : { "If-Match": `"${ifMatch}"` }),
+        }),
+        body: JSON.stringify(body),
+      }),
   };
 }

@@ -21,7 +21,7 @@ import type { WireBoard, WireItem, WireJsonValue, WireWorkspace } from "../api/w
  * payload would render.
  */
 
-const workspace: WireWorkspace = { key: "ORB", name: "Orbit", template: { key: "scrum", version: 1 } };
+const workspace: WireWorkspace = { key: "ORB", name: "Orbit", template: { key: "scrum", version: 1 }, readOnly: false };
 
 const columns = [
   { key: "backlog", name: "Backlog", ordinal: 0, onBoard: true },

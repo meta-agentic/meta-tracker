@@ -25,6 +25,18 @@ export interface Problem {
   title: string;
   status: number;
   detail: string | null;
+  /**
+   * What broke which rule, on a 422 (and a 409 that names a field). `field` is
+   * the request member's path (`title`, `fields.storyPoints`); `code` is what
+   * the client translates, `message` the English fallback (ADR-VEC-05).
+   */
+  violations: ProblemViolation[];
+}
+
+export interface ProblemViolation {
+  field: string;
+  message: string;
+  code: string | null;
 }
 
 export class ApiError extends Error {

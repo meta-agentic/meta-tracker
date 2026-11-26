@@ -118,7 +118,7 @@ export function createRecordedTransport(initial: Recording): RecordedTransport {
 export const workspaceFixture: WireWorkspace = {
   key: "VEC",
   name: "Vectis",
-  template: { key: "scrum", version: 1 },
+  template: { key: "scrum", version: 1 }, readOnly: false,
 };
 
 /** The workspace's first board, which takes the workspace key. Columns out of ordinal order. */
@@ -193,7 +193,7 @@ export function snapshotRecording(items: WireItem[] = [itemFixture()]): Recordin
 export const otherWorkspaceFixture: WireWorkspace = {
   key: "OPS",
   name: "Operations",
-  template: { key: "scrum", version: 1 },
+  template: { key: "scrum", version: 1 }, readOnly: false,
 };
 
 export const otherBoardFixture: WireBoard = {

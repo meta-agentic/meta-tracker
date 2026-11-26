@@ -226,3 +226,71 @@ export function SearchIcon(props: IconProps) {
     </Icon>
   );
 }
+
+/* ---------- Icons a template may name (VEC-70): item types and choice options ---------- */
+
+export function EpicIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m8 2 5.5 3L8 8 2.5 5z" />
+      <path d="m2.5 8 5.5 3 5.5-3M2.5 11 8 14l5.5-3" />
+    </Icon>
+  );
+}
+
+export function ProjectIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M2.5 4.5a1 1 0 0 1 1-1h3l1.5 1.5h4.5a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1z" />
+    </Icon>
+  );
+}
+
+export function MilestoneIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M8 2.25 13.75 8 8 13.75 2.25 8z" />
+    </Icon>
+  );
+}
+
+export function DeliverableIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M2.5 5 8 2.5 13.5 5v6L8 13.5 2.5 11z" />
+      <path d="M2.5 5 8 7.5 13.5 5M8 7.5v6" />
+    </Icon>
+  );
+}
+
+export function PriorityHighIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m4 9.5 4-4 4 4M4 13l4-4 4 4" />
+    </Icon>
+  );
+}
+
+export function PriorityMediumIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M3.5 6.25h9M3.5 9.75h9" />
+    </Icon>
+  );
+}
+
+export function PriorityLowIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m4 6.5 4 4 4-4" />
+    </Icon>
+  );
+}
+
+export function FlagIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M3.5 14V2.5M3.5 3h8l-1.75 3L11.5 9h-8" />
+    </Icon>
+  );
+}

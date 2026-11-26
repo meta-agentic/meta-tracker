@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useWorkspaceStore } from "./store/workspaceStore";
 import {
@@ -40,6 +40,8 @@ import {
   SyncIndicator,
 } from "./components/states";
 import { ProfilingHarness } from "./profiling/ProfilingHarness";
+import { NewItemControl } from "./forms/ItemForms";
+import { ItemWritesProvider } from "./forms/ItemWrites";
 import { RoadmapCanvas } from "./roadmap/RoadmapCanvas";
 
 export interface AppProps {
@@ -69,6 +71,9 @@ function BoardsTab({
   const { t } = useTranslation();
   const activeBoardId = useWorkspaceStore((s) => s.activeBoardId);
   const hasBoards = useWorkspaceStore((s) => Object.keys(s.boardsById).length > 0);
+  const firstColumn = useWorkspaceStore((s) =>
+    activeBoardId ? (s.boardsById[activeBoardId]?.columns[0]?.id ?? null) : null,
+  );
   const [openIssueId, setOpenIssueId] = useState<ID | null>(null);
   const openIssueIdRef = useRef<ID | null>(null);
   // What had focus when the panel opened, for when the card it came from is
@@ -132,6 +137,11 @@ function BoardsTab({
       ) : (
         <>
           <BoardSwitcher />
+          {activeBoardId && (
+            <div className="vec-form__board-actions">
+              <NewItemControl boardKey={activeBoardId} columnKey={firstColumn} />
+            </div>
+          )}
           <BoardFilterBar onBoardOnly />
           {/* Keyed on the board, never on the locale or the sync status: re-keying
               on either would re-mount the board and lose the scroll position on a
@@ -304,6 +314,15 @@ export function App({ createApi = defaultCreateApi }: AppProps = {}) {
     [connection],
   );
   const sync = useWorkspaceSync({ workspaceKey: openKey, createClient });
+  // The item forms' client for the open workspace; null while none can be built.
+  const formsClient = useMemo(() => {
+    if (openKey === null) return null;
+    try {
+      return createClient(openKey);
+    } catch {
+      return null;
+    }
+  }, [createClient, openKey]);
   const stored = useWorkspaceStore((s) => s.workspace);
   const tab = useWorkspaceStore((s) => s.activeTab);
   const setTab = useWorkspaceStore((s) => s.setActiveTab);
@@ -437,12 +456,14 @@ export function App({ createApi = defaultCreateApi }: AppProps = {}) {
           // Keyed on the workspace: an open item, a chosen sprint and a scroll
           // position belong to the workspace they were in.
           <Fragment key={openKey}>
-            {tab === "boards" && <BoardsTab sync={sync} />}
-            {tab === "sprint" && (
-              <BoardsTab sync={sync} sprint={{ createClient: () => createClient(openKey) }} />
-            )}
-            {tab === "backlog" && <BacklogTab sync={sync} />}
-            {tab === "roadmap" && <RoadmapTab sync={sync} />}
+            <MaybeItemWrites client={formsClient} refresh={sync.retry}>
+              {tab === "boards" && <BoardsTab sync={sync} />}
+              {tab === "sprint" && (
+                <BoardsTab sync={sync} sprint={{ createClient: () => createClient(openKey) }} />
+              )}
+              {tab === "backlog" && <BacklogTab sync={sync} />}
+              {tab === "roadmap" && <RoadmapTab sync={sync} />}
+            </MaybeItemWrites>
           </Fragment>
         ) : choice.kind === "pick" ? (
           <WorkspacePicker missing={choice.missing} list={workspaces} onSwitch={switchWorkspace} />
@@ -453,5 +474,23 @@ export function App({ createApi = defaultCreateApi }: AppProps = {}) {
         )}
       </main>
     </div>
+  );
+}
+
+/** The item forms' context when there is a client for the open workspace; the tabs alone otherwise. */
+function MaybeItemWrites({
+  client,
+  refresh,
+  children,
+}: {
+  client: WorkspaceApiClient | null;
+  refresh: () => void;
+  children: ReactNode;
+}) {
+  if (client === null) return <>{children}</>;
+  return (
+    <ItemWritesProvider client={client} refresh={refresh}>
+      {children}
+    </ItemWritesProvider>
   );
 }
