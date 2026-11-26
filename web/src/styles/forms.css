@@ -1,0 +1,173 @@
+/* ---------- Item forms drawn from the workspace configuration (VEC-70) ---------- */
+
+.vec-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.vec-form__title {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.vec-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.vec-form__field > label,
+.vec-form__field > legend {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 0;
+}
+
+.vec-form__required {
+  font-weight: 400;
+  color: var(--vec-text-muted);
+}
+
+.vec-form__input {
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--vec-border-strong);
+  background: var(--vec-surface);
+  color: var(--vec-text);
+  font: inherit;
+  font-size: 13px;
+}
+
+textarea.vec-form__input {
+  resize: vertical;
+  min-height: 88px;
+  line-height: 1.45;
+}
+
+.vec-form__input:focus-visible,
+.vec-form__icon-option:focus-within {
+  outline: 2px solid var(--vec-focus-ring);
+  outline-offset: 1px;
+}
+
+.vec-form__field [aria-invalid="true"],
+.vec-form__field[aria-invalid="true"] .vec-form__icons {
+  border-color: var(--vec-danger);
+}
+
+.vec-form__icons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+
+.vec-form__icon-option {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--vec-border-strong);
+  background: var(--vec-surface);
+  color: var(--vec-text-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.vec-form__icon-option:has(input:checked) {
+  border-color: var(--vec-accent);
+  background: var(--vec-accent-soft);
+  color: var(--vec-accent-text);
+}
+
+.vec-form__icon-option input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.vec-form__help {
+  font-size: 12px;
+  color: var(--vec-text-muted);
+}
+
+.vec-form__error {
+  font-size: 12px;
+  color: var(--vec-danger);
+}
+
+.vec-form__summary {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--vec-danger);
+  background: var(--vec-danger-soft);
+  font-size: 13px;
+}
+
+.vec-form__summary:focus {
+  outline: 2px solid var(--vec-focus-ring);
+}
+
+.vec-form__summary p {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.vec-form__summary ul {
+  padding-left: 18px;
+}
+
+.vec-form__actions,
+.vec-form__item-actions,
+.vec-form__move-row,
+.vec-form__board-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.vec-form__item-actions {
+  margin-top: 12px;
+}
+
+.vec-form__move-row label {
+  font-size: 12px;
+  color: var(--vec-text-muted);
+}
+
+.vec-form__prompt {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--vec-border);
+  background: var(--vec-surface-sunken);
+}
+
+.vec-form__prompt-lead {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.vec-form__board-actions {
+  margin: 0 0 8px;
+}
+
+.vec-form__readonly {
+  margin-top: 8px;
+}

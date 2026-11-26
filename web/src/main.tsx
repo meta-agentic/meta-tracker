@@ -6,6 +6,7 @@ import "./styles/board.css";
 import "./styles/tree.css";
 import "./styles/roadmap.css";
 import "./styles/panels.css";
+import "./styles/forms.css";
 import { App } from "./App";
 import type { ApiClient } from "./api";
 import { AppProviders } from "./providers/AppProviders";

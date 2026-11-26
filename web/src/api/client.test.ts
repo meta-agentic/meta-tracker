@@ -219,6 +219,7 @@ describe("WorkspaceApiClient", () => {
       title: "Not Found",
       status: 404,
       detail: "workspace VEC does not exist",
+      violations: [],
     });
     expect(error.message).toBe("404 Not Found: workspace VEC does not exist");
     expect(isRetryable(error)).toBe(false);
@@ -303,7 +304,7 @@ describe("WorkspaceApiClient", () => {
 });
 
 describe("ApiClient", () => {
-  const other = { key: "OPS", name: "Operations", template: { key: "scrum", version: 1 } };
+  const other = { key: "OPS", name: "Operations", template: { key: "scrum", version: 1 }, readOnly: false };
 
   it("lists the server's workspaces, and reads any of them over the same transport", async () => {
     const recorded = createRecordedTransport({

@@ -5,11 +5,14 @@ import { ApiError } from "./errors";
 import { createHttpClient, type HttpClient, type Transport } from "./http";
 import {
   decodeBoards,
+  decodeConfiguration,
+  decodeItem,
   decodeItemPage,
   decodeSprints,
   decodeWorkspace,
   decodeWorkspaces,
   type WireBoard,
+  type WireConfiguration,
   type WireItem,
   type WireItemPage,
   type WireSprint,
@@ -43,6 +46,20 @@ export interface WorkspaceApiClient {
   listSprints(signal?: AbortSignal): Promise<WireSprint[]>;
   /** The keys of the items in one sprint, following `next` until the last page. */
   listSprintItemKeys(sprintKey: string, signal?: AbortSignal): Promise<string[]>;
+  /** The effective configuration, which the item forms are drawn from (VEC-69, VEC-70). */
+  getConfiguration(signal?: AbortSignal): Promise<WireConfiguration>;
+  /** One item, with the version a write to it takes back. */
+  getItem(itemKey: string, signal?: AbortSignal): Promise<WireItem>;
+  /** VEC-16's writes: each answers the item as written, or throws an `ApiError` carrying the problem. */
+  createItem(body: ItemWrite & { column?: string; board?: string }): Promise<WireItem>;
+  editItem(itemKey: string, version: number, body: ItemWrite): Promise<WireItem>;
+  moveItem(itemKey: string, version: number, body: { column: string; fields?: Record<string, unknown> }): Promise<WireItem>;
+}
+
+/** A write's body: the title, and a JSON merge patch of the open fields. */
+export interface ItemWrite {
+  title?: string;
+  fields?: Record<string, unknown>;
 }
 
 /**
@@ -142,6 +159,23 @@ export function createWorkspaceApiClient(options: ClientOptions): WorkspaceApiCl
     },
     async listSprintItemKeys(sprintKey, signal) {
       return (await listAll(signal, sprintKey)).map((item) => item.key);
+    },
+    async getConfiguration(signal) {
+      return decodeConfiguration(await http.getJson(`${workspacePath}/configuration`, signal));
+    },
+    async getItem(itemKey, signal) {
+      return decodeItem(await http.getJson(`${workspacePath}/items/${encodeURIComponent(itemKey)}`, signal));
+    },
+    async createItem(body) {
+      return decodeItem(await http.sendJson("POST", `${workspacePath}/items`, body));
+    },
+    async editItem(itemKey, version, body) {
+      return decodeItem(await http.sendJson("PATCH", `${workspacePath}/items/${encodeURIComponent(itemKey)}`, body, version));
+    },
+    async moveItem(itemKey, version, body) {
+      return decodeItem(
+        await http.sendJson("POST", `${workspacePath}/items/${encodeURIComponent(itemKey)}/move`, body, version),
+      );
     },
   };
 }
