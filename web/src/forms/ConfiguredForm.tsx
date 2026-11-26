@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import type { FieldSpec, FormDefinition } from "./definition";
-import { FieldIcon } from "./FieldIcon";
+import { FieldIcon, FieldKindIcon } from "./FieldIcon";
 import { FIELD_ICONS } from "./fieldIcons";
 import type { FieldViolation } from "./rules";
 
@@ -34,7 +34,7 @@ function iconChoice(field: FieldSpec): boolean {
  * says why through `aria-describedby`, the summary links each problem to its
  * input, and after a refused submit focus lands on the first wrong input. An
  * option drawn as an icon alone keeps its name as its accessible name and its
- * tooltip.
+ * tooltip. Each label starts with the glyph of its field's kind, decorative.
  */
 export function ConfiguredForm(props: ConfiguredFormProps) {
   const { definition, values, violations } = props;
@@ -123,6 +123,7 @@ export function ConfiguredForm(props: ConfiguredFormProps) {
               tabIndex={violation ? -1 : undefined}
             >
               <legend>
+                <FieldKindIcon field={f} />
                 {name}
                 {required}
               </legend>
@@ -163,6 +164,7 @@ export function ConfiguredForm(props: ConfiguredFormProps) {
         return (
           <div key={f.path} className="vec-form__field" data-path={f.path}>
             <label htmlFor={field}>
+              <FieldKindIcon field={f} />
               {name}
               {required}
             </label>

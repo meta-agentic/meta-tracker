@@ -28,6 +28,13 @@
   padding: 0;
 }
 
+/* The glyph of the field's kind, before its name. */
+.vec-form__kind {
+  vertical-align: -3px;
+  margin-right: 6px;
+  color: var(--vec-text-muted);
+}
+
 .vec-form__required {
   font-weight: 400;
   color: var(--vec-text-muted);

@@ -294,3 +294,64 @@ export function FlagIcon(props: IconProps) {
     </Icon>
   );
 }
+
+/* ---------- Field kinds (VEC-70): drawn beside a field's label in the forms ---------- */
+
+/** A letter T: one line of text. */
+export function TextKindIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M3.5 3.5h9M8 3.5v9M6.25 12.5h3.5" />
+    </Icon>
+  );
+}
+
+/** The Markdown mark, an M and a down arrow in a frame: text over several lines, shown as Markdown. */
+export function MarkdownKindIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="1.5" y="3.5" width="13" height="9" rx="2" />
+      <path d="M4 10V6l2 2 2-2v4M11 6v4M9.5 8.5 11 10l1.5-1.5" />
+    </Icon>
+  );
+}
+
+/** A number sign. */
+export function NumberKindIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M6.5 2.5 5 13.5M11 2.5 9.5 13.5M3 5.75h10.5M2.5 10.25H13" />
+    </Icon>
+  );
+}
+
+/** Rising bars: a number on a point scale. */
+export function ScaleKindIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M3 13v-2M6.33 13V9M9.67 13V6.5M13 13V3.5" />
+    </Icon>
+  );
+}
+
+/** A calendar page. */
+export function DateKindIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="2.5" y="3.5" width="11" height="10" rx="2" />
+      <path d="M2.5 7h11M5.5 2v3M10.5 2v3" />
+    </Icon>
+  );
+}
+
+/** Two options, the first chosen: one of a list. */
+export function ChoiceKindIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="4.5" cy="5" r="2" />
+      <circle cx="4.5" cy="5" r="0.75" fill="currentColor" stroke="none" />
+      <circle cx="4.5" cy="11" r="2" />
+      <path d="M8.5 5h5M8.5 11h5" />
+    </Icon>
+  );
+}

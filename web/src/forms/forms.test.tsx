@@ -4,11 +4,19 @@ import scrumJson from "../../../vectis-domain/src/test/resources/templates/golde
 import stageGateJson from "../../../vectis-domain/src/test/resources/templates/golden/stage-gate.v1.resolved.json";
 import schemaJson from "../../../vectis-domain/src/main/resources/templates/template.schema.json";
 import { ApiError, type WireItem, type WorkspaceApiClient } from "../api";
+import {
+  ChoiceKindIcon,
+  DateKindIcon,
+  MarkdownKindIcon,
+  NumberKindIcon,
+  ScaleKindIcon,
+  TextKindIcon,
+} from "../components/icons";
 import { AppProviders } from "../providers/AppProviders";
 import { workspaceStore } from "../store/workspaceStore";
 import { ConfiguredForm } from "./ConfiguredForm";
-import { enterForm, itemForm, toBody } from "./definition";
-import { FIELD_ICONS } from "./fieldIcons";
+import { enterForm, itemForm, toBody, type FieldSpec } from "./definition";
+import { FIELD_ICONS, KIND_ICONS, kindOf, type FieldKind, type Glyph } from "./fieldIcons";
 import { EditItemForm, MoveItemControl, NewItemControl } from "./ItemForms";
 import { ItemWritesProvider } from "./ItemWrites";
 import type { Effective, FieldViolation } from "./rules";
@@ -162,6 +170,58 @@ describe("the configured form's accessibility", () => {
     ]);
     expect(screen.getByLabelText(/^Description/)).toHaveAccessibleDescription("Description è obbligatorio.");
     expect(screen.getByLabelText(/^Titolo/)).toHaveAccessibleDescription("the server's own words");
+  });
+});
+
+describe("the glyph of each field's kind", () => {
+  const kinds: { kind: FieldKind; field: FieldSpec; glyph: Glyph }[] = [
+    { kind: "text", glyph: TextKindIcon, field: { path: "fields.summary", label: "Summary", kind: "text", required: false } },
+    { kind: "markdown", glyph: MarkdownKindIcon, field: { path: "fields.notes", label: "Notes", kind: "markdown", required: false } },
+    { kind: "number", glyph: NumberKindIcon, field: { path: "fields.effort", label: "Effort", kind: "number", required: false, numeric: true } },
+    {
+      kind: "scale",
+      glyph: ScaleKindIcon,
+      field: { path: "fields.points", label: "Points", kind: "choice", required: false, numeric: true, options: [{ key: "1", name: "1" }] },
+    },
+    { kind: "date", glyph: DateKindIcon, field: { path: "fields.due", label: "Due", kind: "date", required: false } },
+    {
+      kind: "choice",
+      glyph: ChoiceKindIcon,
+      field: { path: "fields.risk", label: "Risk", kind: "choice", required: false, options: [{ key: "low", name: "Low" }] },
+    },
+  ];
+  const renderForm = (fields: FieldSpec[]) =>
+    render(
+      <AppProviders>
+        <ConfiguredForm definition={{ fields }} values={{}} violations={[]} submitLabel="Save"
+          onChange={() => {}} onSubmit={() => {}} onCancel={() => {}} />
+      </AppProviders>,
+    );
+  /** The glyph's own drawing, rendered alone. */
+  const drawn = (Glyph: Glyph) => render(<Glyph />).container.querySelector("svg")!.innerHTML;
+
+  it("has a row here for every kind a form draws", () => {
+    expect(kinds.map((k) => k.kind).sort()).toEqual(Object.keys(KIND_ICONS).sort());
+  });
+
+  it.each(kinds)("draws the $kind glyph first in the label, decorative, and the label keeps its name", ({ kind, field, glyph }) => {
+    expect(kindOf(field)).toBe(kind);
+    expect(KIND_ICONS[kind]).toBe(glyph);
+    renderForm([field]);
+    const input = screen.getByLabelText(field.label!);
+    const label = document.querySelector(`label[for="${input.id}"]`)!;
+    const icon = label.firstElementChild!;
+    expect(icon).toHaveClass("vec-form__kind");
+    expect(icon).toHaveAttribute("data-kind", kind);
+    expect(icon).toHaveAttribute("aria-hidden", "true");
+    expect(icon.innerHTML).toBe(drawn(glyph));
+  });
+
+  it("draws the kind on the legend of a choice drawn as icons", () => {
+    renderForm(itemForm(scrum, "bug", "create").fields.filter((f) => f.path === "fields.priority"));
+    const legend = screen.getByRole("group", { name: "Priority" }).querySelector("legend")!;
+    expect(legend.firstElementChild).toHaveAttribute("data-kind", "choice");
+    expect(legend.firstElementChild).toHaveAttribute("aria-hidden", "true");
   });
 });
 
