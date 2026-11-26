@@ -74,11 +74,11 @@ export function BugIcon(props: IconProps) {
   );
 }
 
-/** A bookmark. */
 export function TaskIcon(props: IconProps) {
   return (
     <Icon {...props}>
-      <path d="M4.5 2.5h7v11L8 11l-3.5 2.5z" />
+      <rect x="2.5" y="2.5" width="11" height="11" rx="2.5" />
+      <path d="m5.5 8 1.75 1.75L10.5 6.5" />
     </Icon>
   );
 }
