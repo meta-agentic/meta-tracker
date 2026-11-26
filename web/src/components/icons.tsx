@@ -57,14 +57,17 @@ export function StoryIcon(props: IconProps) {
   );
 }
 
-/** A beetle: an oval body split down the middle, a head, two antennae and three legs a side. */
+/**
+ * A beetle, as the PO drew it: a D-shaped body, flat at the top and round at the
+ * bottom, split down the middle; a semicircular head on the flat side; two
+ * antennae from the head; three legs a side.
+ */
 export function BugIcon(props: IconProps) {
   return (
     <Icon {...props}>
-      <ellipse cx="8" cy="9.75" rx="3.25" ry="4" />
-      <path d="M8 5.75v8M6.25 6.25a1.75 1.75 0 0 1 3.5 0" />
-      <path d="M6.75 4.75 5.5 2.75M9.25 4.75l1.25-2" />
-      <path d="M4.75 8 2.5 7M4.75 10H2.25M5 12.25 3 13.5M11.25 8l2.25-1M11.25 10h2.5M11 12.25l2 1.25" />
+      <path d="M4 7.25h8a4 5.75 0 0 1-8 0zM8 7.25V13" />
+      <path d="M6 7.25a2 2 0 0 1 4 0M6.6 5.85 5.25 3.5M9.4 5.85l1.35-2.35" />
+      <path d="M4.15 8.75 2.25 7.75M4.8 10.75H2.5M5.6 12.1 3.75 13.75M11.85 8.75l1.9-1M11.2 10.75h2.3M10.4 12.1l1.85 1.65" />
     </Icon>
   );
 }
