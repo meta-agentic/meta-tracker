@@ -77,15 +77,17 @@ public final class BuiltInTemplates {
      * by the migration that ships the revision, on a database that published the old text.
      */
     public static int revise(Connection c) throws SQLException {
-        return seed(c, BuiltInTemplates::file, true);
+        return seed(c, BuiltInTemplates::file, REVISED_IN_PLACE);
     }
 
     /** As {@link #seed(Connection)}, reading each file's text through {@code files}. */
     static int seed(Connection c, Function<String, String> files) throws SQLException {
-        return seed(c, files, false);
+        return seed(c, files, List.of());
     }
 
-    private static int seed(Connection c, Function<String, String> files, boolean revise) throws SQLException {
+    /** As {@link #seed(Connection)}, but a stored version named in {@code overwritable} that differs is overwritten. */
+    private static int seed(Connection c, Function<String, String> files, List<String> overwritable)
+            throws SQLException {
         Map<String, String> texts = new LinkedHashMap<>();
         Map<String, Map<String, Object>> byRef = new LinkedHashMap<>();
         for (String name : PUBLISHED) {
@@ -111,24 +113,21 @@ public final class BuiltInTemplates {
             }
             String resolved = TemplateJson.compact(r.effective());
             Stored stored = stored(c, templateId, version, texts.get(ref), resolved);
-            if (revise && stored != Stored.SAME && stored != Stored.ABSENT && REVISED_IN_PLACE.contains(ref)) {
-                overwrite(c, templateId, version, texts.get(ref), resolved);
-                inserted++;
-                continue;
+            switch (stored) {
+                case SAME -> {
+                }
+                case ABSENT -> {
+                    insertVersion(c, templateId, version, doc, texts.get(ref), resolved);
+                    inserted++;
+                }
+                case DOCUMENT_CHANGED, RESOLUTION_CHANGED -> {
+                    if (!overwritable.contains(ref)) {
+                        throw new IllegalStateException("built-in " + ref + " " + stored.refusal);
+                    }
+                    overwrite(c, templateId, version, texts.get(ref), resolved);
+                    inserted++;
+                }
             }
-            if (stored == Stored.DOCUMENT_CHANGED) {
-                throw new IllegalStateException("built-in " + ref + " is published and its file has changed;"
-                        + " published versions are immutable, so the change is a new version file");
-            }
-            if (stored == Stored.RESOLUTION_CHANGED) {
-                throw new IllegalStateException("built-in " + ref + " is published with a resolution that differs"
-                        + " from what its files resolve to now; a published resolution never changes silently");
-            }
-            if (stored == Stored.SAME) {
-                continue;
-            }
-            insertVersion(c, templateId, version, doc, texts.get(ref), resolved);
-            inserted++;
         }
         return inserted;
     }
@@ -170,7 +169,21 @@ public final class BuiltInTemplates {
         }
     }
 
-    private enum Stored { ABSENT, SAME, DOCUMENT_CHANGED, RESOLUTION_CHANGED }
+    /** How a stored version compares with its file; a change is refused, in these words, unless it may be overwritten. */
+    private enum Stored {
+        ABSENT(null),
+        SAME(null),
+        DOCUMENT_CHANGED("is published and its file has changed;"
+                + " published versions are immutable, so the change is a new version file"),
+        RESOLUTION_CHANGED("is published with a resolution that differs"
+                + " from what its files resolve to now; a published resolution never changes silently");
+
+        private final String refusal;
+
+        Stored(String refusal) {
+            this.refusal = refusal;
+        }
+    }
 
     /** How the stored version, if any, compares as JSON with the file's {@code document} and its {@code resolved}. */
     private static Stored stored(Connection c, UUID templateId, int version, String document, String resolved)

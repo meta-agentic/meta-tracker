@@ -3,12 +3,14 @@ package io.vectis.command;
 
 import io.vectis.domain.template.FieldValues;
 import io.vectis.domain.template.Violation;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
-import java.util.TreeSet;
+import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.stream.Stream;
 
 /**
  * The rules a workspace's effective configuration sets on an item's fields (ADR-VEC-03, the form
@@ -22,167 +24,133 @@ import java.util.TreeSet;
  * changes cannot be emptied if its type or its current state needs it. A move checks what the
  * target state needs, after the move's own field patch. Undeclared members of {@code fields} are
  * the open long tail and pass; {@code type} and {@code parentId} are Vectis's own.
+ *
+ * <p>Each rule answers its violations as a stream, and each write is the rules it runs, in order.
  */
 final class FieldRules {
 
     /** Members of {@code fields} Vectis keeps on every item, never declared by a template. */
     static final Set<String> CORE = Set.of("type", "parentId");
 
+    private static final Predicate<String> EVERY_FIELD = k -> true;
+
     private FieldRules() {
     }
 
     /** The fields a create stores: the patch, its type (the default type if none), and the declared defaults. */
     static Map<String, Object> created(Map<String, Object> effective, Map<String, Object> patch) {
-        Map<String, Object> out = new LinkedHashMap<>(MergePatch.apply(Map.of(), patch));
-        String type = out.get("type") instanceof String t ? t : defaultType(effective);
-        out.put("type", type);
-        for (String k : fieldsOf(effective, type)) {
-            Object d = map(map(effective.get("fields")).get(k)).get("default");
-            if (d != null && !out.containsKey(k)) {
-                out.put(k, d);
-            }
-        }
-        return out;
+        return withDefaults(FormConfig.of(effective), MergePatch.apply(Map.of(), patch));
     }
 
     /** A create into {@code state} with {@code patch} as its fields. */
     static List<Violation> create(Map<String, Object> effective, String state, Map<String, Object> patch) {
-        List<Violation> out = new ArrayList<>();
+        FormConfig config = FormConfig.of(effective);
         Map<String, Object> asked = MergePatch.apply(Map.of(), patch);
-        Object type = asked.containsKey("type") ? asked.get("type") : defaultType(effective);
-        if (!(type instanceof String t) || !types(effective).containsKey(t)) {
-            out.add(ItemRules.violation("fields.type", "unknownType", "this workspace has no item type " + quoted(type)));
-            return out;
+        Object type = asked.containsKey("type") ? asked.get("type") : config.defaultType();
+        if (!(type instanceof String t) || !config.types().containsKey(t)) {
+            return List.of(ItemRules.violation("fields.type", "unknownType",
+                    "this workspace has no item type " + quoted(type)));
         }
-        Map<String, Object> after = created(effective, patch);
-        values(effective, t, after, after.keySet(), out);
-        required(effective, t, after, null, out);
-        requires(effective, t, state, after, null, out);
-        return out;
+        Map<String, Object> after = withDefaults(config, asked);
+        return concat(
+                values(config, t, after, after.keySet()),
+                required(config, t, after, EVERY_FIELD),
+                requires(config, t, state, after, EVERY_FIELD));
     }
 
     /** An edit of an item in {@code state}, whose fields are {@code before}, by {@code patch}. */
     static List<Violation> edit(Map<String, Object> effective, String state, Map<String, Object> before,
                                 Map<String, Object> patch) {
-        List<Violation> out = new ArrayList<>();
         if (patch == null || patch.isEmpty()) {
-            return out;
+            return List.of();
         }
-        if (patch.containsKey("type") && !java.util.Objects.equals(patch.get("type"), before.get("type"))) {
-            out.add(ItemRules.violation("fields.type", "type", "an item's type is set when it is created"));
-        }
-        String type = before.get("type") instanceof String t ? t : defaultType(effective);
+        FormConfig config = FormConfig.of(effective);
+        String type = typeOf(config, before);
         Map<String, Object> after = MergePatch.apply(before, patch);
-        values(effective, type, after, patch.keySet(), out);
-        required(effective, type, after, patch.keySet(), out);
-        requires(effective, type, state, after, patch.keySet(), out);
-        return out;
+        return concat(
+                typeChanged(before, patch),
+                values(config, type, after, patch.keySet()),
+                required(config, type, after, patch::containsKey),
+                requires(config, type, state, after, patch::containsKey));
     }
 
     /** A move of an item whose fields are {@code before} into {@code state}, with {@code patch} set on the way. */
     static List<Violation> move(Map<String, Object> effective, String state, Map<String, Object> before,
                                 Map<String, Object> patch) {
-        List<Violation> out = new ArrayList<>();
-        if (patch != null && patch.containsKey("type") && !java.util.Objects.equals(patch.get("type"), before.get("type"))) {
-            out.add(ItemRules.violation("fields.type", "type", "an item's type is set when it is created"));
-        }
-        String type = before.get("type") instanceof String t ? t : defaultType(effective);
+        FormConfig config = FormConfig.of(effective);
+        String type = typeOf(config, before);
         Map<String, Object> after = MergePatch.apply(before, patch);
-        values(effective, type, after, patch == null ? Set.of() : patch.keySet(), out);
-        requires(effective, type, state, after, null, out);
+        return concat(
+                typeChanged(before, patch),
+                values(config, type, after, patch == null ? Set.of() : patch.keySet()),
+                requires(config, type, state, after, EVERY_FIELD));
+    }
+
+    /** {@code asked}, with its type set and each declared default it leaves out. */
+    private static Map<String, Object> withDefaults(FormConfig config, Map<String, Object> asked) {
+        Map<String, Object> out = new LinkedHashMap<>(asked);
+        String type = typeOf(config, asked);
+        out.put("type", type);
+        config.withDefaults(type).forEach(f -> out.putIfAbsent(f.key(), f.defaultValue()));
         return out;
     }
 
-    /** Each touched declared field belongs to the type and holds a value of its kind. */
-    private static void values(Map<String, Object> effective, String type, Map<String, Object> after,
-                               Set<String> touched, List<Violation> out) {
-        Map<String, Object> declared = map(effective.get("fields"));
-        List<String> has = fieldsOf(effective, type);
-        for (String k : new TreeSet<>(touched)) {
-            if (CORE.contains(k) || !declared.containsKey(k)) {
-                continue;
-            }
-            Map<String, Object> decl = map(declared.get(k));
-            if (!has.contains(k)) {
-                out.add(ItemRules.violation("fields." + k, "notOnType", "a " + typeName(effective, type) + " has no "
-                        + decl.get("name")));
-                continue;
-            }
-            Object value = after.get(k);
-            String code = FieldValues.isEmpty(value) ? null : FieldValues.problem(decl, value);
-            if (code != null) {
-                out.add(ItemRules.violation("fields." + k, code, decl.get("name") + " " + kind(decl)));
-            }
-        }
+    /** An item's type is set when it is created. */
+    private static Stream<Violation> typeChanged(Map<String, Object> before, Map<String, Object> patch) {
+        return patch != null && patch.containsKey("type") && !Objects.equals(patch.get("type"), before.get("type"))
+                ? Stream.of(ItemRules.violation("fields.type", "type", "an item's type is set when it is created"))
+                : Stream.empty();
+    }
+
+    /** Each touched declared field belongs to the type and holds a value of its kind, in key order. */
+    private static Stream<Violation> values(FormConfig config, String type, Map<String, Object> after,
+                                            Set<String> touched) {
+        FormConfig.ItemType itemType = config.type(type);
+        return touched.stream().sorted()
+                .filter(k -> !CORE.contains(k))
+                .map(config.fields()::get)
+                .filter(Objects::nonNull)
+                .flatMap(f -> itemType.fields().contains(f.key())
+                        ? f.problem(after.get(f.key())).stream()
+                                .map(code -> ItemRules.violation("fields." + f.key(), code, f.name() + " " + f.expected()))
+                        : Stream.of(ItemRules.violation("fields." + f.key(), "notOnType",
+                                "a " + itemType.name() + " has no " + f.name())));
     }
 
     /** The type's required fields have values; on an edit, only those it touches. */
-    private static void required(Map<String, Object> effective, String type, Map<String, Object> after,
-                                 Set<String> touched, List<Violation> out) {
-        for (String k : strings(map(types(effective).get(type)).get("required"))) {
-            if ((touched == null || touched.contains(k)) && FieldValues.isEmpty(after.get(k))) {
-                out.add(ItemRules.violation("fields." + k, "required", "a " + typeName(effective, type) + " has a "
-                        + fieldName(effective, k)));
-            }
-        }
+    private static Stream<Violation> required(FormConfig config, String type, Map<String, Object> after,
+                                              Predicate<String> touched) {
+        FormConfig.ItemType itemType = config.type(type);
+        return itemType.required().stream()
+                .filter(touched)
+                .filter(k -> FieldValues.isEmpty(after.get(k)))
+                .map(k -> ItemRules.violation("fields." + k, "required",
+                        "a " + itemType.name() + " has a " + config.fieldName(k)));
     }
 
     /** What the state needs, of the fields the type has; on an edit, only those it touches. */
-    private static void requires(Map<String, Object> effective, String type, String state, Map<String, Object> after,
-                                 Set<String> touched, List<Violation> out) {
-        Map<String, Object> st = map(map(effective.get("states")).get(state));
-        List<String> has = fieldsOf(effective, type);
-        for (String k : strings(st.get("requires"))) {
-            if (has.contains(k) && (touched == null || touched.contains(k)) && FieldValues.isEmpty(after.get(k))) {
-                out.add(ItemRules.violation("fields." + k, "requiredToEnter", st.get("name") + " needs "
-                        + fieldName(effective, k)));
-            }
-        }
+    private static Stream<Violation> requires(FormConfig config, String type, String state, Map<String, Object> after,
+                                              Predicate<String> touched) {
+        FormConfig.State target = config.state(state);
+        List<String> has = config.type(type).fields();
+        return target.requires().stream()
+                .filter(has::contains)
+                .filter(touched)
+                .filter(k -> FieldValues.isEmpty(after.get(k)))
+                .map(k -> ItemRules.violation("fields." + k, "requiredToEnter",
+                        target.name() + " needs " + config.fieldName(k)));
     }
 
-    /** The declared fields of a type, in form order: its list, or every declared field by key. */
-    static List<String> fieldsOf(Map<String, Object> effective, String type) {
-        Object listed = map(types(effective).get(type)).get("fields");
-        return listed != null ? strings(listed) : new ArrayList<>(new TreeSet<>(map(effective.get("fields")).keySet()));
-    }
-
-    private static String kind(Map<String, Object> decl) {
-        return switch (String.valueOf(decl.get("type"))) {
-            case "number" -> decl.get("scale") != null
-                    ? "is one of " + FieldValues.SCALES.get((String) decl.get("scale"))
-                    : "is a number";
-            case "date" -> "is a date, YYYY-MM-DD";
-            case "choice" -> "is one of " + FieldValues.optionKeys(decl);
-            default -> "is text";
-        };
-    }
-
-    private static String defaultType(Map<String, Object> effective) {
-        return (String) map(effective.get("settings")).get("defaultItemType");
-    }
-
-    private static Map<String, Object> types(Map<String, Object> effective) {
-        return map(effective.get("itemTypes"));
-    }
-
-    private static String typeName(Map<String, Object> effective, String type) {
-        return String.valueOf(map(types(effective).get(type)).getOrDefault("name", type));
-    }
-
-    private static String fieldName(Map<String, Object> effective, String key) {
-        return String.valueOf(map(map(effective.get("fields")).get(key)).getOrDefault("name", key));
+    private static String typeOf(FormConfig config, Map<String, Object> fields) {
+        return fields.get("type") instanceof String t ? t : config.defaultType();
     }
 
     private static String quoted(Object value) {
         return value instanceof String s ? "'" + s + "'" : String.valueOf(value);
     }
 
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> map(Object value) {
-        return value instanceof Map<?, ?> m ? (Map<String, Object>) m : Map.of();
-    }
-
-    private static List<String> strings(Object value) {
-        return value instanceof List<?> l ? l.stream().map(String::valueOf).toList() : List.of();
+    @SafeVarargs
+    private static List<Violation> concat(Stream<Violation>... rules) {
+        return Stream.of(rules).flatMap(Function.identity()).toList();
     }
 }

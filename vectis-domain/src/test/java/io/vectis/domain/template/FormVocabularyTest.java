@@ -41,6 +41,7 @@ class FormVocabularyTest {
                 Arguments.of("{\"fields\": {\"priority\": {\"default\": \"urgent\"}}}", "fields.priority.default", "is not a value of this field"),
                 Arguments.of("{\"fields\": {\"storyPoints\": {\"default\": 4}}}", "fields.storyPoints.default", "is not a value of this field"),
                 Arguments.of("{\"fields\": {\"due\": {\"name\": \"Due\", \"type\": \"date\", \"default\": \"2027-02-30\"}}}", "fields.due.default", "is not a value of this field"),
+                Arguments.of("{\"fields\": {\"points\": {\"name\": \"Points\", \"type\": \"number\", \"scale\": 5, \"default\": 3}}}", "fields.points.default", "is not a value of this field"),
                 Arguments.of("{\"fields\": {\"type\": {\"name\": \"Kind\", \"type\": \"text\"}}}", "fields.type", "Vectis keeps on every item"),
                 Arguments.of("{\"fields\": {\"parentId\": {\"name\": \"Parent\", \"type\": \"text\"}}}", "fields.parentId", "Vectis keeps on every item"),
                 Arguments.of("{\"itemTypes\": {\"story\": {\"icon\": \"rocket\"}}}", "itemTypes.story.icon", "must be one of"),
