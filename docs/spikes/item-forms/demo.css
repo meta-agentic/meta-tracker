@@ -1,0 +1,20 @@
+/* THROWAWAY PROTOTYPE (VEC-67 spike): the forms on VEC-55's tokens. */
+body { margin: 0; background: var(--vec-bg); color: var(--vec-text); font-family: var(--vec-font-sans); }
+.demo { max-width: 40rem; margin: 0 auto; padding: 1.5rem 1rem; }
+.demo-bar { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem; }
+.demo-bar label { display: flex; flex-direction: column; font-size: 0.8rem; color: var(--vec-text-muted); }
+.demo-note { color: var(--vec-text-muted); font-size: 0.85rem; }
+.cf-form { display: flex; flex-direction: column; gap: 0.9rem; background: var(--vec-surface); border: 1px solid var(--vec-border); border-radius: 8px; padding: 1rem; box-shadow: var(--vec-shadow-sm); }
+.cf-title { margin: 0; font-size: 0.8rem; font-family: var(--vec-font-mono); color: var(--vec-text-subtle); }
+.cf-field { display: flex; flex-direction: column; gap: 0.3rem; }
+.cf-field label { font-weight: 600; font-size: 0.9rem; }
+.cf-req { font-weight: 400; color: var(--vec-text-muted); font-size: 0.8rem; }
+.cf-field input, .cf-field select, .cf-field textarea, .demo-bar select { font: inherit; padding: 0.4rem 0.5rem; border: 1px solid var(--vec-border-strong); border-radius: 6px; background: var(--vec-surface-sunken); color: var(--vec-text); }
+.cf-field [aria-invalid="true"] { border-color: var(--vec-danger); }
+.cf-field :focus-visible, .cf-submit:focus-visible { outline: 2px solid var(--vec-focus-ring); outline-offset: 1px; }
+.cf-help { margin: 0; font-size: 0.8rem; color: var(--vec-text-muted); }
+.cf-error { margin: 0; font-size: 0.85rem; color: var(--vec-danger); }
+.cf-summary { border: 1px solid var(--vec-danger); background: var(--vec-danger-soft); border-radius: 6px; padding: 0.5rem 0.75rem; font-size: 0.9rem; }
+.cf-summary p { margin: 0 0 0.25rem; font-weight: 600; }
+.cf-summary ul { margin: 0; padding-left: 1.2rem; }
+.cf-submit, .demo button { align-self: flex-start; font: inherit; padding: 0.45rem 0.9rem; border: 0; border-radius: 6px; background: var(--vec-accent); color: var(--vec-on-accent); cursor: pointer; }

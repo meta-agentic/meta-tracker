@@ -1,0 +1,39 @@
+{
+  "template": "stage-gate",
+  "version": 2,
+  "name": "Stage-Gate",
+  "states": {
+    "idea": {"name": "Idea", "category": "START_STATE", "enterFrom": []},
+    "scoping": {"name": "Scoping", "category": "IN_PROGRESS", "enterFrom": ["idea", "gate-1"]},
+    "gate-1": {
+      "name": "Gate 1: go to development",
+      "category": "IN_PROGRESS",
+      "enterFrom": ["scoping"],
+      "gate": {"approvals": 2},
+      "requires": ["businessCase"]
+    },
+    "development": {"name": "Development", "category": "IN_PROGRESS", "enterFrom": ["gate-1", "gate-2"]},
+    "gate-2": {"name": "Gate 2: go to launch", "category": "IN_PROGRESS", "enterFrom": ["development"], "gate": {"approvals": 2}},
+    "done": {"name": "Launched", "category": "END_STATE", "outcome": "DELIVERED", "enterFrom": ["gate-2"]},
+    "no-go": {"name": "Killed", "category": "END_STATE", "outcome": "DISCONTINUED", "onBoard": false, "enterFrom": ["idea", "gate-1", "gate-2"]}
+  },
+  "stateOrder": ["idea", "scoping", "gate-1", "development", "gate-2", "done", "no-go"],
+  "itemTypes": {
+    "project": {"name": "Project", "fields": ["description", "businessCase", "risk", "targetLaunch"]},
+    "deliverable": {"name": "Deliverable", "parents": ["project"], "fields": ["description", "targetLaunch"]},
+    "milestone": {"name": "Milestone", "parents": ["project"], "fields": ["targetLaunch"], "required": ["targetLaunch"]},
+    "task": {"name": "Task", "parents": ["deliverable"], "fields": ["description"]}
+  },
+  "fields": {
+    "description": {"name": "Description", "type": "markdown"},
+    "businessCase": {"name": "Business case", "type": "markdown"},
+    "risk": {
+      "name": "Risk",
+      "type": "choice",
+      "options": [{"key": "low", "name": "Low"}, {"key": "medium", "name": "Medium"}, {"key": "high", "name": "High"}]
+    },
+    "targetLaunch": {"name": "Target launch", "type": "date"}
+  },
+  "settings": {"defaultItemType": "project", "gatedDelivery": true},
+  "cadence": {"mode": "phase"}
+}
