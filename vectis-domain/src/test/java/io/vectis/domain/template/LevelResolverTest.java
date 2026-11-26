@@ -199,9 +199,11 @@ class LevelResolverTest {
      * The spike runs M6 and M7 against the hierarchy's resolved scrum@1, which is VEC-45's scrum
      * plus item type parents and a sprint cadence; this is that document, built at one level.
      */
-    static final Map<String, Object> SCRUM_WITH_PARENTS = TemplateJson.obj(TemplateJson.mergePatch(SCRUM, patch(
-            "{\"itemTypes\": {\"story\": {\"parents\": [\"epic\"]}, \"bug\": {\"parents\": [\"epic\"]}, \"task\": {\"parents\": [\"story\", \"bug\"]}},"
-                    + " \"cadence\": {\"mode\": \"sprint\", \"sprintDays\": 14}}")));
+    /** VEC-45's one-level Scrum with what the hierarchy's scrum@1 adds since: parents, a cadence, and the form vocabulary of its item types and fields. */
+    static final Map<String, Object> SCRUM_WITH_PARENTS = TemplateJson.obj(TemplateJson.mergePatch(SCRUM, Map.of(
+            "itemTypes", load("scrum.v1.json").get("itemTypes"),
+            "fields", load("scrum.v1.json").get("fields"),
+            "cadence", patch("{\"mode\": \"sprint\", \"sprintDays\": 14}"))));
 
     @Test
     @DisplayName("M6 item type hierarchy: an unknown parent, a loop, or removing a type another still names as parent is rejected")

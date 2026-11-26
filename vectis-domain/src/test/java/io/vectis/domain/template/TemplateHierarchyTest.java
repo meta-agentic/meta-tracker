@@ -52,7 +52,7 @@ class TemplateHierarchyTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"base.v1.json", "scrum.v1.json", "kanban.v1.json", "hybrid.v1.json", "template.schema.json",
-            "hierarchy/stage-gate.v1.json", "hierarchy/acme.v1.json", "hierarchy/acme-platform.v1.json", "hierarchy/instance-platform.json"})
+            "stage-gate.v1.json", "hierarchy/acme.v1.json", "hierarchy/acme-platform.v1.json", "hierarchy/instance-platform.json"})
     @DisplayName("H1 (canonical) every shipped and fixture document is in canonical form")
     void h1Canonical(String file) {
         String bytes = Fixtures.text(file);
@@ -63,7 +63,7 @@ class TemplateHierarchyTest {
     @DisplayName("H1 every level of the shipped hierarchy publishes and resolves on its own; member order irrelevant")
     void h1() {
         assertEquals(7, r.versions.size());
-        for (String f : List.of("scrum.v1.json", "hierarchy/stage-gate.v1.json", "hierarchy/acme.v1.json", "hierarchy/acme-platform.v1.json")) {
+        for (String f : List.of("scrum.v1.json", "stage-gate.v1.json", "hierarchy/acme.v1.json", "hierarchy/acme-platform.v1.json")) {
             Map<String, Object> doc = load(f);
             Map<String, Object> parent = r.res(obj(doc.get("extends")).get("template") + "@1");
             assertEquals(TemplateHierarchy.derive(parent, doc, "x").effective(),
@@ -73,7 +73,7 @@ class TemplateHierarchyTest {
     }
 
     @Test
-    @DisplayName("H2 the hierarchy's scrum and kanban give VEC-45's single-level boards: order, states, item types, fields, settings")
+    @DisplayName("H2 the hierarchy's scrum and kanban give VEC-45's single-level boards: order, states, item types, fields (VEC-70 adds more), settings")
     void h2() {
         assertSameBoard(r.res("scrum@1"), eff(load("vec45/scrum.v1.json"), Map.of()));
         assertSameBoard(r.res("kanban@1"), eff(load("vec45/kanban.v1.json"), Map.of()));
@@ -89,7 +89,8 @@ class TemplateHierarchyTest {
         assertEquals(y.get("states"), x.get("states"));
         assertEquals(order(y), order(x));
         assertEquals(tb, ta);
-        assertEquals(y.get("fields"), x.get("fields"));
+        // VEC-45's fields are all still there, unchanged; the form vocabulary (VEC-70) only adds.
+        obj(y.get("fields")).forEach((k, f) -> assertEquals(f, obj(x.get("fields")).get(k), "fields." + k));
         assertEquals(y.get("settings"), x.get("settings"));
     }
 

@@ -38,7 +38,15 @@ public final class BuiltInTemplates {
      * Every published built-in version, each after the version it extends. A new version is a new
      * file appended here (and to the test's digest list); an existing file is never edited.
      */
-    public static final List<String> PUBLISHED = List.of("base.v1", "scrum.v1", "kanban.v1", "hybrid.v1");
+    public static final List<String> PUBLISHED = List.of("base.v1", "scrum.v1", "kanban.v1", "hybrid.v1", "stage-gate.v1");
+
+    /**
+     * The one exception to immutability: versions the PO revised in place before any customer
+     * depended on them (VEC-70: {@code scrum@1} gained the form vocabulary, and {@code hybrid@1}
+     * resolves to more because it extends it). Only {@link #revise} may overwrite them, and only
+     * these.
+     */
+    static final List<String> REVISED_IN_PLACE = List.of("scrum@1", "hybrid@1");
 
     static final String AUTHORED = "{\"kind\": \"authored\"}";
 
@@ -63,8 +71,21 @@ public final class BuiltInTemplates {
         return seed(c, BuiltInTemplates::file);
     }
 
+    /**
+     * Overwrites the stored document and resolution of each {@link #REVISED_IN_PLACE} version that
+     * differs from its file, then inserts what is missing as {@link #seed(Connection)} does. Run once,
+     * by the migration that ships the revision, on a database that published the old text.
+     */
+    public static int revise(Connection c) throws SQLException {
+        return seed(c, BuiltInTemplates::file, true);
+    }
+
     /** As {@link #seed(Connection)}, reading each file's text through {@code files}. */
     static int seed(Connection c, Function<String, String> files) throws SQLException {
+        return seed(c, files, false);
+    }
+
+    private static int seed(Connection c, Function<String, String> files, boolean revise) throws SQLException {
         Map<String, String> texts = new LinkedHashMap<>();
         Map<String, Map<String, Object>> byRef = new LinkedHashMap<>();
         for (String name : PUBLISHED) {
@@ -90,6 +111,11 @@ public final class BuiltInTemplates {
             }
             String resolved = TemplateJson.compact(r.effective());
             Stored stored = stored(c, templateId, version, texts.get(ref), resolved);
+            if (revise && stored != Stored.SAME && stored != Stored.ABSENT && REVISED_IN_PLACE.contains(ref)) {
+                overwrite(c, templateId, version, texts.get(ref), resolved);
+                inserted++;
+                continue;
+            }
             if (stored == Stored.DOCUMENT_CHANGED) {
                 throw new IllegalStateException("built-in " + ref + " is published and its file has changed;"
                         + " published versions are immutable, so the change is a new version file");
@@ -163,6 +189,29 @@ public final class BuiltInTemplates {
                 }
                 return !rs.getBoolean(1) ? Stored.DOCUMENT_CHANGED
                         : !rs.getBoolean(2) ? Stored.RESOLUTION_CHANGED : Stored.SAME;
+            }
+        }
+    }
+
+    private static void overwrite(Connection c, UUID templateId, int version, String document, String resolved)
+            throws SQLException {
+        // The immutability trigger guards every other write; it steps aside for this one statement.
+        try (var toggle = c.createStatement()) {
+            toggle.execute("alter table workflow_template_version disable trigger workflow_template_version_immutable");
+        }
+        try (PreparedStatement st = c.prepareStatement("""
+                update workflow_template_version set document = ?::jsonb, resolved = ?::jsonb, resolver_version = ?
+                 where template_id = ? and version = ?
+                """)) {
+            st.setString(1, document);
+            st.setString(2, resolved);
+            st.setInt(3, TemplateResolver.RESOLVER_VERSION);
+            st.setObject(4, templateId);
+            st.setInt(5, version);
+            st.executeUpdate();
+        } finally {
+            try (var toggle = c.createStatement()) {
+                toggle.execute("alter table workflow_template_version enable trigger workflow_template_version_immutable");
             }
         }
     }

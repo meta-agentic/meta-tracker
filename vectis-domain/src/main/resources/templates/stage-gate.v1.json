@@ -17,7 +17,8 @@
       "name": "Gate 1: go to development",
       "category": "IN_PROGRESS",
       "enterFrom": ["scoping"],
-      "gate": {"approvals": 2}
+      "gate": {"approvals": 2},
+      "requires": ["businessCase"]
     },
     "development": {
       "name": "Development",
@@ -35,10 +36,39 @@
   },
   "stateOrder": ["idea", "scoping", "gate-1", "development", "gate-2", "done", "no-go"],
   "itemTypes": {
-    "project": {"name": "Project"},
-    "deliverable": {"name": "Deliverable", "parents": ["project"]},
-    "milestone": {"name": "Milestone", "parents": ["project"]},
-    "task": {"parents": ["deliverable"]}
+    "project": {
+      "name": "Project",
+      "icon": "project",
+      "fields": ["description", "businessCase", "risk", "targetLaunch"]
+    },
+    "deliverable": {
+      "name": "Deliverable",
+      "parents": ["project"],
+      "icon": "deliverable",
+      "fields": ["description", "targetLaunch"]
+    },
+    "milestone": {
+      "name": "Milestone",
+      "parents": ["project"],
+      "icon": "milestone",
+      "fields": ["targetLaunch"],
+      "required": ["targetLaunch"]
+    },
+    "task": {"parents": ["deliverable"], "icon": "task", "fields": ["description"]}
+  },
+  "fields": {
+    "description": {"name": "Description", "type": "markdown"},
+    "businessCase": {"name": "Business case", "type": "markdown"},
+    "risk": {
+      "name": "Risk",
+      "type": "choice",
+      "options": [
+        {"key": "low", "name": "Low", "icon": "low"},
+        {"key": "medium", "name": "Medium", "icon": "medium"},
+        {"key": "high", "name": "High", "icon": "high"}
+      ]
+    },
+    "targetLaunch": {"name": "Target launch", "type": "date"}
   },
   "settings": {"defaultItemType": "project", "gatedDelivery": true},
   "cadence": {"mode": "phase"},

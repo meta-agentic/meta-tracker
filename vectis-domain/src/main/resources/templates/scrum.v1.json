@@ -8,13 +8,35 @@
     "in-review": {"name": "In Review", "category": "IN_PROGRESS", "after": "in-progress"}
   },
   "itemTypes": {
-    "story": {"name": "Story", "parents": ["epic"]},
-    "bug": {"name": "Bug", "parents": ["epic"]},
-    "epic": {"name": "Epic"},
-    "task": {"parents": ["story", "bug"]}
+    "story": {
+      "name": "Story",
+      "parents": ["epic"],
+      "icon": "story",
+      "fields": ["description", "storyPoints", "priority"]
+    },
+    "bug": {
+      "name": "Bug",
+      "parents": ["epic"],
+      "icon": "bug",
+      "fields": ["description", "storyPoints", "priority"],
+      "required": ["description"]
+    },
+    "epic": {"name": "Epic", "icon": "epic", "fields": ["description", "priority"]},
+    "task": {"parents": ["story", "bug"], "icon": "task", "fields": ["description"]}
   },
   "fields": {
-    "storyPoints": {"name": "Story points", "type": "number", "scale": "fibonacci"}
+    "storyPoints": {"name": "Story points", "type": "number", "scale": "fibonacci"},
+    "description": {"name": "Description", "type": "markdown"},
+    "priority": {
+      "name": "Priority",
+      "type": "choice",
+      "options": [
+        {"key": "high", "name": "High", "icon": "high"},
+        {"key": "medium", "name": "Medium", "icon": "medium"},
+        {"key": "low", "name": "Low", "icon": "low"}
+      ],
+      "default": "medium"
+    }
   },
   "settings": {"defaultItemType": "story"},
   "cadence": {"mode": "sprint", "sprintDays": 14}

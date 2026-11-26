@@ -54,6 +54,6 @@ class TemplateTablesBootTest {
                 builtIns.add(rs.getString(1));
             }
         }
-        assertEquals(List.of("base@1", "hybrid@1", "kanban@1", "scrum@1"), builtIns);
+        assertEquals(List.of("base@1", "hybrid@1", "kanban@1", "scrum@1", "stage-gate@1"), builtIns);
     }
 }

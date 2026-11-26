@@ -106,13 +106,14 @@ class TemplateMigrationTest {
     }
 
     @Test
-    void fromEmptyTheFourBuiltInsArePublishedWithTheirResolution() throws SQLException {
+    void fromEmptyTheFiveBuiltInsArePublishedWithTheirResolution() throws SQLException {
         try (Connection c = inAppSchema()) {
             assertEquals(List.of(
                             Arrays.asList("base", null, null, "1", "{\"kind\": \"authored\"}", "manual"),
                             List.of("hybrid", "scrum", "1", "1", "{\"kind\": \"authored\"}", "manual"),
                             List.of("kanban", "base", "1", "1", "{\"kind\": \"authored\"}", "manual"),
-                            List.of("scrum", "base", "1", "1", "{\"kind\": \"authored\"}", "manual")),
+                            List.of("scrum", "base", "1", "1", "{\"kind\": \"authored\"}", "manual"),
+                            List.of("stage-gate", "base", "1", "1", "{\"kind\": \"authored\"}", "manual")),
                     rows(c, """
                             select t.key, p.key, v.parent_version::text, v.resolver_version::text, v.cause::text, t.follow
                               from workflow_template t
@@ -121,7 +122,7 @@ class TemplateMigrationTest {
                              where t.tenant_id is null
                              order by t.key, v.version
                             """));
-            for (String key : List.of("base", "scrum", "kanban", "hybrid")) {
+            for (String key : List.of("base", "scrum", "kanban", "hybrid", "stage-gate")) {
                 List<List<String>> stored = rows(c, "select v.document::text, v.resolved::text from workflow_template t"
                         + " join workflow_template_version v on v.template_id = t.id where t.tenant_id is null and t.key = '"
                         + key + "' and v.version = 1");
@@ -150,7 +151,7 @@ class TemplateMigrationTest {
             assertEquals(0, BuiltInTemplates.seed(c));
             assertEquals(0, BuiltInTemplates.seed(c));
             assertEquals(before, rows(c, BUILT_IN_VERSIONS).getFirst().getFirst());
-            assertEquals("4", before);
+            assertEquals("5", before);
             c.rollback();
         }
     }
@@ -163,7 +164,52 @@ class TemplateMigrationTest {
                             ? BuiltInTemplates.file(name).replace("\"Scrum\"", "\"Scrum, renamed\"")
                             : BuiltInTemplates.file(name)));
             assertTrue(e.getMessage().contains("scrum@1") && e.getMessage().contains("immutable"), e.getMessage());
-            assertEquals("4", rows(c, BUILT_IN_VERSIONS).getFirst().getFirst());
+            assertEquals("5", rows(c, BUILT_IN_VERSIONS).getFirst().getFirst());
+            c.rollback();
+        }
+    }
+
+    @Test
+    void reviseOverwritesTheVersionsRevisedInPlaceAndInsertsWhatIsMissing() throws SQLException {
+        try (Connection c = inAppSchema(); Statement st = c.createStatement()) {
+            // A database that published scrum@1 and hybrid@1 before VEC-70, and has no stage-gate.
+            st.execute("alter table workflow_template_version disable trigger workflow_template_version_immutable");
+            st.executeUpdate("""
+                    update workflow_template_version v set document = document - 'fields', resolved = '{}'::jsonb
+                      from workflow_template t
+                     where t.id = v.template_id and t.tenant_id is null and t.key in ('scrum', 'hybrid')
+                    """);
+            st.executeUpdate("""
+                    delete from workflow_template_version v using workflow_template t
+                     where t.id = v.template_id and t.tenant_id is null and t.key = 'stage-gate'
+                    """);
+            st.execute("alter table workflow_template_version enable trigger workflow_template_version_immutable");
+            assertThrows(IllegalStateException.class, () -> BuiltInTemplates.seed(c), "seed still refuses a changed file");
+            assertEquals(3, BuiltInTemplates.revise(c));
+            for (String key : List.of("scrum", "hybrid", "stage-gate")) {
+                List<List<String>> stored = rows(c, "select v.document::text, v.resolved::text from workflow_template t"
+                        + " join workflow_template_version v on v.template_id = t.id where t.tenant_id is null and t.key = '"
+                        + key + "' and v.version = 1");
+                assertEquals(TemplateJson.parseObject(BuiltInTemplates.file(key + ".v1")),
+                        TemplateJson.parseObject(stored.getFirst().get(0)), key + "@1 document");
+                assertEquals(resolve(key), TemplateJson.parseObject(stored.getFirst().get(1)), key + "@1 resolved");
+            }
+            assertEquals(0, BuiltInTemplates.revise(c), "a second run changes nothing");
+            c.rollback();
+        }
+    }
+
+    @Test
+    void reviseLeavesAnyOtherChangedVersionToTheImmutabilityCheck() throws SQLException {
+        try (Connection c = inAppSchema(); Statement st = c.createStatement()) {
+            st.execute("alter table workflow_template_version disable trigger workflow_template_version_immutable");
+            st.executeUpdate("""
+                    update workflow_template_version v set resolved = '{}'::jsonb
+                      from workflow_template t
+                     where t.id = v.template_id and t.tenant_id is null and t.key = 'kanban' and v.version = 1
+                    """);
+            IllegalStateException e = assertThrows(IllegalStateException.class, () -> BuiltInTemplates.revise(c));
+            assertTrue(e.getMessage().contains("kanban@1"), e.getMessage());
             c.rollback();
         }
     }
@@ -180,7 +226,7 @@ class TemplateMigrationTest {
                     """);
             IllegalStateException e = assertThrows(IllegalStateException.class, () -> BuiltInTemplates.seed(c));
             assertTrue(e.getMessage().contains("kanban@1") && e.getMessage().contains("resolution"), e.getMessage());
-            assertEquals("4", rows(c, BUILT_IN_VERSIONS).getFirst().getFirst());
+            assertEquals("5", rows(c, BUILT_IN_VERSIONS).getFirst().getFirst());
             c.rollback();
         }
     }

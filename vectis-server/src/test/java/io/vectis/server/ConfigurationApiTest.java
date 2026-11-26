@@ -195,7 +195,7 @@ class ConfigurationApiTest {
         tenantTemplate("acme" + SEQ.incrementAndGet(), 1, 1, "{}");
         given().when().get("/api/v1/templates")
                 .then().statusCode(200)
-                .body("key", contains("base", "hybrid", "kanban", "scrum"))
+                .body("key", contains("base", "hybrid", "kanban", "scrum", "stage-gate"))
                 .body("find { it.key == 'base' }.owner", equalTo("system"))
                 .body("find { it.key == 'base' }.latest", equalTo(1))
                 .body("find { it.key == 'base' }.parent", nullValue())
