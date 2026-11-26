@@ -3,6 +3,7 @@ package io.vectis.server.api;
 
 import io.smallrye.mutiny.Uni;
 import io.vectis.domain.template.TemplateResolver;
+import io.vectis.persistence.TemplateChains;
 import io.vectis.persistence.TemplateNotFoundException;
 import io.vectis.persistence.TemplateRef;
 import io.vectis.persistence.TemplateRepository;

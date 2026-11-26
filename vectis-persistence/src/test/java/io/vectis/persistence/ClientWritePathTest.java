@@ -204,6 +204,33 @@ class ClientWritePathTest {
     }
 
     @Test
+    void aMoveWithFieldsWritesBothAsOneVersionAndOneEventNamingTheFields() {
+        Fixture f = newWorkspace();
+        Item item = create(f, "Moving with fields");
+        long before = head(f);
+        Item moved = items.move(item, f.column("done"), "z", Map.of("businessCase", "Grow"), 1, "tab-1")
+                .await().indefinitely();
+        assertEquals(f.column("done"), moved.columnId());
+        assertEquals(Map.of("businessCase", "Grow"), moved.fields());
+        assertEquals(2, moved.version());
+        assertEquals(before + 1, head(f));
+        JsonObject event = lastEvent(f);
+        assertEquals("item.moved", event.getString("type"));
+        assertTrue(event.encode().contains("fields.businessCase"), event::encode);
+    }
+
+    @Test
+    void aMoveWithFieldsAtAnotherVersionIsAConflictAndWritesNothing() {
+        Fixture f = newWorkspace();
+        Item item = create(f, "Stale move with fields");
+        long before = head(f);
+        assertInstanceOf(ItemVersionConflictException.class,
+                failure(items.move(item, f.column("done"), "z", Map.of("x", 1), 7, null)));
+        assertEquals(item, stored(item).orElseThrow());
+        assertEquals(before, head(f));
+    }
+
+    @Test
     void aMoveAtAnotherVersionIsAConflictAndWritesNothing() {
         Fixture f = newWorkspace();
         Item item = create(f, "Stale move");
@@ -299,6 +326,8 @@ class ClientWritePathTest {
                         (r, b) -> r.move(b.item(), b.fixture().column("done"), "z", "tab-1")),
                 Map.entry("move(Item,UUID,String,long,String)",
                         (r, b) -> r.move(b.item(), b.fixture().column("done"), "z", 1, "tab-1")),
+                Map.entry("move(Item,UUID,String,Map,long,String)",
+                        (r, b) -> r.move(b.item(), b.fixture().column("done"), "z", Map.of("points", 3), 1, "tab-1")),
                 Map.entry("moveToSprint(Item,UUID)", (r, b) -> r.moveToSprint(b.item(), null)),
                 Map.entry("moveToSprint(Item,UUID,String)", (r, b) -> r.moveToSprint(b.item(), null, "tab-1")),
                 Map.entry("edit(Item,long,String)", (r, b) -> r.edit(b.item().withTitle("Edited"), 1, "tab-1")),

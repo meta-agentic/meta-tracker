@@ -404,6 +404,45 @@ public class ItemRepository {
     }
 
     /**
+     * {@link #move(Item, UUID, String, long, String)} that also writes the item's open fields as
+     * {@code fields} holds them, in the same statement: one version, one {@code item.moved} event,
+     * which names the fields that changed beside the column and rank. A null {@code fields} is the
+     * plain move.
+     */
+    public Uni<Item> move(Item item, UUID targetColumnId, String newRank, Map<String, Object> fields,
+                          long expectedVersion, String origin) {
+        if (fields == null) {
+            return move(item, targetColumnId, newRank, expectedVersion, origin);
+        }
+        return log.writeToItem(item.id(), origin, scope -> requiringOwned(scope).connection()
+                .preparedQuery("""
+                        update item i set column_id = $1, rank = $2, fields = $6, version = i.version + 1,
+                               updated_at = now()
+                          from board_column c, item old
+                         where i.id = $3 and i.workspace_id = $4 and i.version = $5
+                           and c.id = $1 and c.board_id = i.board_id and old.id = i.id
+                        returning\s""" + qualified("i") + ", old.fields as old_fields")
+                .execute(Tuple.of(targetColumnId, newRank, item.id(), item.workspaceId(), expectedVersion,
+                        new JsonObject(fields)))
+                .chain(rows -> {
+                    if (rows.rowCount() == 1) {
+                        Row row = rows.iterator().next();
+                        Item moved = map(row);
+                        JsonObject old = row.getJsonObject("old_fields");
+                        return Uni.createFrom().item(Change.of(moved, ItemEvents.movedWithFields(moved,
+                                old == null ? Map.of() : old.getMap(), scope.at())));
+                    }
+                    return stored(scope, item).map(found -> {
+                        if (found.version() != expectedVersion) {
+                            throw new ItemVersionConflictException(item.id(), expectedVersion, found.version());
+                        }
+                        throw new PlacementException("column " + targetColumnId + " is not on the board of item "
+                                + item.id());
+                    });
+                }));
+    }
+
+    /**
      * Assigns an item to a sprint, or returns it to the backlog if {@code sprintId} is
      * null. Mirrors {@link #move} for column moves: one row written regardless of scope.
      */

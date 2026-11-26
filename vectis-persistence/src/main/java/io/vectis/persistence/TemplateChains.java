@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
-package io.vectis.server.api;
+package io.vectis.persistence;
 
 import io.smallrye.mutiny.Uni;
 import io.vectis.domain.template.Resolution;
 import io.vectis.domain.template.TemplateResolver;
-import io.vectis.persistence.ConfigurationViolationException;
-import io.vectis.persistence.PublishedTemplate;
-import io.vectis.persistence.TemplateNotFoundException;
-import io.vectis.persistence.TemplateRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.jboss.logging.Logger;
 
-/** Reads a template version's chain through {@link TemplateRepository} and resolves it. */
+/**
+ * Reads a template version's chain through {@link TemplateRepository} and resolves it: the
+ * resources that serve configurations, and the command layer that checks item writes against a
+ * workspace's effective configuration, read it the same way.
+ */
 @ApplicationScoped
 public class TemplateChains {
 
@@ -73,6 +73,14 @@ public class TemplateChains {
             throw new ConfigurationViolationException(resolution.violations());
         }
         return resolution;
+    }
+
+    /** The effective configuration of a workspace, as {@code GET …/configuration} serves it. */
+    public Uni<Map<String, Object>> effective(WorkspaceConfiguration config) {
+        return templates.findVersion(config.templateTenantId(), config.template())
+                .map(version -> version.orElseThrow(() -> new TemplateNotFoundException(config.template())))
+                .chain(this::chain)
+                .map(chain -> resolve(chain, config.delta(), false).effective());
     }
 
     public static boolean stale(PublishedTemplate version) {
